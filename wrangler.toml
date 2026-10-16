@@ -1,0 +1,33 @@
+name = "classsync"
+main = "worker/index.ts"
+compatibility_date = "2024-04-05"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+# Cloudflare D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "classsync-db"
+database_id = "placeholder-d1-id"
+
+# Cloudflare R2 Bucket binding
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "classsync-media"
+
+# Daily post expiry and hourly trends cron triggers
+[triggers]
+crons = ["0 0 * * *", "0 * * * *"]
+
+# Non-secret environment variables
+[vars]
+ENVIRONMENT = "production"
+# Secrets (configure via `npx wrangler secret put <KEY>`):
+# - GOOGLE_CLIENT_ID
+# - GOOGLE_CLIENT_SECRET
+# - APP_URL
+# - ADMIN_SECRET

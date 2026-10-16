@@ -1,0 +1,6 @@
+{
+  "name": "Dialtone",
+  "description": "Dialtone App - Cloudflare Worker, D1, Google OAuth with PKCE, session management, and profile editing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
