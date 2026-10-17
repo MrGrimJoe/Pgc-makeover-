@@ -301,11 +301,21 @@ describe('Task B: Direct Messaging, Blocking, DM Policy & Report Evidence', () =
       // Alice uploads media attachment
       const mediaId = 'med_test_attach';
       const now = new Date().toISOString();
+      await env.MEDIA_BUCKET!.put('obj_attach.png', new Uint8Array([137, 80, 78, 71]));
       await env.DB.prepare(
         'INSERT INTO media (id, owner_id, object_key, mime_type, size_bytes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
         .bind(mediaId, 'usr_alice', 'obj_attach.png', 'image/png', 1024, now, now)
         .run();
+
+      // Before attaching to message: Bob cannot GET unattached media -> 403
+      const bobUnattachedRes = await worker.fetch(
+        new Request(`http://localhost:3000/api/media/${mediaId}`, {
+          headers: { Cookie: bobSessionCookie },
+        }),
+        env
+      );
+      expect(bobUnattachedRes.status).toBe(403);
 
       // Alice sends message with attachment
       const msgRes1 = await worker.fetch(
@@ -321,6 +331,15 @@ describe('Task B: Direct Messaging, Blocking, DM Policy & Report Evidence', () =
       expect(msg1.message.body).toBe('Message 1 with photo');
       expect(msg1.message.media.length).toBe(1);
       expect(msg1.message.media[0]!.id).toBe(mediaId);
+
+      // After attaching to message: Bob CAN GET the media -> 200
+      const bobAttachedRes = await worker.fetch(
+        new Request(`http://localhost:3000/api/media/${mediaId}`, {
+          headers: { Cookie: bobSessionCookie },
+        }),
+        env
+      );
+      expect(bobAttachedRes.status).toBe(200);
 
       // Verify media expires with the message (14 days)
       const mediaRow = await env.DB.prepare('SELECT expires_at FROM media WHERE id = ?').bind(mediaId).first<{ expires_at: string }>();

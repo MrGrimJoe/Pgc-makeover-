@@ -79,6 +79,26 @@ function encodeCursor(createdAt: string, id: string): string {
 }
 
 /**
+ * Safely parses limit query param, falling back to defaultLimit for NaN/invalid values,
+ * and clamping to min..max (1..50).
+ */
+export function parseLimitParam(
+  param: string | null | undefined,
+  defaultLimit = 20,
+  min = 1,
+  max = 50
+): number {
+  if (param === null || param === undefined || param.trim() === '') {
+    return defaultLimit;
+  }
+  const parsed = Number(param);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+    return defaultLimit;
+  }
+  return Math.min(Math.max(Math.floor(parsed), min), max);
+}
+
+/**
  * Decodes composite cursor. Supports base64url composite or raw ISO string fallback.
  */
 function decodeCursor(cursorStr: string): { createdAt: string; id: string } | null {
@@ -401,8 +421,9 @@ export default {
   },
 
   async fetch(request: Request, env: Env, _ctx?: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-    const pathname = url.pathname;
+    try {
+      const url = new URL(request.url);
+      const pathname = url.pathname;
     const method = request.method.toUpperCase();
     const isDevelopment = env.ENVIRONMENT === 'development';
     const isTest = env.ENVIRONMENT === 'test';
@@ -861,6 +882,17 @@ export default {
 
       const data = parseResult.data;
 
+      // Cap feed_preferences at 2000 characters
+      if (data.feed_preferences !== undefined) {
+        const prefsStr =
+          typeof data.feed_preferences === 'string'
+            ? data.feed_preferences
+            : JSON.stringify(data.feed_preferences);
+        if (prefsStr.length > 2000) {
+          return jsonResponse({ error: 'feed_preferences cannot exceed 2000 characters' }, 400);
+        }
+      }
+
       // Check username uniqueness if updating username
       if (data.username !== undefined) {
         const normalized = normalizeUsername(data.username);
@@ -869,9 +901,18 @@ export default {
         )
           .bind(normalized, auth.user.id)
           .first();
-
         if (conflict) {
           return jsonResponse({ error: 'Username is already taken' }, 409);
+        }
+      }
+
+      // Reject class_id values that do not exist in the classes table with 400
+      if (data.class_id !== undefined && data.class_id !== null) {
+        const classExists = await env.DB.prepare('SELECT 1 FROM classes WHERE id = ?')
+          .bind(data.class_id)
+          .first();
+        if (!classExists) {
+          return jsonResponse({ error: 'Class not found' }, 400);
         }
       }
 
@@ -928,8 +969,14 @@ export default {
         try {
           await env.DB.batch(batchStatements);
         } catch (dbErr) {
-          const errMsg = (dbErr as Error).message || '';
-          if (errMsg.includes('UNIQUE constraint') && errMsg.includes('username')) {
+          const errMsg = String((dbErr as Error)?.message || dbErr || '');
+          const lower = errMsg.toLowerCase();
+          if (
+            lower.includes('unique') ||
+            (lower.includes('constraint') && (lower.includes('username') || lower.includes('profile'))) ||
+            (dbErr as any)?.code === 'SQLITE_CONSTRAINT' ||
+            (dbErr as any)?.code === 'SQLITE_CONSTRAINT_UNIQUE'
+          ) {
             return jsonResponse({ error: 'Username is already taken' }, 409);
           }
           return jsonResponse({ error: 'Failed to update profile' }, 500);
@@ -1007,15 +1054,22 @@ export default {
 
     // GET /api/classes - Available campus classes
     if (pathname === '/api/classes' && method === 'GET') {
+      const auth = await authenticateRequest(request, env.DB);
+      if (!auth) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
+      }
       const classesResult = await env.DB.prepare('SELECT id, name FROM classes ORDER BY name ASC').all<ClassRow>();
       return jsonResponse({ classes: classesResult.results || [] });
     }
 
     // GET /api/trends - Topic trend snapshots
     if (pathname === '/api/trends' && method === 'GET') {
-      const windowParam = url.searchParams.get('window') === '7d' ? '7d' : '24h';
       const auth = await authenticateRequest(request, env.DB);
-      const blockedIds = auth ? await getBlockedUserIds(env.DB, auth.user.id) : [];
+      if (!auth) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
+      }
+      const windowParam = url.searchParams.get('window') === '7d' ? '7d' : '24h';
+      const blockedIds = await getBlockedUserIds(env.DB, auth.user.id);
 
       if (blockedIds.length > 0) {
         const durationMs = windowParam === '7d' ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
@@ -1247,7 +1301,7 @@ export default {
       }
 
       const q = (url.searchParams.get('q') || '').trim();
-      const limit = Math.min(Math.max(1, Number(url.searchParams.get('limit') || 20)), 50);
+      const limit = parseLimitParam(url.searchParams.get('limit'), 20, 1, 50);
 
       if (!q) {
         return jsonResponse({ posts: [], total: 0 });
@@ -1497,7 +1551,7 @@ export default {
 
       const rawCursor = url.searchParams.get('cursor');
       const cursorObj = rawCursor ? decodeCursor(rawCursor) : null;
-      const limit = Math.min(Math.max(1, Number(url.searchParams.get('limit') || 20)), 50);
+      const limit = parseLimitParam(url.searchParams.get('limit'), 20, 1, 50);
       const mode = url.searchParams.get('mode'); // 'ranked' | 'for_you' | 'following' | 'chronological'
       const isRankedRequested = mode === 'ranked' || mode === 'for_you';
 
@@ -1871,7 +1925,7 @@ export default {
       }
 
       const cursor = url.searchParams.get('cursor');
-      const limit = Math.min(Math.max(1, Number(url.searchParams.get('limit') || 20)), 50);
+      const limit = parseLimitParam(url.searchParams.get('limit'), 20, 1, 50);
 
       const blockedIds = await getBlockedUserIds(env.DB, auth.user.id);
       const hasBlocked = blockedIds.length > 0;
@@ -2292,7 +2346,7 @@ export default {
         return jsonResponse({ error: 'Forbidden: Not a member of this conversation' }, 403);
       }
 
-      const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 20), 1), 50);
+      const limit = parseLimitParam(url.searchParams.get('limit'), 20, 1, 50);
       const cursorParam = url.searchParams.get('cursor');
       const nowIso = new Date().toISOString();
 
@@ -2455,8 +2509,8 @@ export default {
         }
       }
 
-      const msgId = `msg_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
       const nowMs = Date.now();
+      const msgId = `msg_${nowMs}_${generateRandomString(12).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
       const sentAt = new Date(nowMs).toISOString();
       const expiresAt = new Date(nowMs + 14 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -2927,13 +2981,38 @@ export default {
 
       const mediaId = pathname.slice('/api/media/'.length);
       const media = await env.DB.prepare(
-        'SELECT id, object_key, mime_type FROM media WHERE id = ?'
+        'SELECT id, owner_id, object_key, mime_type FROM media WHERE id = ?'
       )
         .bind(mediaId)
         .first<MediaRow>();
 
       if (!media) {
         return jsonResponse({ error: 'Media not found' }, 404);
+      }
+
+      // Only the owner can GET /api/media/:id while it is not attached to any post or message
+      if (media.owner_id !== auth.user.id) {
+        let attached = await env.DB.prepare(
+          'SELECT 1 FROM post_media WHERE media_id = ?'
+        )
+          .bind(mediaId)
+          .first();
+
+        if (!attached) {
+          try {
+            attached = await env.DB.prepare(
+              'SELECT 1 FROM message_media WHERE media_id = ?'
+            )
+              .bind(mediaId)
+              .first();
+          } catch {
+            // message_media table may not exist in environments without migration 004
+          }
+        }
+
+        if (!attached) {
+          return jsonResponse({ error: 'Forbidden' }, 403);
+        }
       }
 
       if (!env.MEDIA_BUCKET) {
@@ -3034,6 +3113,10 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    return new Response('Not Found', { status: 404 });
+      return new Response('Not Found', { status: 404 });
+    } catch (err) {
+      console.error('Unhandled worker error:', err);
+      return jsonResponse({ error: 'Internal error' }, 500);
+    }
   },
 };

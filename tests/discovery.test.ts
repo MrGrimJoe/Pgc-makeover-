@@ -341,11 +341,34 @@ describe('Milestone 3 Discovery Engine & Phase B Fixes', () => {
 
   // 6. Milestone 3: Classes & Profile selection
   describe('Classes & Profile Integration', () => {
-    it('allows user to retrieve classes and update class_id on profile', async () => {
-      const classesRes = await worker.fetch(new Request('http://localhost:3000/api/classes'), env);
+    it('requires a session for GET /api/classes and allows user to retrieve classes and update class_id', async () => {
+      // Unauthenticated request to /api/classes returns 401
+      const unauthClasses = await worker.fetch(new Request('http://localhost:3000/api/classes'), env);
+      expect(unauthClasses.status).toBe(401);
+
+      // Unauthenticated request to /api/trends returns 401
+      const unauthTrends = await worker.fetch(new Request('http://localhost:3000/api/trends'), env);
+      expect(unauthTrends.status).toBe(401);
+
+      // Authenticated request to /api/classes succeeds
+      const classesRes = await worker.fetch(
+        new Request('http://localhost:3000/api/classes', {
+          headers: { Cookie: aliceSessionCookie },
+        }),
+        env
+      );
       expect(classesRes.status).toBe(200);
       const classesData = (await classesRes.json()) as { classes: any[] };
       expect(classesData.classes.length).toBeGreaterThan(0);
+
+      // Authenticated request to /api/trends succeeds
+      const trendsRes = await worker.fetch(
+        new Request('http://localhost:3000/api/trends', {
+          headers: { Cookie: aliceSessionCookie },
+        }),
+        env
+      );
+      expect(trendsRes.status).toBe(200);
 
       // Alice updates class_id to cls_2028
       const patchReq = new Request('http://localhost:3000/api/me', {
@@ -398,6 +421,50 @@ describe('Milestone 3 Discovery Engine & Phase B Fixes', () => {
       expect(searchRes.status).toBe(200);
       const searchData = (await searchRes.json()) as { posts: any[] };
       expect(searchData.posts.length).toBeGreaterThan(0);
+    });
+
+    it('safely parses limit query params (limit=abc, -5, 0, 100000)', async () => {
+      // limit=abc (NaN fallback to default 20)
+      const resAbc = await worker.fetch(
+        new Request('http://localhost:3000/api/feed?limit=abc', {
+          headers: { Cookie: aliceSessionCookie },
+        }),
+        env
+      );
+      expect(resAbc.status).toBe(200);
+
+      // limit=-5 (clamps to 1)
+      const resNeg = await worker.fetch(
+        new Request('http://localhost:3000/api/feed?limit=-5', {
+          headers: { Cookie: aliceSessionCookie },
+        }),
+        env
+      );
+      expect(resNeg.status).toBe(200);
+      const dataNeg = (await resNeg.json()) as { posts: any[] };
+      expect(dataNeg.posts.length).toBeLessThanOrEqual(1);
+
+      // limit=0 (clamps to 1)
+      const resZero = await worker.fetch(
+        new Request('http://localhost:3000/api/feed?limit=0', {
+          headers: { Cookie: aliceSessionCookie },
+        }),
+        env
+      );
+      expect(resZero.status).toBe(200);
+      const dataZero = (await resZero.json()) as { posts: any[] };
+      expect(dataZero.posts.length).toBeLessThanOrEqual(1);
+
+      // limit=100000 (clamps to 50)
+      const resLarge = await worker.fetch(
+        new Request('http://localhost:3000/api/feed?limit=100000', {
+          headers: { Cookie: aliceSessionCookie },
+        }),
+        env
+      );
+      expect(resLarge.status).toBe(200);
+      const dataLarge = (await resLarge.json()) as { posts: any[] };
+      expect(dataLarge.posts.length).toBeLessThanOrEqual(50);
     });
   });
 });

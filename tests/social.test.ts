@@ -165,6 +165,56 @@ describe('Milestone 2 Social Feed, Media, Interactions & Expiry Lifecycle', () =
       const deleteRes = await worker.fetch(deleteReq, env);
       expect(deleteRes.status).toBe(403);
     });
+
+    it('only the owner can GET /api/media/:id while it is not attached to any post or message', async () => {
+      // Alice uploads media
+      const uploadReq = new Request('http://localhost:3000/api/media/uploads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/png', Cookie: aliceSessionCookie },
+        body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+      });
+      const uploadRes = await worker.fetch(uploadReq, env);
+      expect(uploadRes.status).toBe(201);
+      const media = (await uploadRes.json()) as { id: string };
+
+      // Bob tries to GET Alice's unattached media -> 403
+      const bobGetReq = new Request(`http://localhost:3000/api/media/${media.id}`, {
+        method: 'GET',
+        headers: { Cookie: bobSessionCookie },
+      });
+      const bobGetRes = await worker.fetch(bobGetReq, env);
+      expect(bobGetRes.status).toBe(403);
+
+      // Alice (owner) can GET her unattached media -> 200
+      const aliceGetReq = new Request(`http://localhost:3000/api/media/${media.id}`, {
+        method: 'GET',
+        headers: { Cookie: aliceSessionCookie },
+      });
+      const aliceGetRes = await worker.fetch(aliceGetReq, env);
+      expect(aliceGetRes.status).toBe(200);
+
+      // Alice attaches the media to a post
+      const createPostReq = new Request('http://localhost:3000/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: aliceSessionCookie },
+        body: JSON.stringify({
+          body: 'Post with attached photo',
+          media_ids: [media.id],
+        }),
+      });
+      const createPostRes = await worker.fetch(createPostReq, env);
+      expect(createPostRes.status).toBe(201);
+
+      // Now Bob CAN GET the media since it is attached -> 200
+      const bobGetAttachedRes = await worker.fetch(
+        new Request(`http://localhost:3000/api/media/${media.id}`, {
+          method: 'GET',
+          headers: { Cookie: bobSessionCookie },
+        }),
+        env
+      );
+      expect(bobGetAttachedRes.status).toBe(200);
+    });
   });
 
   // 3. Post Expiry Lifecycle & R2 Cleanup

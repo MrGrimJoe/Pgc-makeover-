@@ -105,6 +105,8 @@ export function createSqliteD1(filePath = ':memory:'): D1Database {
     }
   }
 
+  let batchLock: Promise<void> = Promise.resolve();
+
   const d1 = {
     prepare(query: string): D1PreparedStatement {
       return new MockPreparedStatement(query);
@@ -123,6 +125,13 @@ export function createSqliteD1(filePath = ':memory:'): D1Database {
     },
 
     async batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
+      const prev = batchLock;
+      let release: () => void;
+      batchLock = new Promise<void>((res) => {
+        release = res;
+      });
+      await prev;
+
       const results: D1Result<T>[] = [];
       sqlite.exec('BEGIN TRANSACTION;');
       try {
@@ -135,6 +144,8 @@ export function createSqliteD1(filePath = ':memory:'): D1Database {
       } catch (err) {
         sqlite.exec('ROLLBACK;');
         throw err;
+      } finally {
+        release!();
       }
     },
 

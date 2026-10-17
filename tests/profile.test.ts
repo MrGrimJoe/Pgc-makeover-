@@ -167,6 +167,45 @@ describe('Profile Management and Access Control', () => {
     expect(data.error).toContain('Username is already taken');
   });
 
+  it('maps D1 unique-constraint errors on username to 409 in race case with two parallel requests', async () => {
+    // Both Alice and Bob attempt to update their username to the exact same new username in parallel
+    const p1 = worker.fetch(
+      new Request('http://localhost:3000/api/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: 'session_id=sess_alice',
+        },
+        body: JSON.stringify({
+          username: 'race_winner_hero',
+        }),
+      }),
+      env
+    );
+
+    const p2 = worker.fetch(
+      new Request('http://localhost:3000/api/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: 'session_id=sess_bob',
+        },
+        body: JSON.stringify({
+          username: 'race_winner_hero',
+        }),
+      }),
+      env
+    );
+
+    const [res1, res2] = await Promise.all([p1, p2]);
+    const statuses = [res1.status, res2.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    const conflictRes = res1.status === 409 ? res1 : res2;
+    const conflictData = (await conflictRes.json()) as { error: string };
+    expect(conflictData.error).toContain('Username is already taken');
+  });
+
   it('GET /api/users/:username requires a valid session', async () => {
     const unauthReq = new Request('http://localhost:3000/api/users/bob_builder', {
       method: 'GET',
@@ -242,5 +281,71 @@ describe('Profile Management and Access Control', () => {
     // Verify Bob is unaffected
     const bobUser = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind('usr_bob').first();
     expect(bobUser).not.toBeNull();
+  });
+
+  it('rejects feed_preferences exceeding 2000 characters with 400', async () => {
+    const oversizedPrefs = 'a'.repeat(2001);
+    const req = new Request('http://localhost:3000/api/me', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: 'session_id=sess_alice',
+      },
+      body: JSON.stringify({
+        feed_preferences: oversizedPrefs,
+      }),
+    });
+
+    const res = await worker.fetch(req, env);
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toContain('feed_preferences cannot exceed 2000 characters');
+
+    // Valid size <= 2000 succeeds
+    const validPrefs = 'b'.repeat(2000);
+    const validReq = new Request('http://localhost:3000/api/me', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: 'session_id=sess_alice',
+      },
+      body: JSON.stringify({
+        feed_preferences: validPrefs,
+      }),
+    });
+    const validRes = await worker.fetch(validReq, env);
+    expect(validRes.status).toBe(200);
+  });
+
+  it('rejects class_id values that do not exist in the classes table with 400', async () => {
+    const req = new Request('http://localhost:3000/api/me', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: 'session_id=sess_alice',
+      },
+      body: JSON.stringify({
+        class_id: 'cls_nonexistent_999',
+      }),
+    });
+
+    const res = await worker.fetch(req, env);
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toBe('Class not found');
+
+    // Valid class_id works
+    const validReq = new Request('http://localhost:3000/api/me', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: 'session_id=sess_alice',
+      },
+      body: JSON.stringify({
+        class_id: 'cls_2028',
+      }),
+    });
+    const validRes = await worker.fetch(validReq, env);
+    expect(validRes.status).toBe(200);
   });
 });
