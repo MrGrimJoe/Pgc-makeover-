@@ -198,6 +198,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
 
       {message && (
         <div
+          role="alert"
           className={`p-3 rounded-sm text-[13px] ${
             message.type === 'success'
               ? 'bg-primary-tint text-primary'
@@ -330,7 +331,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
                   onClick={() => handleRemoveInterest(item.topic_id)}
                   title={`Remove #${item.slug}`}
                   aria-label={`Remove #${item.slug}`}
-                  className="p-0.5 hover:text-danger cursor-pointer flex items-center justify-center"
+                  className="min-h-[44px] min-w-[44px] -my-2 -mr-1.5 p-0.5 hover:text-danger cursor-pointer flex items-center justify-center"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -362,7 +363,8 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
                 <button
                   type="button"
                   onClick={() => handleUnblock(bu.user_id)}
-                  className="h-[32px] px-3 rounded-[6px] border border-[var(--line,#E8EBF0)] text-[12px] font-semibold text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
+                  aria-label={`Unblock @${bu.username}`}
+                  className="min-h-[44px] px-3.5 rounded-[6px] border border-[var(--line,#E8EBF0)] text-[12px] font-semibold text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center"
                 >
                   Unblock
                 </button>
@@ -403,7 +405,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
             </p>
 
             {deleteError && (
-              <div className="p-2 rounded-sm bg-danger-tint text-danger text-[13px]">
+              <div role="alert" className="p-2 rounded-sm bg-danger-tint text-danger text-[13px]">
                 {deleteError}
               </div>
             )}
@@ -413,6 +415,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
               value={deleteConfirmationText}
               onChange={(e) => setDeleteConfirmationText(e.target.value)}
               placeholder={currentUser.profile.username}
+              aria-label="Confirm username to delete account"
               className="w-full min-h-[44px] bg-bg border border-border rounded-sm px-3 py-2 text-[15px] text-text font-mono focus:outline-none focus:border-danger transition-colors"
             />
 

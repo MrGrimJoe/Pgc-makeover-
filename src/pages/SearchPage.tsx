@@ -109,15 +109,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search people and #topics"
+            aria-label="Search people and #topics"
             className="flex-1 border-0 bg-transparent text-[var(--text,#17233A)] text-[15px] outline-none"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={handleClear}
-              title="Clear"
-              aria-label="Clear"
-              className="text-[var(--muted,#5B6577)] hover:text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0 p-1"
+              title="Clear search"
+              aria-label="Clear search"
+              className="text-[var(--muted,#5B6577)] hover:text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0 min-h-[44px] min-w-[44px] flex items-center justify-center p-0 -mr-2"
             >
               <X className="w-4 h-4 stroke-[1.7]" />
             </button>
@@ -249,6 +250,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
               <button
                 type="button"
                 onClick={() => onViewAuthorProfile(person.username)}
+                aria-label={`View profile of @${person.username}`}
                 className="w-8 h-8 rounded-full bg-[var(--tint,#EAF0FA)] text-[var(--blue,#244C8A)] flex items-center justify-center font-semibold text-[13px] shrink-0 border-0 p-0 cursor-pointer"
               >
                 {person.displayName.slice(0, 2).toUpperCase()}
@@ -267,7 +269,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
               <button
                 type="button"
                 onClick={() => handleTogglePersonFollow(idx, person.username)}
-                className={`h-[32px] px-3.5 rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer flex items-center justify-center ${
+                className={`min-h-[44px] px-3.5 rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer flex items-center justify-center ${
                   person.isFollowing
                     ? 'border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)]'
                     : 'bg-[var(--blue,#244C8A)] border border-[var(--blue,#244C8A)] text-white'

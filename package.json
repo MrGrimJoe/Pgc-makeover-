@@ -7,8 +7,15 @@
     "dev": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
+    "preview:worker": "npm run build && wrangler dev --local",
+    "db:migrate:local": "wrangler d1 migrations apply classsync-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply classsync-db --remote",
+    "db:backup": "wrangler d1 export classsync-db --remote --output=backups/classsync-$(date +%F).sql",
+    "deploy": "npm run build && wrangler deploy",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "seed:dev": "tsx scripts/seed-dev.ts",
+    "prelaunch-check": "tsx scripts/prelaunch-check.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
@@ -35,6 +42,7 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.4",
+    "wrangler": "4.151.1"
   }
 }

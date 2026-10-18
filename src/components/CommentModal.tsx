@@ -98,7 +98,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         </div>
 
         {error && (
-          <div className="my-2 p-2 rounded-sm bg-danger-tint text-danger text-[13px]">
+          <div role="alert" className="my-2 p-2 rounded-sm bg-danger-tint text-danger text-[13px]">
             {error}
           </div>
         )}
@@ -144,11 +144,11 @@ export const CommentModal: React.FC<CommentModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleDeleteComment(comment.id)}
-                      className="text-text-muted hover:text-danger min-h-[32px] min-w-[32px] flex items-center justify-center cursor-pointer"
+                      className="text-text-muted hover:text-danger min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
                       title="Delete comment"
                       aria-label="Delete comment"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   )}
                 </div>
@@ -164,6 +164,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             placeholder="Add a comment..."
+            aria-label="Add a comment"
             maxLength={500}
             className="flex-1 min-h-[44px] bg-bg border border-border rounded-sm px-3 py-2 text-[15px] text-text focus:outline-none focus:border-primary transition-colors"
           />

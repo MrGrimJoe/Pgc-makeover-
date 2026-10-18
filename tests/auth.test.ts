@@ -107,6 +107,75 @@ describe('Google OAuth & Session Authentication', () => {
     expect(body.error).toBe('Mock authorization is disabled in production');
   });
 
+  // DEV-ONLY: remove before launch
+  it('rejects as= parameter in /api/auth/google when ENVIRONMENT is production', async () => {
+    const prodEnv: Env = {
+      ...env,
+      ENVIRONMENT: 'production',
+      GOOGLE_CLIENT_ID: 'real-client-id.apps.googleusercontent.com',
+    };
+
+    const req = new Request('http://localhost:3000/api/auth/google?mock=true&as=alice', { method: 'GET' });
+    const res = await worker.fetch(req, prodEnv);
+
+    expect(res.status).toBe(400);
+  });
+
+  // DEV-ONLY: remove before launch
+  it('rejects as= parameter in /api/auth/callback when ENVIRONMENT is production', async () => {
+    const prodEnv: Env = {
+      ...env,
+      ENVIRONMENT: 'production',
+      GOOGLE_CLIENT_ID: 'real-client-id.apps.googleusercontent.com',
+    };
+
+    const callbackUrl = 'http://localhost:3000/api/auth/callback?code=mock_code&state=s123&mock=true&as=alice';
+    const req = new Request(callbackUrl, { method: 'GET' });
+    const res = await worker.fetch(req, prodEnv);
+
+    expect(res.status).toBe(400);
+  });
+
+  // DEV-ONLY: remove before launch
+  it('allows dev sign-in with as=<username> when ENVIRONMENT is development', async () => {
+    const devEnv: Env = {
+      ...env,
+      ENVIRONMENT: 'development',
+    };
+
+    // First ensure user alice exists
+    await devEnv.DB.prepare('INSERT INTO users (id, provider_subject, created_at, status) VALUES (?, ?, ?, ?)')
+      .bind('usr_alice', 'mock-google-sub-alice', new Date().toISOString(), 'active')
+      .run();
+    await devEnv.DB.prepare('INSERT INTO profiles (user_id, username, username_normalized, display_name, bio) VALUES (?, ?, ?, ?, ?)')
+      .bind('usr_alice', 'alice', 'alice', 'Alice Adams', '')
+      .run();
+
+    const callbackUrl = 'http://localhost:3000/api/auth/callback?code=mock_code&state=s123&mock=true&as=alice';
+    const req = new Request(callbackUrl, { method: 'GET' });
+    const res = await worker.fetch(req, devEnv);
+
+    expect(res.status).toBe(302);
+    const setCookie = res.headers.get('Set-Cookie');
+    expect(setCookie).toContain('session_id=');
+
+    // Verify session belongs to usr_alice
+    const sessionId = setCookie?.match(/session_id=([^;]+)/)?.[1];
+    const sessionRow = await devEnv.DB.prepare('SELECT user_id FROM sessions WHERE id = ?').bind(sessionId).first<{ user_id: string }>();
+    expect(sessionRow?.user_id).toBe('usr_alice');
+  });
+
+  // DEV-ONLY: remove before launch
+  it('the seed refuses outside development and when target is not .local-dev-d1.sqlite', async () => {
+    const { seedDevDatabase } = await import('../scripts/seed-dev.ts');
+
+    // Refuses when ENVIRONMENT is production
+    await expect(seedDevDatabase(undefined, 'production')).rejects.toThrow('Refusing to seed: ENVIRONMENT cannot be production');
+
+    // Refuses when target is remote or not .local-dev-d1.sqlite
+    await expect(seedDevDatabase('/tmp/remote-database.sqlite', 'development')).rejects.toThrow('Refusing to seed: target must be .local-dev-d1.sqlite only');
+  });
+
   it('auth callback with a bad state is rejected with 400', async () => {
     const validCookieState = 'valid_secret_state_123';
     const cookiePayload = encodeOAuthState({

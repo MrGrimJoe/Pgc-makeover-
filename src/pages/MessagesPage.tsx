@@ -235,7 +235,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
 
         {/* Error notification */}
         {error && (
-          <div className="m-3 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">
+          <div role="alert" className="m-3 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">
             {error}
           </div>
         )}
@@ -278,7 +278,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                         <img
                           key={m.id}
                           src={`/api/media/${m.id}`}
-                          alt=""
+                          alt="Message attachment"
                           className="rounded-[8px] max-h-[220px] w-full object-cover"
                           loading="lazy"
                         />
@@ -309,13 +309,16 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                   key={m.id}
                   className="relative w-14 h-14 rounded-[8px] overflow-hidden bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] shrink-0"
                 >
-                  <img src={`/api/media/${m.id}`} alt="" className="w-full h-full object-cover" />
+                  <img src={`/api/media/${m.id}`} alt="Attachment preview" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => setAttachedMedia((prev) => prev.filter((item) => item.id !== m.id))}
-                    className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5 cursor-pointer"
+                    aria-label="Remove attachment"
+                    className="absolute top-0 right-0 w-[44px] h-[44px] min-w-[44px] min-h-[44px] flex items-center justify-center text-white cursor-pointer"
                   >
-                    <X className="w-3 h-3" />
+                    <span className="bg-black/60 rounded-full p-0.5 flex items-center justify-center">
+                      <X className="w-3 h-3" />
+                    </span>
                   </button>
                 </div>
               ))}
@@ -338,6 +341,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
               type="file"
               accept="image/jpeg,image/png,image/webp"
               onChange={handleImageSelect}
+              aria-label="Attach image"
               className="hidden"
             />
 
@@ -346,6 +350,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
               value={messageBody}
               onChange={(e) => setMessageBody(e.target.value)}
               placeholder={uploadingImage ? 'Uploading image...' : 'Message...'}
+              aria-label="Message"
               maxLength={1000}
               className="flex-1 min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3.5 text-[15px] text-[var(--text,#17233A)] outline-none"
             />
@@ -386,7 +391,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
 
       {/* Error state */}
       {error && (
-        <div className="m-4 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">
+        <div role="alert" className="m-4 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">
           {error}
         </div>
       )}

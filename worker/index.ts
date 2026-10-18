@@ -464,6 +464,12 @@ export default {
       // DEV-ONLY: remove before launch
       const isMockRequested =
         url.searchParams.get('mock') === 'true' || env.GOOGLE_CLIENT_ID === 'PLACEHOLDER';
+      const asUser = url.searchParams.get('as');
+
+      // DEV-ONLY: remove before launch
+      if (asUser !== null && !isDevelopment) {
+        return jsonResponse({ error: 'User switching is only allowed in development' }, 400);
+      }
 
       if (isMockRequested && !isDevelopment && !isTest) {
         return jsonResponse({ error: 'Mock authentication is disabled in production' }, 400);
@@ -486,9 +492,10 @@ export default {
       const encodedStateCookie = encodeOAuthState(statePayload);
 
       if (isMockRequested) {
+        const asQuery = asUser ? `&as=${encodeURIComponent(asUser)}` : '';
         const mockRedirect = (isDevelopment || isTest)
-          ? `/api/auth/callback?code=mock_code&state=${encodeURIComponent(state)}&mock=true`
-          : `${redirectUri}?code=mock_code&state=${encodeURIComponent(state)}&mock=true`;
+          ? `/api/auth/callback?code=mock_code&state=${encodeURIComponent(state)}&mock=true${asQuery}`
+          : `${redirectUri}?code=mock_code&state=${encodeURIComponent(state)}&mock=true${asQuery}`;
 
         return new Response(null, {
           status: 302,
@@ -540,6 +547,12 @@ export default {
       const state = url.searchParams.get('state');
       const errorParam = url.searchParams.get('error');
       const isMock = url.searchParams.get('mock') === 'true';
+      const asUser = url.searchParams.get('as');
+
+      // DEV-ONLY: remove before launch
+      if (asUser !== null && !isDevelopment) {
+        return jsonResponse({ error: 'User switching is only allowed in development' }, 400);
+      }
 
       if (errorParam) {
         return jsonResponse({ error: 'Authentication was denied or encountered an error' }, 400);
@@ -576,10 +589,36 @@ export default {
 
       let providerSubject: string;
       let displayName: string;
+      let targetUserRow: UserRow | null = null;
 
       if (isMock) {
-        providerSubject = 'mock-google-sub-12345';
-        displayName = 'Test User';
+        // DEV-ONLY: remove before launch
+        if (asUser && isDevelopment) {
+          const normalized = normalizeUsername(asUser);
+          const profile = await env.DB.prepare(
+            'SELECT user_id, display_name FROM profiles WHERE username_normalized = ?'
+          )
+            .bind(normalized)
+            .first<{ user_id: string; display_name: string }>();
+
+          if (!profile) {
+            return jsonResponse({ error: `User @${asUser} not found` }, 400);
+          }
+
+          targetUserRow = await env.DB.prepare('SELECT id, provider_subject, created_at, status FROM users WHERE id = ?')
+            .bind(profile.user_id)
+            .first<UserRow>();
+
+          if (!targetUserRow) {
+            return jsonResponse({ error: `User account for @${asUser} not found` }, 400);
+          }
+
+          providerSubject = targetUserRow.provider_subject;
+          displayName = profile.display_name;
+        } else {
+          providerSubject = 'mock-google-sub-12345';
+          displayName = 'Test User';
+        }
       } else {
         const redirectUri = `${env.APP_URL || url.origin}/api/auth/callback`;
 
@@ -616,9 +655,9 @@ export default {
         }
       }
 
-      let user = await env.DB.prepare('SELECT id, created_at, status FROM users WHERE provider_subject = ?')
+      let user = targetUserRow || (await env.DB.prepare('SELECT id, created_at, status FROM users WHERE provider_subject = ?')
         .bind(providerSubject)
-        .first<UserRow>();
+        .first<UserRow>());
 
       const now = new Date().toISOString();
 
@@ -1011,26 +1050,67 @@ export default {
 
       const userId = auth.user.id;
 
+      // Collect all R2 keys for this user (own media and message attachments)
+      const keysToDelete = new Set<string>();
+
       const userMedia = await env.DB.prepare('SELECT object_key FROM media WHERE owner_id = ?')
         .bind(userId)
         .all<{ object_key: string }>();
 
-      if (env.MEDIA_BUCKET && userMedia.results) {
+      if (userMedia.results) {
         for (const m of userMedia.results) {
+          keysToDelete.add(m.object_key);
+        }
+      }
+
+      try {
+        const msgMedia = await env.DB.prepare(`
+          SELECT m.object_key FROM media m
+          JOIN message_media mm ON mm.media_id = m.id
+          JOIN messages msg ON msg.id = mm.message_id
+          WHERE msg.sender_id = ?
+        `).bind(userId).all<{ object_key: string }>();
+
+        if (msgMedia.results) {
+          for (const m of msgMedia.results) {
+            keysToDelete.add(m.object_key);
+          }
+        }
+      } catch {
+        // Table might not exist in some migrations
+      }
+
+      if (env.MEDIA_BUCKET && keysToDelete.size > 0) {
+        for (const key of keysToDelete) {
           try {
-            await env.MEDIA_BUCKET.delete(m.object_key);
+            await env.MEDIA_BUCKET.delete(key);
           } catch {
             // Ignore R2 error on account purge
           }
         }
       }
 
-      await env.DB.batch([
+      const batchStatements: D1PreparedStatement[] = [
         env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
         env.DB.prepare('DELETE FROM user_settings WHERE user_id = ?').bind(userId),
         env.DB.prepare('DELETE FROM profiles WHERE user_id = ?').bind(userId),
-        env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId),
-      ]);
+      ];
+
+      try {
+        batchStatements.push(
+          env.DB.prepare('DELETE FROM message_media WHERE message_id IN (SELECT id FROM messages WHERE sender_id = ?)').bind(userId),
+          env.DB.prepare('DELETE FROM messages WHERE sender_id = ?').bind(userId)
+        );
+      } catch {
+        // Table may not exist
+      }
+
+      batchStatements.push(
+        env.DB.prepare('DELETE FROM media WHERE owner_id = ?').bind(userId),
+        env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId)
+      );
+
+      await env.DB.batch(batchStatements);
 
       return jsonResponse(
         { success: true, message: 'Account and associated data deleted permanently' },
@@ -2762,6 +2842,67 @@ export default {
     // ==========================================
     // 6. ADMIN MODERATION ROUTES (FIX #8)
     // ==========================================
+
+    // GET /api/admin/stats - System health & usage counts (requires admin secret)
+    if (pathname === '/api/admin/stats' && method === 'GET') {
+      const adminSecretHeader = request.headers.get('x-admin-secret');
+      if (!adminSecretHeader) {
+        if (!((isDevelopment || isTest) && !env.ADMIN_SECRET)) {
+          return jsonResponse({ error: 'Unauthorized: Admin secret required' }, 401);
+        }
+      } else if (!env.ADMIN_SECRET || !constantTimeCompare(adminSecretHeader, env.ADMIN_SECRET)) {
+        return jsonResponse({ error: 'Forbidden: Invalid admin secret' }, 403);
+      }
+
+      const now = Date.now();
+      const nowIso = new Date(now).toISOString();
+      const in24hIso = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+
+      const [
+        usersRow,
+        postsRow,
+        commentsRow,
+        mediaRow,
+        openReportsRow,
+        expiringPostsRow,
+      ] = await Promise.all([
+        env.DB.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>(),
+        env.DB.prepare('SELECT COUNT(*) as count FROM posts').first<{ count: number }>(),
+        env.DB.prepare('SELECT COUNT(*) as count FROM comments').first<{ count: number }>(),
+        env.DB.prepare('SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as total_bytes FROM media').first<{ count: number; total_bytes: number }>(),
+        env.DB.prepare("SELECT COUNT(*) as count FROM reports WHERE status = 'pending' OR status = 'open'").first<{ count: number }>(),
+        env.DB.prepare("SELECT COUNT(*) as count FROM posts WHERE status = 'active' AND expires_at >= ? AND expires_at <= ?").bind(nowIso, in24hIso).first<{ count: number }>(),
+      ]);
+
+      let messagesCount = 0;
+      let conversationsCount = 0;
+      try {
+        const msgRow = await env.DB.prepare('SELECT COUNT(*) as count FROM messages').first<{ count: number }>();
+        messagesCount = msgRow?.count ?? 0;
+      } catch {
+        // Table may not exist yet
+      }
+      try {
+        const convRow = await env.DB.prepare('SELECT COUNT(*) as count FROM conversations').first<{ count: number }>();
+        conversationsCount = convRow?.count ?? 0;
+      } catch {
+        // Table may not exist yet
+      }
+
+      return jsonResponse({
+        users: usersRow?.count ?? 0,
+        posts: postsRow?.count ?? 0,
+        comments: commentsRow?.count ?? 0,
+        messages: messagesCount,
+        conversations: conversationsCount,
+        media: mediaRow?.count ?? 0,
+        media_rows: mediaRow?.count ?? 0,
+        total_media_bytes: Number(mediaRow?.total_bytes ?? 0),
+        media_bytes: Number(mediaRow?.total_bytes ?? 0),
+        open_reports: openReportsRow?.count ?? 0,
+        posts_expiring_within_24h: expiringPostsRow?.count ?? 0,
+      });
+    }
 
     // GET /api/admin/reports - Retrieve all moderation reports (requires admin secret)
     if (pathname === '/api/admin/reports' && method === 'GET') {

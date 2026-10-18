@@ -27,6 +27,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
         onClick={() => setActiveTab('feed')}
         title="Feed"
         aria-label="Feed"
+        aria-current={activeTab === 'feed' ? 'page' : undefined}
         className={`flex-1 h-full min-h-[44px] flex items-center justify-center cursor-pointer transition-colors bg-transparent border-0 ${
           activeTab === 'feed'
             ? 'text-[var(--text,#17233A)]'
@@ -45,6 +46,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
         onClick={() => setActiveTab('search')}
         title="Search"
         aria-label="Search"
+        aria-current={activeTab === 'search' ? 'page' : undefined}
         className={`flex-1 h-full min-h-[44px] flex items-center justify-center cursor-pointer transition-colors bg-transparent border-0 ${
           activeTab === 'search'
             ? 'text-[var(--text,#17233A)]'
@@ -63,6 +65,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
         onClick={() => setActiveTab('post')}
         title="New post"
         aria-label="New post"
+        aria-current={activeTab === 'post' ? 'page' : undefined}
         className={`flex-1 h-full min-h-[44px] flex items-center justify-center cursor-pointer transition-colors bg-transparent border-0 ${
           activeTab === 'post'
             ? 'text-[var(--text,#17233A)]'
@@ -81,6 +84,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({
         onClick={() => setActiveTab('profile')}
         title="Profile"
         aria-label="Profile"
+        aria-current={activeTab === 'profile' ? 'page' : undefined}
         className={`flex-1 h-full min-h-[44px] flex items-center justify-center cursor-pointer transition-colors bg-transparent border-0 ${
           activeTab === 'profile'
             ? 'text-[var(--text,#17233A)]'

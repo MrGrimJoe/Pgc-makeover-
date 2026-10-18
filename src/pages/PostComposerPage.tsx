@@ -125,7 +125,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
       </div>
 
       {error && (
-        <div className="m-4 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">
+        <div role="alert" className="m-4 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">
           {error}
         </div>
       )}
@@ -135,6 +135,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         placeholder="What's happening? Use #topics so classmates can find it"
+        aria-label="What's happening? Use #topics so classmates can find it"
         maxLength={1000}
         autoFocus
         className="w-full border-0 outline-none resize-none bg-transparent text-[var(--text,#17233A)] text-[17px] p-4 min-h-[150px] leading-relaxed"
@@ -157,9 +158,11 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
                 type="button"
                 onClick={() => handleRemoveMedia(m.id)}
                 aria-label="Remove image"
-                className="absolute top-1 right-1 p-1 rounded-full bg-[#17233A]/70 text-white hover:bg-[var(--danger,#B23A40)] transition-colors cursor-pointer"
+                className="absolute top-0 right-0 w-[44px] h-[44px] min-w-[44px] min-h-[44px] flex items-center justify-center text-white cursor-pointer"
               >
-                <X className="w-3 h-3 stroke-[2]" />
+                <span className="p-1 rounded-full bg-[#17233A]/70 hover:bg-[var(--danger,#B23A40)] transition-colors flex items-center justify-center">
+                  <X className="w-3 h-3 stroke-[2]" />
+                </span>
               </button>
             </div>
           ))}
@@ -184,6 +187,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
           accept="image/jpeg,image/png,image/webp"
           multiple
           onChange={handleFileSelect}
+          aria-label="Upload photo"
           className="hidden"
         />
         {uploading && <span className="text-[13px] text-[var(--muted,#5B6577)]">Uploading...</span>}

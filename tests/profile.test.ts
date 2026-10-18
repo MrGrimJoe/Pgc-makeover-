@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import worker from '../worker/index.ts';
 import { createSqliteD1 } from '../worker/db/sqlite-d1.ts';
-import { runMigrations } from '../worker/db/migrate.ts';
+import { runMigrations, ALL_MIGRATIONS } from '../worker/db/migrate.ts';
+import { createMemoryR2Bucket } from '../worker/db/r2-shim.ts';
 import type { Env } from '../worker/types.ts';
 
 describe('Profile Management and Access Control', () => {
@@ -9,9 +10,11 @@ describe('Profile Management and Access Control', () => {
 
   beforeEach(async () => {
     const db = createSqliteD1(':memory:');
-    await runMigrations(db);
+    const r2 = createMemoryR2Bucket();
+    await runMigrations(db, ALL_MIGRATIONS);
     env = {
       DB: db,
+      MEDIA_BUCKET: r2,
       APP_URL: 'http://localhost:3000',
       GOOGLE_CLIENT_ID: 'test-google-client-id.apps.googleusercontent.com',
       GOOGLE_CLIENT_SECRET: 'test-google-client-secret',
@@ -256,7 +259,35 @@ describe('Profile Management and Access Control', () => {
     expect(data.username).toBe('bob_builder');
   });
 
-  it('DELETE /api/me removes the user and all their rows', async () => {
+  it('DELETE /api/me removes the user, all their rows, R2 objects, and message attachments', async () => {
+    // 1. Create R2 media object owned by Alice
+    const now = new Date().toISOString();
+    await env.MEDIA_BUCKET!.put('alice_avatar_key', new Uint8Array([1, 2, 3]));
+    await env.DB.prepare(
+      'INSERT INTO media (id, owner_id, object_key, mime_type, size_bytes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    )
+      .bind('med_alice_1', 'usr_alice', 'alice_avatar_key', 'image/png', 3, now, now)
+      .run();
+
+    // 2. Create conversation and message with media attachment sent by Alice
+    await env.MEDIA_BUCKET!.put('alice_msg_attach_key', new Uint8Array([4, 5, 6]));
+    await env.DB.prepare(
+      'INSERT INTO media (id, owner_id, object_key, mime_type, size_bytes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    )
+      .bind('med_alice_2', 'usr_alice', 'alice_msg_attach_key', 'image/png', 3, now, now)
+      .run();
+
+    await env.DB.prepare('INSERT INTO conversations (id, created_at) VALUES (?, ?)')
+      .bind('conv_test_del', now)
+      .run();
+    await env.DB.prepare('INSERT INTO messages (id, conversation_id, sender_id, body, sent_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind('msg_test_del', 'conv_test_del', 'usr_alice', 'Secret photo', now, now)
+      .run();
+    await env.DB.prepare('INSERT INTO message_media (message_id, media_id) VALUES (?, ?)')
+      .bind('msg_test_del', 'med_alice_2')
+      .run();
+
+    // 3. Alice performs DELETE /api/me
     const req = new Request('http://localhost:3000/api/me', {
       method: 'DELETE',
       headers: {
@@ -267,7 +298,19 @@ describe('Profile Management and Access Control', () => {
     const res = await worker.fetch(req, env);
     expect(res.status).toBe(200);
 
-    // Verify all Alice's rows are removed from database
+    // 4. Verify R2 objects are deleted
+    expect(await env.MEDIA_BUCKET!.get('alice_avatar_key')).toBeNull();
+    expect(await env.MEDIA_BUCKET!.get('alice_msg_attach_key')).toBeNull();
+
+    // 5. Verify message attachments and messages are removed from database
+    const msgRow = await env.DB.prepare('SELECT * FROM messages WHERE sender_id = ?').bind('usr_alice').first();
+    expect(msgRow).toBeNull();
+    const msgMediaRow = await env.DB.prepare('SELECT * FROM message_media WHERE message_id = ?').bind('msg_test_del').first();
+    expect(msgMediaRow).toBeNull();
+    const mediaRow = await env.DB.prepare('SELECT * FROM media WHERE owner_id = ?').bind('usr_alice').first();
+    expect(mediaRow).toBeNull();
+
+    // 6. Verify all Alice's rows are removed from database
     const userRow = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind('usr_alice').first();
     const profileRow = await env.DB.prepare('SELECT * FROM profiles WHERE user_id = ?').bind('usr_alice').first();
     const settingsRow = await env.DB.prepare('SELECT * FROM user_settings WHERE user_id = ?').bind('usr_alice').first();
@@ -278,7 +321,7 @@ describe('Profile Management and Access Control', () => {
     expect(settingsRow).toBeNull();
     expect(sessionRow).toBeNull();
 
-    // Verify Bob is unaffected
+    // 7. Verify Bob is unaffected
     const bobUser = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind('usr_bob').first();
     expect(bobUser).not.toBeNull();
   });

@@ -117,6 +117,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           onClick={() => onViewAuthorProfile && onViewAuthorProfile(post.author_username)}
           className="w-8 h-8 rounded-full bg-[var(--tint,#EAF0FA)] text-[var(--blue,#244C8A)] flex items-center justify-center font-semibold text-[13px] shrink-0 cursor-pointer border-0 p-0"
           title={`View @${post.author_username}`}
+          aria-label={`View @${post.author_username}`}
         >
           {authorInitial}
         </button>
@@ -145,7 +146,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               disabled={deleting}
               title="Delete post"
               aria-label="Delete post"
-              className="text-[var(--muted,#5B6577)] hover:text-[var(--danger,#B23A40)] cursor-pointer bg-transparent border-0 p-1"
+              className="w-[44px] h-[44px] min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--muted,#5B6577)] hover:text-[var(--danger,#B23A40)] cursor-pointer bg-transparent border-0 p-0 -mr-2"
             >
               <Trash2 className="w-4 h-4 stroke-[1.7]" />
             </button>
@@ -155,21 +156,21 @@ export const PostCard: React.FC<PostCardProps> = ({
 
       {/* Delete confirmation inline banner */}
       {confirmDelete && (
-        <div className="mx-4 mb-2 p-2 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px] flex items-center justify-between">
+        <div role="alert" className="mx-4 mb-2 p-2 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px] flex items-center justify-between">
           <span>Delete post permanently?</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleDeletePost}
               disabled={deleting}
-              className="px-2.5 py-1 rounded-[6px] bg-[var(--danger,#B23A40)] text-white font-semibold text-[12px] cursor-pointer"
+              className="px-2.5 py-1 min-h-[44px] rounded-[6px] bg-[var(--danger,#B23A40)] text-white font-semibold text-[12px] cursor-pointer flex items-center"
             >
               {deleting ? 'Deleting...' : 'Delete'}
             </button>
             <button
               type="button"
               onClick={() => setConfirmDelete(false)}
-              className="px-2 py-1 rounded-[6px] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[12px] cursor-pointer hover:bg-[var(--bg,#fff)]"
+              className="px-2 py-1 min-h-[44px] rounded-[6px] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[12px] cursor-pointer hover:bg-[var(--bg,#fff)] flex items-center"
             >
               Cancel
             </button>
@@ -184,7 +185,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           <div className="w-full aspect-[4/5] bg-[var(--bg2,#F8F9FC)] overflow-hidden">
             <img
               src={`/api/media/${post.media[0]!.id}`}
-              alt=""
+              alt={`Photo post by @${post.author_username}`}
               className="w-full h-full object-cover"
               loading="lazy"
             />
@@ -196,7 +197,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               type="button"
               onClick={handleToggleLike}
               title={hasLiked ? 'Unlike' : 'Like'}
-              aria-label="Like"
+              aria-label={hasLiked ? 'Unlike' : 'Like'}
               className={`w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center cursor-pointer bg-transparent border-0 ${
                 hasLiked ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'
               }`}
@@ -302,7 +303,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               type="button"
               onClick={handleToggleLike}
               title={hasLiked ? 'Unlike' : 'Like'}
-              aria-label="Like"
+              aria-label={hasLiked ? 'Unlike' : 'Like'}
               className={`w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center cursor-pointer bg-transparent border-0 ${
                 hasLiked ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'
               }`}

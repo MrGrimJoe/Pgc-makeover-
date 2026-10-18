@@ -7,6 +7,12 @@ interface DevBarProps {
   onLogout: () => Promise<void>;
 }
 
+// DEV-ONLY: remove before launch
+const SEEDED_DEV_USERS = [
+  'alice', 'bob', 'charlie', 'dave', 'emma', 'fiona',
+  'george', 'hannah', 'ian', 'julia', 'kevin', 'laura',
+];
+
 export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
   // DEV-ONLY: remove before launch
   // Completely omitted in production builds via Vite dead-code elimination
@@ -16,6 +22,11 @@ export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
 
   const handleDevSignIn = () => {
     window.location.href = '/api/auth/google?mock=true';
+  };
+
+  const handleSwitchUser = (username: string) => {
+    if (!username) return;
+    window.location.href = `/api/auth/google?mock=true&as=${encodeURIComponent(username)}`;
   };
 
   return (
@@ -35,6 +46,25 @@ export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
       </div>
 
       <div className="flex items-center space-x-2">
+        {/* DEV-ONLY: seeded user switcher dropdown */}
+        <div className="flex items-center space-x-1">
+          <label htmlFor="dev-user-select" className="sr-only">Switch User</label>
+          <select
+            id="dev-user-select"
+            aria-label="Switch Dev User"
+            value={currentUser?.profile.username || ''}
+            onChange={(e) => handleSwitchUser(e.target.value)}
+            className="px-1.5 py-0.5 rounded bg-white text-[#17233A] border border-[#17233A]/30 text-[11px] font-medium cursor-pointer"
+          >
+            <option value="" disabled>Switch user...</option>
+            {SEEDED_DEV_USERS.map((u) => (
+              <option key={u} value={u}>
+                @{u} {currentUser?.profile.username === u ? '(current)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {currentUser ? (
           <>
             <span className="text-[11px]">

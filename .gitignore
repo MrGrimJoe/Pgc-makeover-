@@ -12,3 +12,5 @@ coverage/
 *.sqlite-wal
 bun.lock
 bun.lockb
+backups/
+.wrangler/

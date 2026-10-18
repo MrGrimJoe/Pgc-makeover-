@@ -17,7 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <button
         type="button"
         onClick={onTitleClick}
-        className="font-semibold text-[20px] text-[var(--text,#17233A)] tracking-[-0.3px] hover:opacity-85 transition-opacity cursor-pointer bg-transparent border-0 p-0"
+        className="font-semibold text-[20px] text-[var(--text,#17233A)] tracking-[-0.3px] hover:opacity-85 transition-opacity cursor-pointer bg-transparent border-0 p-0 min-h-[44px] flex items-center"
       >
         {appName}
       </button>

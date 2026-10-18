@@ -228,6 +228,45 @@ describe('Milestone 3 Discovery Engine & Phase B Fixes', () => {
       const patchRes = await worker.fetch(patchReq, env);
       expect(patchRes.status).toBe(200);
     });
+
+    it('GET /api/admin/stats returns counts only with valid admin secret and rejects unauthorized access', async () => {
+      // 1. 401 without secret
+      const unauthReq = new Request('http://localhost:3000/api/admin/stats', { method: 'GET' });
+      const unauthRes = await worker.fetch(unauthReq, env);
+      expect(unauthRes.status).toBe(401);
+
+      // 2. 403 with wrong secret
+      const wrongSecretReq = new Request('http://localhost:3000/api/admin/stats', {
+        headers: { 'x-admin-secret': 'wrong-secret-12345' },
+      });
+      const wrongSecretRes = await worker.fetch(wrongSecretReq, env);
+      expect(wrongSecretRes.status).toBe(403);
+
+      // 3. 200 with right secret
+      const authReq = new Request('http://localhost:3000/api/admin/stats', {
+        headers: { 'x-admin-secret': 'super-admin-secret-test-key-12345' },
+      });
+      const authRes = await worker.fetch(authReq, env);
+      expect(authRes.status).toBe(200);
+
+      const stats = (await authRes.json()) as Record<string, unknown>;
+
+      // Expected count fields
+      expect(typeof stats.users).toBe('number');
+      expect(typeof stats.posts).toBe('number');
+      expect(typeof stats.comments).toBe('number');
+      expect(typeof stats.messages).toBe('number');
+      expect(typeof stats.conversations).toBe('number');
+      expect(typeof stats.media_rows).toBe('number');
+      expect(typeof stats.total_media_bytes).toBe('number');
+      expect(typeof stats.open_reports).toBe('number');
+      expect(typeof stats.posts_expiring_within_24h).toBe('number');
+
+      // 4. Verify COUNTS ONLY: every field in the response is a number, no personal content
+      for (const val of Object.values(stats)) {
+        expect(typeof val).toBe('number');
+      }
+    });
   });
 
   // 5. Milestone 3: Content Understanding, Topics, and Interest Signals

@@ -66,7 +66,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         </div>
 
         {error && (
-          <div className="p-2.5 rounded-sm bg-danger-tint text-danger text-[13px]">
+          <div role="alert" className="p-2.5 rounded-sm bg-danger-tint text-danger text-[13px]">
             {error}
           </div>
         )}

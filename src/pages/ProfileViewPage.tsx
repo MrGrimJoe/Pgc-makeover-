@@ -174,7 +174,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
 
       {/* Error state */}
       {error && !loading && (
-        <div className="py-16 text-center space-y-2 px-4">
+        <div role="alert" className="py-16 text-center space-y-2 px-4">
           <p className="text-[14px] text-[var(--muted,#5B6577)]">{error}</p>
         </div>
       )}
@@ -232,7 +232,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                 <button
                   type="button"
                   onClick={onNavigateToEditProfile}
-                  className="flex-1 h-[36px] min-h-[36px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
+                  className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
                 >
                   Edit profile
                 </button>
@@ -240,7 +240,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                   <button
                     type="button"
                     onClick={onLogout}
-                    className="flex-1 h-[36px] min-h-[36px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
+                    className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
                   >
                     Sign out
                   </button>
@@ -252,7 +252,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                   type="button"
                   onClick={handleToggleFollow}
                   disabled={togglingFollow}
-                  className={`flex-1 h-[36px] min-h-[36px] rounded-[8px] font-semibold text-[13px] transition-colors cursor-pointer flex items-center justify-center ${
+                  className={`flex-1 min-h-[44px] rounded-[8px] font-semibold text-[13px] transition-colors cursor-pointer flex items-center justify-center ${
                     profile.is_following
                       ? 'border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)]'
                       : 'border border-[var(--blue,#244C8A)] bg-[var(--blue,#244C8A)] text-white hover:opacity-95'
@@ -270,7 +270,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                         avatar_media_id: profile.avatar_media_id,
                       })
                     }
-                    className="flex-1 h-[36px] min-h-[36px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
+                    className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
                   >
                     Message
                   </button>
@@ -279,7 +279,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowMenu((prev) => !prev)}
-                    className="w-[36px] h-[36px] min-w-[36px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] flex items-center justify-center cursor-pointer hover:bg-[var(--bg2,#F8F9FC)] transition-colors"
+                    className="w-[44px] h-[44px] min-w-[44px] min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] flex items-center justify-center cursor-pointer hover:bg-[var(--bg2,#F8F9FC)] transition-colors"
                     title="User options"
                     aria-label="User options"
                   >
@@ -290,7 +290,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                       <button
                         type="button"
                         onClick={handleBlockToggle}
-                        className="w-full text-left px-3 py-2 text-[13px] font-semibold text-[var(--danger,#B23A40)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
+                        className="w-full text-left px-3 py-2 min-h-[44px] flex items-center text-[13px] font-semibold text-[var(--danger,#B23A40)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
                       >
                         {isBlocked ? 'Unblock' : 'Block'}
                       </button>
@@ -300,7 +300,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                           setShowMenu(false);
                           setShowReport(true);
                         }}
-                        className="w-full text-left px-3 py-2 text-[13px] font-medium text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
+                        className="w-full text-left px-3 py-2 min-h-[44px] flex items-center text-[13px] font-medium text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
                       >
                         Report
                       </button>
@@ -321,7 +321,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                 {post.media && post.media.length > 0 && post.media[0] ? (
                   <img
                     src={`/api/media/${post.media[0].id}`}
-                    alt=""
+                    alt={`Post by @${profile.username}`}
                     className="w-full h-full object-cover"
                   />
                 ) : (

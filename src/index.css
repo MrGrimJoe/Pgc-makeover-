@@ -65,8 +65,11 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .like-pop {
-    animation: none !important;
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -81,8 +84,8 @@ html, body {
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
-/* Focus styles */
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+/* Focus styles: visible focus-visible ring in blue */
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
   outline: 2px solid var(--blue);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }

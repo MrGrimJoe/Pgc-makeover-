@@ -155,38 +155,126 @@ npm run type-check
 
 ## Cloudflare Deployment
 
-### 1. Build Frontend Application
-```bash
-npm run build
+Follow this step-by-step numbered guide to deploy ClassSync to Cloudflare Workers, Cloudflare D1, and Cloudflare R2:
+
+### 1. Create Cloudflare Account & Authenticate
+1. Sign up for a Cloudflare account at https://dash.cloudflare.com if you do not already have one.
+2. Log in via Wrangler CLI from the project root:
+   ```bash
+   npx wrangler login
+   ```
+   This will open a browser window to authenticate Wrangler with your Cloudflare account.
+
+### 2. Create D1 Database and R2 Bucket
+1. Create the production D1 SQLite database:
+   ```bash
+   npx wrangler d1 create classsync-db
+   ```
+   Take note of the `database_id` returned in the command output (a UUID format).
+2. Create the production R2 storage bucket:
+   ```bash
+   npx wrangler r2 bucket create classsync-media
+   ```
+
+### 3. Configure Database ID in `wrangler.toml`
+Open `wrangler.toml` and update `database_id` under `[[d1_databases]]` with the real ID from Step 2:
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "classsync-db"
+database_id = "<YOUR_D1_DATABASE_ID>"
 ```
 
-### 2. Provision D1 and R2
+### 4. Run Migrations on Remote D1
+Apply all database schema migrations (`001_init.sql` through `004_messaging.sql`) to your remote production D1 database:
 ```bash
-npx wrangler d1 create classsync-db
-npx wrangler r2 bucket create classsync-media
+npm run db:migrate:remote
 ```
-Update `database_id` in `wrangler.toml` with the generated database ID.
+*(Alternatively: `npx wrangler d1 migrations apply classsync-db --remote`)*
 
-### 3. Apply Migrations to Remote D1 (001 to 004)
-```bash
-npx wrangler d1 execute classsync-db --remote --file=./migrations/001_init.sql
-npx wrangler d1 execute classsync-db --remote --file=./migrations/002_social.sql
-npx wrangler d1 execute classsync-db --remote --file=./migrations/003_discovery.sql
-npx wrangler d1 execute classsync-db --remote --file=./migrations/004_messaging.sql
-```
+### 5. Create Google OAuth Client Credentials
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and create or select your project.
+2. Navigate to **APIs & Services > OAuth consent screen**:
+   - Choose **External** (or **Internal** if using Google Workspace for your school).
+   - Fill in App name (e.g. `ClassSync`), User support email, and Developer contact information.
+   - Under **Publishing status**:
+     - **Testing**: Only users explicitly added to the "Test users" list can authenticate (up to 100 users). Google will show an unverified app warning.
+     - **In production**: Available to all Google accounts without individual whitelisting. For basic sign-in scopes (`openid`, `email`, `profile`), full verification is not required for standard deployment. Switch to "In production" when ready to launch.
+3. Navigate to **APIs & Services > Credentials > Create Credentials > OAuth client ID**:
+   - Application type: **Web application**.
+   - Name: `ClassSync Web Client`.
+   - **Authorized redirect URIs**:
+     ```text
+     https://<APP_URL>/api/auth/callback
+     ```
+     *(Replace `<APP_URL>` with your actual deployment domain, e.g. `classsync.<your-subdomain>.workers.dev` or custom domain)*.
+4. Save and copy the generated **Client ID** and **Client Secret**.
 
-### 4. Set Cloudflare Worker Secrets
+### 6. Set Cloudflare Worker Secrets
+Store the four production secrets securely using Wrangler:
 ```bash
 npx wrangler secret put GOOGLE_CLIENT_ID
 npx wrangler secret put GOOGLE_CLIENT_SECRET
 npx wrangler secret put APP_URL
 npx wrangler secret put ADMIN_SECRET
 ```
+When prompted for each secret:
+- `GOOGLE_CLIENT_ID`: Your Google OAuth client ID (e.g., `*.apps.googleusercontent.com`).
+- `GOOGLE_CLIENT_SECRET`: Your Google OAuth client secret.
+- `APP_URL`: Your canonical production application URL including protocol, with no trailing slash (e.g., `https://classsync.<your-subdomain>.workers.dev`).
+- `ADMIN_SECRET`: A high-entropy random secret key for admin APIs and cron tasks (e.g., generated with `openssl rand -hex 32`).
 
-### 5. Deploy
+### 7. Build and Deploy
+Build the client application and deploy the worker to Cloudflare:
 ```bash
-npx wrangler deploy
+npm run deploy
 ```
+*(Runs `npm run build && wrangler deploy` to compile Vite assets into `dist/` and upload Worker and static assets)*.
+
+---
+
+### 8. Post-Deploy Smoke Checklist
+Verify that your deployed instance functions properly at `https://<APP_URL>`:
+- [ ] **Home route**: `GET https://<APP_URL>/` returns HTTP 200 with HTML application shell.
+- [ ] **SPA client-side routing**: Direct navigation to `https://<APP_URL>/search` loads the SPA without 404.
+- [ ] **Unauthenticated session check**: `GET https://<APP_URL>/api/me` returns HTTP 401 with `{"error":"Unauthorized"}`:
+  ```bash
+  curl -i https://<APP_URL>/api/me
+  ```
+- [ ] **OAuth sign-in initiation**: Clicking "Continue with Google" redirects to `accounts.google.com` with valid `client_id`, `state`, and `redirect_uri=https://<APP_URL>/api/auth/callback`.
+- [ ] **OAuth callback**: Completing Google sign-in redirects to the app with a secure `session` cookie.
+- [ ] **Profile edit**: Updating your display name, bio, and class via `PATCH /api/me` saves and persists.
+- [ ] **Post & media upload**: Uploading an image post creates the post and serves the R2 object at `/api/media/<id>` with `X-Content-Type-Options: nosniff`.
+- [ ] **Admin authentication**:
+  ```bash
+  # 1. Missing secret returns 401:
+  curl -i https://<APP_URL>/api/admin/stats
+  # 2. Invalid secret returns 403:
+  curl -i https://<APP_URL>/api/admin/stats -H "X-Admin-Secret: wrong-secret"
+  # 3. Valid secret returns 200 with counts:
+  curl -i https://<APP_URL>/api/admin/stats -H "X-Admin-Secret: <ADMIN_SECRET>"
+  ```
+- [ ] **Cleanup cron trigger**:
+  ```bash
+  curl -i -X POST https://<APP_URL>/api/jobs/cleanup-expired -H "X-Admin-Secret: <ADMIN_SECRET>"
+  ```
+
+---
+
+### 9. "Before Inviting Students" Checklist
+Before opening the platform to real students, verify all production hardening criteria:
+- [ ] **Remove DEV-ONLY code**: Remove all development bars, mock sign-in shortcuts, and test helpers marked with the dev-only comment marker.
+- [ ] **Verify `wrangler.toml` configuration**:
+  - `database_id` is set to the real provisioned D1 UUID (not `placeholder-d1-id`).
+  - `ENVIRONMENT = "production"` under `[vars]`.
+- [ ] **Run Prelaunch Check**:
+  Execute the prelaunch verification gate and verify it passes:
+  ```bash
+  npm run prelaunch-check
+  ```
+  Must print `=== PRELAUNCH CHECK: PASS ===` before students are invited.
+- [ ] **Google OAuth Status**: Move Google OAuth Consent Screen publishing status from "Testing" to "In production" so any school student can sign in without needing manual inclusion on a whitelist.
+- [ ] **Establish Database Backups**: Verify backup commands work as documented in `docs/operations.md` (`npm run db:backup`).
 
 ---
 
