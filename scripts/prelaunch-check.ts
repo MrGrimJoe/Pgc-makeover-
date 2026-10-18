@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { findPlaceholderStrings } from './placeholder-check.ts';
 
 interface Marker {
   file: string;
@@ -31,6 +32,45 @@ const SCANNED_EXTENSIONS = new Set([
   '.css',
   '.sql',
 ]);
+
+// Only shipped code is scanned for DEV-ONLY markers. tests/, scripts/, docs and the
+// README legitimately mention or contain dev helpers and are deliberately excluded.
+const DEV_ONLY_SCAN_TARGETS = ['src', 'worker', 'server.ts', 'wrangler.toml'];
+
+function scanFileForMarkers(fullPath: string, baseDir: string): Marker[] {
+  const results: Marker[] = [];
+  if (!SCANNED_EXTENSIONS.has(path.extname(fullPath))) return results;
+  try {
+    const content = fs.readFileSync(fullPath, 'utf8');
+    if (!content.includes(SEARCH_MARKER)) return results;
+    content.split('\n').forEach((lineText, idx) => {
+      if (lineText.includes(SEARCH_MARKER)) {
+        results.push({
+          file: path.relative(baseDir, fullPath),
+          line: idx + 1,
+          content: lineText.trim(),
+        });
+      }
+    });
+  } catch {
+    // ignore read errors
+  }
+  return results;
+}
+
+function findDevOnlyMarkersInTargets(rootDir: string): Marker[] {
+  const results: Marker[] = [];
+  for (const target of DEV_ONLY_SCAN_TARGETS) {
+    const fullPath = path.join(rootDir, target);
+    if (!fs.existsSync(fullPath)) continue;
+    if (fs.statSync(fullPath).isDirectory()) {
+      results.push(...findDevOnlyMarkers(fullPath, rootDir));
+    } else {
+      results.push(...scanFileForMarkers(fullPath, rootDir));
+    }
+  }
+  return results;
+}
 
 function findDevOnlyMarkers(dir: string, baseDir: string): Marker[] {
   const results: Marker[] = [];
@@ -76,29 +116,46 @@ function findDevOnlyMarkers(dir: string, baseDir: string): Marker[] {
   return results;
 }
 
-export function runPrelaunchCheck(options: { listOnly?: boolean } = {}) {
-  const rootDir = process.cwd();
+export function runPrelaunchCheck(options: { listOnly?: boolean; rootDir?: string } = {}) {
+  const rootDir = options.rootDir ?? process.cwd();
   const listOnly = options.listOnly ?? process.argv.includes('--list');
   const failures: string[] = [];
 
   console.log('=== Prelaunch Check ===\n');
 
-  // 1. Scan for DEV-ONLY markers
-  const markers = findDevOnlyMarkers(rootDir, rootDir);
+  // 1. Scan shipped code (src/, worker/, server.ts, wrangler.toml) for DEV-ONLY markers
+  const markers = findDevOnlyMarkersInTargets(rootDir);
 
+  console.log(`Scanned: ${DEV_ONLY_SCAN_TARGETS.join(', ')}`);
   console.log(`Found ${markers.length} ${SEARCH_MARKER} marker(s):`);
   for (const m of markers) {
     console.log(`  ${m.file}:${m.line} -> ${m.content}`);
   }
   console.log('');
 
+  // Hardcoded sample/placeholder data in the client (same list as tests/placeholder-data.test.ts)
+  const placeholderHits = findPlaceholderStrings(path.join(rootDir, 'src'), rootDir);
+  console.log(`Found ${placeholderHits.length} placeholder string(s) in src/:`);
+  for (const h of placeholderHits) {
+    console.log(`  ${h.file}:${h.line} [${h.label}] -> ${h.content}`);
+  }
+  console.log('');
+
   if (listOnly) {
-    console.log(`--list specified: Listed ${markers.length} marker(s).`);
+    console.log(
+      `--list specified: Listed ${markers.length} marker(s) and ${placeholderHits.length} placeholder string(s).`
+    );
     return { pass: true, markers, failures: [] };
   }
 
   if (markers.length > 0) {
     failures.push(`${markers.length} ${SEARCH_MARKER} marker(s) remain in the codebase.`);
+  }
+
+  if (placeholderHits.length > 0) {
+    failures.push(
+      `${placeholderHits.length} hardcoded placeholder string(s) remain in src/ (see list above).`
+    );
   }
 
   // 2. Check wrangler.toml for placeholder-d1-id
