@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { PublicProfileResponse, PostItem } from '../../shared/schema.ts';
 import { MoreVertical } from 'lucide-react';
 import { ReportModal } from '../components/ReportModal.tsx';
+import { avatarInitial } from '../lib/initial.ts';
 
 interface ProfileViewPageProps {
   initialUsername?: string;
@@ -185,7 +186,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
           {/* Header row: 80px avatar and three stats */}
           <div className="flex items-center gap-6 p-4">
             <div className="w-[80px] h-[80px] rounded-full bg-[var(--tint,#EAF0FA)] text-[var(--blue,#244C8A)] font-semibold text-[30px] flex items-center justify-center shrink-0">
-              {(profile.display_name || profile.username || 'U').charAt(0).toUpperCase()}
+              {avatarInitial(profile.display_name, profile.username)}
             </div>
             <div className="flex flex-1 justify-around text-center text-[13px] text-[var(--muted,#5B6577)]">
               <div>

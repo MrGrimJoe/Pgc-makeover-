@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { PostItem, TrendItem } from '../../shared/schema.ts';
 import { PostCard } from '../components/PostCard.tsx';
 import { Search, X } from 'lucide-react';
+import { avatarInitial } from '../lib/initial.ts';
 
 interface SearchPageProps {
   currentUserId: string;
@@ -24,10 +25,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   const [scopeTab, setScopeTab] = useState<'my_class' | 'campus' | 'everyone'>('my_class');
   const [trends, setTrends] = useState<TrendItem[]>([]);
   const [results, setResults] = useState<PostItem[]>([]);
-  const [people, setPeople] = useState<SuggestedPerson[]>([
-    { username: 'ayesha.k', displayName: 'ayesha.k', className: 'Class 12-B', isFollowing: false },
-    { username: 'hamza.m', displayName: 'hamza.m', className: 'Class 12-A', isFollowing: true },
-  ]);
+  // People come only from a real API result. No suggested-people endpoint exists
+  // yet, so this stays empty (and the empty state shows) until one is wired in.
+  const [people, setPeople] = useState<SuggestedPerson[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -206,41 +206,33 @@ export const SearchPage: React.FC<SearchPageProps> = ({
 
           {trends.length > 0 ? (
             trends.slice(0, 5).map((t) => (
-              <div
+              <button
                 key={t.slug}
+                type="button"
                 onClick={() => handleTrendClick(t.slug)}
-                className="flex items-center gap-3 px-4 py-2.5 min-h-[56px] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer transition-colors"
+                className="w-full text-left flex items-center gap-3 px-4 py-2.5 min-h-[56px] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer transition-colors bg-transparent border-0"
               >
-                <div className="flex-1">
-                  <b className="font-semibold text-[15px] block text-[var(--text,#17233A)]">
-                    #{t.slug}
-                  </b>
-                  <small className="text-[var(--muted,#5B6577)] block text-[13px]">
-                    {Math.round(t.score) || 12} posts this week
-                  </small>
-                </div>
-              </div>
+                <b className="font-semibold text-[15px] block text-[var(--text,#17233A)]">
+                  #{t.slug}
+                </b>
+              </button>
             ))
           ) : (
-            <div
-              onClick={() => handleTrendClick('campus')}
-              className="flex items-center gap-3 px-4 py-2.5 min-h-[56px] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer transition-colors"
-            >
-              <div className="flex-1">
-                <b className="font-semibold text-[15px] block text-[var(--text,#17233A)]">
-                  #campus
-                </b>
-                <small className="text-[var(--muted,#5B6577)] block text-[13px]">
-                  18 posts this week
-                </small>
-              </div>
-            </div>
+            <p className="mx-4 my-3 text-[13px] text-[var(--muted,#5B6577)]">
+              No trending topics yet
+            </p>
           )}
 
           {/* Section: People */}
           <h3 className="mx-4 mt-4 mb-1 text-[13px] font-semibold text-[var(--muted,#5B6577)] uppercase tracking-[0.4px]">
             People
           </h3>
+
+          {people.length === 0 && (
+            <p className="mx-4 my-3 text-[13px] text-[var(--muted,#5B6577)]">
+              No people to show
+            </p>
+          )}
 
           {people.map((person, idx) => (
             <div
@@ -253,7 +245,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 aria-label={`View profile of @${person.username}`}
                 className="w-8 h-8 rounded-full bg-[var(--tint,#EAF0FA)] text-[var(--blue,#244C8A)] flex items-center justify-center font-semibold text-[13px] shrink-0 border-0 p-0 cursor-pointer"
               >
-                {person.displayName.slice(0, 2).toUpperCase()}
+                {avatarInitial(person.displayName, person.username)}
               </button>
               <div
                 className="flex-1 min-w-0 cursor-pointer"

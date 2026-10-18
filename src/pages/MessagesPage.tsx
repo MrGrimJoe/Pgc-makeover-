@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { ConversationItem, MessageItem, MediaItem } from '../../shared/schema.ts';
 import { ArrowLeft, Image as ImageIcon, X } from 'lucide-react';
 import { ExpiryChip } from '../components/ExpiryChip.tsx';
+import { avatarInitial } from '../lib/initial.ts';
 
 interface MessagesPageProps {
   currentUserId: string;
@@ -195,7 +196,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
   // If in Thread view
   if (activeConversation) {
     const otherUser = activeConversation.other_user;
-    const initial = (otherUser.display_name || otherUser.username || 'U').slice(0, 2).toUpperCase();
+    const initial = avatarInitial(otherUser.display_name, otherUser.username);
 
     return (
       <div className="w-full max-w-[430px] mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col pb-16">
@@ -426,7 +427,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
         <div className="divide-y divide-[var(--line,#E8EBF0)]">
           {conversations.map((conv) => {
             const other = conv.other_user;
-            const initial = (other.display_name || other.username || 'U').slice(0, 2).toUpperCase();
+            const initial = avatarInitial(other.display_name, other.username);
             const lastMsg = conv.last_message;
 
             return (

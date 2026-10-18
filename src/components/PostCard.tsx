@@ -4,6 +4,7 @@ import { ExpiryChip } from './ExpiryChip.tsx';
 import { Heart, MessageSquare, Flag, Trash2 } from 'lucide-react';
 import { CommentModal } from './CommentModal.tsx';
 import { ReportModal } from './ReportModal.tsx';
+import { avatarInitial } from '../lib/initial.ts';
 
 interface PostCardProps {
   post: PostItem;
@@ -29,13 +30,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [likePopping, setLikePopping] = useState(false);
 
-  const authorInitial = (
-    post.author_display_name ||
-    post.author_username ||
-    'U'
-  )
-    .slice(0, 2)
-    .toUpperCase();
+  const authorInitial = avatarInitial(post.author_display_name, post.author_username);
 
   const handleToggleLike = async () => {
     const nextLiked = !hasLiked;
@@ -101,12 +96,6 @@ export const PostCard: React.FC<PostCardProps> = ({
       return part;
     });
   };
-
-  // Check if separate topic tag row is needed
-  const separateTopics = (post.topics || []).filter((t) => {
-    const tagPattern = new RegExp(`#${t.slug}\\b`, 'i');
-    return !tagPattern.test(post.body);
-  });
 
   return (
     <article className="border-b border-[var(--line,#E8EBF0)] pt-3 pb-2 text-[var(--text,#17233A)]">
@@ -245,22 +234,6 @@ export const PostCard: React.FC<PostCardProps> = ({
             {renderBodyWithTags(post.body)}
           </div>
 
-          {/* Separate tag row only if hashtags do not appear in text */}
-          {separateTopics.length > 0 && (
-            <div className="px-4 pt-1 flex flex-wrap gap-x-2 gap-y-1">
-              {separateTopics.map((t) => (
-                <button
-                  key={t.slug}
-                  type="button"
-                  onClick={() => onTopicClick && onTopicClick(t.slug)}
-                  className="text-[14px] text-[var(--blue,#244C8A)] hover:underline cursor-pointer font-normal p-0 bg-transparent border-0"
-                >
-                  #{t.slug}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Comments link */}
           <div className="px-4 pt-1 pb-1 text-[13px] text-[var(--muted,#5B6577)]">
             <button
@@ -280,22 +253,6 @@ export const PostCard: React.FC<PostCardProps> = ({
           <div className="px-4 pt-0 pb-1 text-[17px] leading-normal break-words">
             {renderBodyWithTags(post.body)}
           </div>
-
-          {/* Separate tag row only if hashtags do not appear in text */}
-          {separateTopics.length > 0 && (
-            <div className="px-4 pb-1 flex flex-wrap gap-x-2 gap-y-1">
-              {separateTopics.map((t) => (
-                <button
-                  key={t.slug}
-                  type="button"
-                  onClick={() => onTopicClick && onTopicClick(t.slug)}
-                  className="text-[14px] text-[var(--blue,#244C8A)] hover:underline cursor-pointer font-normal p-0 bg-transparent border-0"
-                >
-                  #{t.slug}
-                </button>
-              ))}
-            </div>
-          )}
 
           {/* Action Row */}
           <div className="flex items-center gap-4 px-4 pt-2.5">
