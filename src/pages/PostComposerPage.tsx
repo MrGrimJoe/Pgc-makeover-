@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { MediaItem } from '../../shared/schema.ts';
 import { Image, X } from 'lucide-react';
 
@@ -16,6 +16,8 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoPickerDisabled = mediaList.length >= 4 || uploading;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -171,23 +173,27 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
 
       {/* Image attach icon button */}
       <div className="px-4 py-1 flex items-center gap-2">
-        <label
-          htmlFor="composer-photo-input"
-          className={`w-[44px] h-[44px] flex items-center justify-center text-[var(--blue,#244C8A)] hover:opacity-80 cursor-pointer transition-opacity ${
-            mediaList.length >= 4 || uploading ? 'opacity-40 pointer-events-none' : ''
-          }`}
+        {/* A real button (aria-label is not allowed on <label>): focusable, Enter/Space work,
+            and disabled is a true disabled state rather than a pointer-events hack. */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={photoPickerDisabled}
           title="Add photo"
           aria-label="Add photo"
+          className="w-[44px] h-[44px] flex items-center justify-center text-[var(--blue,#244C8A)] hover:opacity-80 cursor-pointer transition-opacity bg-transparent border-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <Image className="w-6 h-6 stroke-[1.7]" />
-        </label>
+          <Image className="w-6 h-6 stroke-[1.7]" aria-hidden="true" />
+        </button>
+        {/* Hidden native input, driven by the button above. Not focusable or exposed on its own. */}
         <input
-          id="composer-photo-input"
+          ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
           multiple
           onChange={handleFileSelect}
-          aria-label="Upload photo"
+          tabIndex={-1}
+          aria-hidden="true"
           className="hidden"
         />
         {uploading && <span className="text-[13px] text-[var(--muted,#5B6577)]">Uploading...</span>}
