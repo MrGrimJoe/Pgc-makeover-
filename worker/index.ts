@@ -1719,11 +1719,19 @@ export default {
           LIMIT 100
         `;
 
-        const candidateParams: unknown[] = [nowIso];
+        // Bind order MUST match the placeholder order in candidateQuery above:
+        //   1. engagersExclude (blocked ids)  - post_reactions subquery in SELECT
+        //   2. commentsExclude (blocked ids)  - comments subquery in SELECT
+        //   3. p.expires_at > ?               - nowIso
+        //   4. candidateFilter (blocked ids)  - WHERE author filter
+        const candidateParams: unknown[] = [];
         if (hasBlocked) {
-          candidateParams.push(...blockedIds); // for engagersExclude
-          candidateParams.push(...blockedIds); // for commentsExclude
-          candidateParams.push(...blockedIds); // for candidateFilter
+          candidateParams.push(...blockedIds); // engagersExclude
+          candidateParams.push(...blockedIds); // commentsExclude
+        }
+        candidateParams.push(nowIso); // expires_at
+        if (hasBlocked) {
+          candidateParams.push(...blockedIds); // candidateFilter
         }
 
         const candidateRows = await env.DB.prepare(candidateQuery)
