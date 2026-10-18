@@ -278,6 +278,41 @@ Before opening the platform to real students, verify all production hardening cr
 
 ---
 
+## Recent Fixes & Open Items
+
+Changes made on top of baseline commit `6f12617`. Each is its own commit.
+
+### Fixed
+
+- **Ranked feed returned an empty list when the user had any block** (`worker/index.ts`, `mode=ranked` / `for_you`). The SQL placeholders run: engagers block list, comments block list, `expires_at > ?`, candidate block list, but params were built as `[nowIso, ...blocked x3]`, so the timestamp landed in a block-list slot. Params are now built in placeholder order. Every other query that mixes a timestamp with an `IN (...)` block list (chronological and author feeds, search, trends, comments, like counts, profile counts) was audited and already bound correctly.
+- **Hardcoded sample data removed from `SearchPage.tsx`**: the fake people, the `|| 12` fallback and the `#campus / 18 posts this week` entry. Trending shows only real `/api/trends` results (the API returns a ranking score, not a post count, so no count is shown). Empty states are one muted line each ("No trending topics yet", "No people to show") with no buttons. No other hardcoded sample data exists in `src/`.
+- **Posts show only hashtags the author typed in the text.** `PostCard` no longer renders derived topics as a separate tag row.
+- **Avatars show one uppercase initial** everywhere (`avatarInitial()` in `src/lib/initial.ts`, used by `PostCard`, `MessagesPage`, `SearchPage`, `ProfileViewPage`). Previously several showed two letters.
+- **Compose photo picker accessibility.** axe-core (`wcag2a`, `wcag2aa`, `wcag21aa`) reported a serious `aria-prohibited-attr` for `aria-label` on a `<label>`. The picker is now a real `<button aria-label="Add photo">` that drives the hidden file input, which also makes it keyboard accessible (the old hidden input could not be reached by keyboard). Scan result after the fix: 0 violations.
+- **`scripts/prelaunch-check.ts`** scans only `src/`, `worker/`, `server.ts` and `wrangler.toml` for DEV-ONLY markers (`tests/`, `scripts/`, the README and docs no longer count), and fails if `src/` contains placeholder strings.
+
+### Regression tests added
+
+- `tests/ranked-feed-blocks.test.ts`: blocker and blocked user, `ranked` and `for_you`, multiple blocks. Asserts the feed is non-empty and still contains other people's posts, so an empty feed fails.
+- `tests/placeholder-data.test.ts`: fails if `src/` contains "ayesha", "hamza", "posts this week" or "Class 12-".
+- `tests/initial.test.ts`: avatar initial is always exactly one character.
+- `tests/a11y.test.tsx`: axe-core scans of the Compose screen and the Search empty state must have no violations.
+- `tests/prelaunch-check.test.ts`: scan scope and placeholder failure, run against temp trees.
+
+### Dependencies
+
+`axe-core`, `jsdom` and `@types/jsdom` were added as devDependencies. Saving them also resynced `package-lock.json`, which previously lacked wrangler entries and made `npm ci` fail.
+
+### Open items
+
+- There is no suggested-people endpoint, so the People section on the search screen always shows its empty state until one exists.
+- The My class / Campus / Everyone tabs on the search screen only change styling, not results.
+- Color contrast is not verified: jsdom has no layout engine, so axe reports `color-contrast` as incomplete. Check it in a real browser.
+- `npm run prelaunch-check` is expected to fail until the DEV-ONLY code is removed (including the "Sign in as test user" button in `SignInPage.tsx`) and `database_id` in `wrangler.toml` is replaced.
+- Step 9 above says the check prints `=== PRELAUNCH CHECK: PASS ===`, but the script currently prints `Prelaunch Check: PASS`.
+
+---
+
 ## Database Schemas Overview
 
 - **`001_init.sql`**: Core authentication, `users`, `profiles`, `user_settings`, and `sessions`.
