@@ -16,6 +16,10 @@ export interface WallpaperPreset {
   stops: [string, string] | [];
   text: string;
   muted: string;
+  /** Fill for buttons and chips that sit on the wallpaper. */
+  surface: string;
+  /** Borders on the wallpaper. */
+  line: string;
 }
 
 export interface ThemePreset {
@@ -33,12 +37,12 @@ export interface TextStylePreset {
 }
 
 export const WALLPAPERS: readonly WallpaperPreset[] = [
-  { id: 'plain', label: 'Plain', tone: 'none', stops: [], text: '', muted: '' },
-  { id: 'dawn', label: 'Dawn', tone: 'light', stops: ['#FFF1E6', '#FFDFC9'], text: '#2B1B12', muted: '#6B4733' },
-  { id: 'mist', label: 'Mist', tone: 'light', stops: ['#EAF1FB', '#D6E4F6'], text: '#14233A', muted: '#44566F' },
-  { id: 'meadow', label: 'Meadow', tone: 'light', stops: ['#EAF6EC', '#D3EBD8'], text: '#12261A', muted: '#3D5845' },
-  { id: 'dusk', label: 'Dusk', tone: 'dark', stops: ['#1B2440', '#2C2150'], text: '#F1F3FA', muted: '#B8BFD6' },
-  { id: 'ink', label: 'Ink', tone: 'dark', stops: ['#12151C', '#242831'], text: '#F2F3F5', muted: '#B5BAC5' },
+  { id: 'plain', label: 'Plain', tone: 'none', stops: [], text: '', muted: '', surface: '', line: '' },
+  { id: 'dawn', label: 'Dawn', tone: 'light', stops: ['#FFF1E6', '#FFDFC9'], text: '#2B1B12', muted: '#6B4733', surface: '#FFFFFF', line: '#00000033' },
+  { id: 'mist', label: 'Mist', tone: 'light', stops: ['#EAF1FB', '#D6E4F6'], text: '#14233A', muted: '#44566F', surface: '#FFFFFF', line: '#00000033' },
+  { id: 'meadow', label: 'Meadow', tone: 'light', stops: ['#EAF6EC', '#D3EBD8'], text: '#12261A', muted: '#3D5845', surface: '#FFFFFF', line: '#00000033' },
+  { id: 'dusk', label: 'Dusk', tone: 'dark', stops: ['#1B2440', '#2C2150'], text: '#F1F3FA', muted: '#B8BFD6', surface: '#0F1522', line: '#FFFFFF40' },
+  { id: 'ink', label: 'Ink', tone: 'dark', stops: ['#12151C', '#242831'], text: '#F2F3F5', muted: '#B5BAC5', surface: '#0F1522', line: '#FFFFFF40' },
 ] as const;
 
 export const THEMES: readonly ThemePreset[] = [
@@ -104,7 +108,11 @@ export interface ResolvedProfileStyle {
   wallpaper: WallpaperPreset;
   theme: ThemePreset;
   textStyle: TextStylePreset;
-  /** Inline style for the profile header block. Empty object for the default wallpaper. */
+  /**
+   * Inline style for the profile header block. Empty object for the default wallpaper. It also
+   * remaps the app's color variables (--text, --muted, --bg, --bg2, --line) inside the block so the
+   * existing text, buttons and chips stay readable on the wallpaper in both light and dark mode.
+   */
   headerStyle: Record<string, string>;
   /** Inline style for name and bio text. */
   textStyleCss: Record<string, string | number>;
@@ -127,6 +135,11 @@ export function resolveProfileStyle(ids: {
       ? {
           background: `linear-gradient(160deg, ${wallpaper.stops[0]}, ${wallpaper.stops[1]})`,
           color: wallpaper.text,
+          '--text': wallpaper.text,
+          '--muted': wallpaper.muted,
+          '--bg': wallpaper.surface,
+          '--bg2': wallpaper.surface,
+          '--line': wallpaper.line,
         }
       : {};
 

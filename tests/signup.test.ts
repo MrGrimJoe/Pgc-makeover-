@@ -52,6 +52,17 @@ describe('Sign up and log in', () => {
     });
   });
 
+  describe('data the sign-up form needs before an account exists', () => {
+    it('the class list is readable with a sign-up ticket, but not with nothing', async () => {
+      expect((await call(env, 'GET', '/api/classes')).status).toBe(401);
+      expect((await call(env, 'GET', '/api/classes', { cookie: 'signup_ticket=tkt_forged' })).status).toBe(401);
+      const { cookie } = await startSignup(env);
+      const res = await call(env, 'GET', '/api/classes', { cookie });
+      expect(res.status).toBe(200);
+      expect(res.json.classes.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('completing sign-up', () => {
     it('creates the account, a session and the private record in one go', async () => {
       const { cookie } = await startSignup(env, { email: 'ayesha@gmail.com' });

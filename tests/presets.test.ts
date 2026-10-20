@@ -40,6 +40,14 @@ describe('Profile style presets', () => {
           expect(contrastRatio(w.muted, stop)).toBeGreaterThanOrEqual(4.5);
         });
       }
+      it(`wallpaper ${w.id}: text and muted text are at least 4.5:1 on the button/chip surface`, () => {
+        expect(contrastRatio(w.text, w.surface)).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(w.muted, w.surface)).toBeGreaterThanOrEqual(4.5);
+      });
+      it(`wallpaper ${w.id}: border color is a valid color with alpha`, () => {
+        expect(w.line).toMatch(/^#[0-9A-F]{8}$/i);
+        expect(w.surface).toMatch(/^#[0-9A-F]{6}$/i);
+      });
     }
 
     const backgrounds = [APP_SURFACES.light, APP_SURFACES.dark, ...WALLPAPERS.flatMap((w) => w.stops)];
@@ -66,6 +74,9 @@ describe('Profile style presets', () => {
       const r = resolveProfileStyle({ wallpaper_id: 'dusk', theme_id: 'coral', text_style_id: 'serif' });
       expect(r.headerStyle.background).toContain('linear-gradient');
       expect(r.headerStyle.color).toBe('#F1F3FA');
+      // the app's own color variables are remapped inside the header so existing buttons stay readable
+      expect(r.headerStyle['--text']).toBe('#F1F3FA');
+      expect(r.headerStyle['--bg']).toBe('#0F1522');
       expect(r.accent).toBe('#CC4F36');
       expect(r.textStyleCss.fontFamily).toContain('Georgia');
     });

@@ -19,7 +19,7 @@ import {
   verifyGoogleIdToken,
 } from './auth.ts';
 import { normalizeUsername, isReservedUsername } from '../shared/username.ts';
-import { handleOnboardingRoutes, purgeExpiredSignupTickets, SIGNUP_TICKET_COOKIE, SIGNUP_TICKET_TTL_MS, campusSelectableBy } from './onboarding.ts';
+import { handleOnboardingRoutes, getValidSignupTicket, purgeExpiredSignupTickets, SIGNUP_TICKET_COOKIE, SIGNUP_TICKET_TTL_MS, campusSelectableBy } from './onboarding.ts';
 import { buildMeResponse } from './me.ts';
 import { DEFAULT_PRESET_IDS } from '../shared/presets.ts';
 import {
@@ -985,6 +985,16 @@ export default {
         return jsonResponse({ error: 'That username is reserved' }, 400);
       }
 
+      // A profile picture must be an upload that belongs to this person
+      if (data.avatar_media_id !== undefined && data.avatar_media_id !== null) {
+        const ownMedia = await env.DB.prepare('SELECT 1 FROM media WHERE id = ? AND owner_id = ?')
+          .bind(data.avatar_media_id, auth.user.id)
+          .first();
+        if (!ownMedia) {
+          return jsonResponse({ error: 'Media not found' }, 400);
+        }
+      }
+
       // A campus must be approved, or still pending but requested by this person
       if (data.campus_id !== undefined && data.campus_id !== null) {
         if (!(await campusSelectableBy(env, data.campus_id, auth.user.id))) {
@@ -1203,8 +1213,9 @@ export default {
 
     // GET /api/classes - Available campus classes
     if (pathname === '/api/classes' && method === 'GET') {
+      // Signed-in people, and people in the middle of signing up (they pick a class before an account exists)
       const auth = await authenticateRequest(request, env.DB);
-      if (!auth) {
+      if (!auth && !(await getValidSignupTicket(request, env))) {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
       const classesResult = await env.DB.prepare('SELECT id, name FROM classes ORDER BY name ASC').all<ClassRow>();
@@ -3242,6 +3253,16 @@ export default {
               .first();
           } catch {
             // message_media table may not exist in environments without migration 004
+          }
+        }
+
+        if (!attached) {
+          // Profile pictures are visible to signed-in people unless blocked in either direction
+          const avatarOwner = await env.DB.prepare('SELECT user_id FROM profiles WHERE avatar_media_id = ?')
+            .bind(mediaId)
+            .first<{ user_id: string }>();
+          if (avatarOwner && !(await isBlockedBetween(env.DB, auth.user.id, avatarOwner.user_id))) {
+            attached = { avatar: 1 };
           }
         }
 

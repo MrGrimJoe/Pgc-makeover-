@@ -22,6 +22,7 @@ export interface CallOptions {
   cookie?: string;
   json?: unknown;
   raw?: string;
+  form?: FormData;
   headers?: Record<string, string>;
 }
 
@@ -35,7 +36,7 @@ export interface CallResult {
 export async function call(env: Env, method: string, path: string, opts: CallOptions = {}): Promise<CallResult> {
   const headers: Record<string, string> = { ...(opts.headers ?? {}) };
   if (opts.cookie) headers.Cookie = opts.cookie;
-  let body = opts.raw;
+  let body: string | FormData | undefined = opts.raw ?? opts.form;
   if (opts.json !== undefined) {
     body = JSON.stringify(opts.json);
     headers['Content-Type'] = 'application/json';
@@ -132,4 +133,14 @@ export function deepKeys(value: unknown, out = new Set<string>()): Set<string> {
     }
   }
   return out;
+}
+
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+
+/** Uploads a tiny valid PNG and returns the media id. */
+export async function uploadPng(env: Env, cookie: string): Promise<string> {
+  const form = new FormData();
+  form.append('file', new Blob([PNG_BYTES], { type: 'image/png' }), 'a.png');
+  const res = await call(env, 'POST', '/api/media/uploads', { cookie, form });
+  return res.json?.id ?? res.json?.media?.id;
 }
