@@ -57,8 +57,15 @@ describe('seed-campuses', () => {
     expect(row?.name).toBe(evil);
   });
 
-  it('ships an empty template CSV with only the header', () => {
-    expect(readFileSync('data/campuses.csv', 'utf8').trim()).toBe('name,city');
+  it('ships a valid campus list with no duplicates', () => {
+    const text = readFileSync('data/campuses.csv', 'utf8');
+    const rows = parseCampusCsv(text);
+    expect(rows.length).toBe(text.trim().split('\n').length - 1);
+    expect(rows.length).toBeGreaterThan(100);
+    expect(rows).toContainEqual({ name: 'Johar Town Campus', city: 'Lahore' });
+    expect(rows).toContainEqual({ name: 'Sialkot Campus', city: 'Sialkot' });
+    const ids = new Set(rows.map((r) => campusId(r.name, r.city)));
+    expect(ids.size).toBe(rows.length);
   });
 });
 
