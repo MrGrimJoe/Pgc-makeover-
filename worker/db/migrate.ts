@@ -329,6 +329,11 @@ export const MIGRATIONS: MigrationRecord[] = [
     name: '003_discovery.sql',
     sql: MIGRATION_003_DISCOVERY_SQL,
   },
+  {
+    // Profile reads and writes depend on these columns, so it is part of the base set.
+    name: '005_onboarding.sql',
+    sql: MIGRATION_005_ONBOARDING_SQL,
+  },
 ];
 
 export const ALL_MIGRATIONS: MigrationRecord[] = [
@@ -337,11 +342,7 @@ export const ALL_MIGRATIONS: MigrationRecord[] = [
     name: '004_messaging.sql',
     sql: MIGRATION_004_MESSAGING_SQL,
   },
-  {
-    name: '005_onboarding.sql',
-    sql: MIGRATION_005_ONBOARDING_SQL,
-  },
-];
+].sort((a, b) => a.name.localeCompare(b.name));
 
 export async function runMigrations(
   db: D1Database,

@@ -212,68 +212,89 @@ describe('Google OAuth & Session Authentication', () => {
   });
 
   // DEV-ONLY: remove before launch
-  it('auth callback in dev mock flow gracefully succeeds even if iframe drops the transient oauth_state cookie', async () => {
-    const callbackUrl = 'http://localhost:3000/api/auth/callback?code=mock_code&state=mock_state_123&mock=true';
-    const req = new Request(callbackUrl, {
-      method: 'GET',
-    });
-
-    const res = await worker.fetch(req, env);
+  it('sign-up callback survives the preview iframe dropping the transient oauth_state cookie', async () => {
+    const callbackUrl =
+      'http://localhost:3000/api/auth/callback?code=mock_code&state=mock_state_123&mock=true&intent=signup';
+    const res = await worker.fetch(new Request(callbackUrl, { method: 'GET' }), env);
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('/');
+    expect(res.headers.get('Location')).toBe('/?signup=1');
 
-    const setCookie = res.headers.get('Set-Cookie');
-    expect(setCookie).toContain('session_id=sess_');
+    expect(res.headers.get('Set-Cookie')).toContain('signup_ticket=tkt_');
 
+    // The callback never creates an account: only a ticket exists
     const users = await env.DB.prepare('SELECT * FROM users').all();
-    expect(users.results.length).toBe(1);
+    expect(users.results.length).toBe(0);
+    const tickets = await env.DB.prepare('SELECT * FROM signup_tickets').all();
+    expect(tickets.results.length).toBe(1);
   });
 
   // DEV-ONLY: remove before launch
-  it('auth callback in development creates account with random username and unsets Secure cookie flag', async () => {
+  it('log in with an unknown Google account does not create a user and returns to the login screen', async () => {
     const legitimateState = 'valid_matching_state_456';
-    const nonce = 'nonce_123456789';
     const cookiePayload = encodeOAuthState({
       state: legitimateState,
       codeVerifier: 'verifier_string_abcdef',
-      nonce,
+      nonce: 'nonce_123456789',
       createdAt: Date.now(),
+      intent: 'login',
     });
 
     const callbackUrl = `http://localhost:3000/api/auth/callback?code=mock_code&state=${legitimateState}&mock=true`;
-    const req = new Request(callbackUrl, {
-      method: 'GET',
-      headers: {
-        Cookie: `oauth_state=${cookiePayload}`,
-      },
-    });
-
-    const res = await worker.fetch(req, env);
+    const res = await worker.fetch(
+      new Request(callbackUrl, { method: 'GET', headers: { Cookie: `oauth_state=${cookiePayload}` } }),
+      env
+    );
 
     expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/?auth=no_account');
+    expect(res.headers.get('Set-Cookie') ?? '').not.toContain('session_id=');
 
-    // Verify session cookie without Secure flag in development
-    const setCookie = res.headers.get('Set-Cookie');
-    expect(setCookie).toBeDefined();
-    expect(setCookie).toContain('session_id=sess_');
-    expect(setCookie).toContain('HttpOnly');
-    expect(setCookie).toContain('SameSite=Lax');
-    expect(setCookie).not.toContain('Secure');
-
-    // Verify user was inserted into D1
-    const users = await env.DB.prepare('SELECT * FROM users').all();
-    expect(users.results.length).toBe(1);
-
-    // Verify random username format (user_ + 6 chars) and not derived from email
-    const profile = await env.DB.prepare('SELECT * FROM profiles').first<{ username: string }>();
-    expect(profile?.username).toMatch(/^user_[a-z0-9]{6}$/);
-
-    const sessions = await env.DB.prepare('SELECT * FROM sessions').all();
-    expect(sessions.results.length).toBe(1);
+    expect((await env.DB.prepare('SELECT * FROM users').all()).results.length).toBe(0);
+    expect((await env.DB.prepare('SELECT * FROM signup_tickets').all()).results.length).toBe(0);
+    expect((await env.DB.prepare('SELECT * FROM sessions').all()).results.length).toBe(0);
   });
 
   // DEV-ONLY: remove before launch
-  it('dev mock flow completes and sets session cookie on request host when APP_URL is a different host', async () => {
+  it('sign up with an unknown Google account issues a single-use ticket cookie (no Secure flag in development)', async () => {
+    const legitimateState = 'valid_matching_state_789';
+    const cookiePayload = encodeOAuthState({
+      state: legitimateState,
+      codeVerifier: 'verifier_string_abcdef',
+      nonce: 'nonce_123456789',
+      createdAt: Date.now(),
+      intent: 'signup',
+    });
+
+    const callbackUrl =
+      `http://localhost:3000/api/auth/callback?code=mock_code&state=${legitimateState}&mock=true` +
+      '&mock_sub=s1&mock_email=new.student%40gmail.com&mock_name=New%20Student';
+    const res = await worker.fetch(
+      new Request(callbackUrl, { method: 'GET', headers: { Cookie: `oauth_state=${cookiePayload}` } }),
+      env
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/?signup=1');
+    const setCookie = res.headers.get('Set-Cookie') ?? '';
+    expect(setCookie).toContain('signup_ticket=tkt_');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('SameSite=Lax');
+    expect(setCookie).not.toContain('Secure');
+    expect(setCookie).not.toContain('session_id=');
+
+    const ticket = await env.DB.prepare('SELECT * FROM signup_tickets').first<{
+      provider_subject: string;
+      email: string;
+      display_name: string;
+    }>();
+    expect(ticket?.provider_subject).toBe('mock-google-sub-s1');
+    expect(ticket?.email).toBe('new.student@gmail.com');
+    expect(ticket?.display_name).toBe('New Student');
+    expect((await env.DB.prepare('SELECT * FROM users').all()).results.length).toBe(0);
+  });
+
+  // DEV-ONLY: remove before launch
+  it('dev mock flow redirects relatively and sets the ticket cookie on the request host when APP_URL is a different host', async () => {
     const diffHostEnv: Env = {
       ...env,
       APP_URL: 'https://different-host.example.com',
@@ -281,7 +302,7 @@ describe('Google OAuth & Session Authentication', () => {
     };
 
     // Step 1: Initiate mock OAuth from http://localhost:3000
-    const initReq = new Request('http://localhost:3000/api/auth/google?mock=true', { method: 'GET' });
+    const initReq = new Request('http://localhost:3000/api/auth/google?mock=true&intent=signup', { method: 'GET' });
     const initRes = await worker.fetch(initReq, diffHostEnv);
 
     expect(initRes.status).toBe(302);
@@ -301,29 +322,29 @@ describe('Google OAuth & Session Authentication', () => {
     const oauthCookieValue = cookieMatch ? cookieMatch[1] : '';
 
     // Step 2: Follow relative redirect on http://localhost:3000 with the oauth_state cookie
-    const callbackUrl = `http://localhost:3000${location}`;
-    const callbackReq = new Request(callbackUrl, {
+    const callbackReq = new Request(`http://localhost:3000${location}`, {
       method: 'GET',
-      headers: {
-        Cookie: `oauth_state=${oauthCookieValue}`,
-      },
+      headers: { Cookie: `oauth_state=${oauthCookieValue}` },
     });
 
     const callbackRes = await worker.fetch(callbackReq, diffHostEnv);
     expect(callbackRes.status).toBe(302);
 
-    // Verify post-login redirect is relative ("/") and does not redirect away to different-host
-    const postLoginLocation = callbackRes.headers.get('Location');
-    expect(postLoginLocation).toBe('/');
+    // Post-callback redirect is relative and goes to onboarding
+    expect(callbackRes.headers.get('Location')).toBe('/?signup=1');
+    expect(callbackRes.headers.get('Set-Cookie')).toContain('signup_ticket=tkt_');
 
-    // Verify session cookie was set on the request's host
-    const sessionCookie = callbackRes.headers.get('Set-Cookie');
-    expect(sessionCookie).toBeDefined();
-    expect(sessionCookie).toContain('session_id=sess_');
-
-    // Verify user was inserted into D1
+    // Still no account until onboarding completes
     const users = await diffHostEnv.DB.prepare('SELECT * FROM users').all();
-    expect(users.results.length).toBe(1);
+    expect(users.results.length).toBe(0);
+  });
+
+  it('GET /api/auth/google rejects an unknown intent', async () => {
+    const res = await worker.fetch(
+      new Request('http://localhost:3000/api/auth/google?intent=admin', { method: 'GET' }),
+      env
+    );
+    expect(res.status).toBe(400);
   });
 
   it('verifyGoogleIdToken requires email_verified', async () => {

@@ -1,7 +1,6 @@
 import type { ExecutionContext, D1PreparedStatement, ScheduledController, D1Database } from '@cloudflare/workers-types';
 import type {
   Env,
-  ProfileRow,
   UserRow,
   UserSettingsRow,
   PostRow,
@@ -19,7 +18,10 @@ import {
   serializeCookie,
   verifyGoogleIdToken,
 } from './auth.ts';
-import { normalizeUsername } from '../shared/username.ts';
+import { normalizeUsername, isReservedUsername } from '../shared/username.ts';
+import { handleOnboardingRoutes, purgeExpiredSignupTickets, SIGNUP_TICKET_COOKIE, SIGNUP_TICKET_TTL_MS, campusSelectableBy } from './onboarding.ts';
+import { buildMeResponse } from './me.ts';
+import { DEFAULT_PRESET_IDS } from '../shared/presets.ts';
 import {
   updateProfileSchema,
   createPostSchema,
@@ -185,17 +187,6 @@ async function canSendDmTo(
   }
 
   return { allowed: true };
-}
-
-function generateRandomUsername(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-  let suffix = '';
-  for (let i = 0; i < 6; i++) {
-    suffix += chars[bytes[i]! % chars.length];
-  }
-  return `user_${suffix}`;
 }
 
 /**
@@ -455,6 +446,10 @@ export default {
       });
     }
 
+    // Sign-up, campuses, username availability, suggested people and campus admin
+    const onboardingResponse = await handleOnboardingRoutes(request, env);
+    if (onboardingResponse) return onboardingResponse;
+
     // ==========================================
     // 1. AUTHENTICATION ROUTES
     // ==========================================
@@ -465,6 +460,11 @@ export default {
       const isMockRequested =
         url.searchParams.get('mock') === 'true' || env.GOOGLE_CLIENT_ID === 'PLACEHOLDER';
       const asUser = url.searchParams.get('as');
+      const intentParam = url.searchParams.get('intent') ?? 'login';
+      if (intentParam !== 'login' && intentParam !== 'signup') {
+        return jsonResponse({ error: 'intent must be login or signup' }, 400);
+      }
+      const intent: 'login' | 'signup' = intentParam;
 
       // DEV-ONLY: remove before launch
       if (asUser !== null && !isDevelopment) {
@@ -487,15 +487,20 @@ export default {
         codeVerifier,
         nonce,
         createdAt: Date.now(),
+        intent,
       };
 
       const encodedStateCookie = encodeOAuthState(statePayload);
 
       if (isMockRequested) {
         const asQuery = asUser ? `&as=${encodeURIComponent(asUser)}` : '';
+        // DEV-ONLY: remove before launch (lets tests and previews sign up as different mock Google accounts)
+        const mockQuery = ['mock_sub', 'mock_email', 'mock_name']
+          .map((k) => (url.searchParams.get(k) ? `&${k}=${encodeURIComponent(url.searchParams.get(k)!)}` : ''))
+          .join('');
         const mockRedirect = (isDevelopment || isTest)
-          ? `/api/auth/callback?code=mock_code&state=${encodeURIComponent(state)}&mock=true${asQuery}`
-          : `${redirectUri}?code=mock_code&state=${encodeURIComponent(state)}&mock=true${asQuery}`;
+          ? `/api/auth/callback?code=mock_code&state=${encodeURIComponent(state)}&mock=true&intent=${intent}${asQuery}${mockQuery}`
+          : `${redirectUri}?code=mock_code&state=${encodeURIComponent(state)}&mock=true&intent=${intent}${asQuery}${mockQuery}`;
 
         return new Response(null, {
           status: 302,
@@ -589,6 +594,7 @@ export default {
 
       let providerSubject: string;
       let displayName: string;
+      let email: string | null = null;
       let targetUserRow: UserRow | null = null;
 
       if (isMock) {
@@ -616,8 +622,11 @@ export default {
           providerSubject = targetUserRow.provider_subject;
           displayName = profile.display_name;
         } else {
-          providerSubject = 'mock-google-sub-12345';
-          displayName = 'Test User';
+          // DEV-ONLY: remove before launch (mock_* params pick which mock Google account signs in)
+          const mockSub = url.searchParams.get('mock_sub');
+          providerSubject = mockSub ? `mock-google-sub-${mockSub}`.slice(0, 100) : 'mock-google-sub-12345';
+          displayName = (url.searchParams.get('mock_name') || 'Test User').slice(0, 100);
+          email = (url.searchParams.get('mock_email') || '').slice(0, 200) || null;
         }
       } else {
         const redirectUri = `${env.APP_URL || url.origin}/api/auth/callback`;
@@ -650,66 +659,15 @@ export default {
           const claims = await verifyGoogleIdToken(tokenData.id_token, env.GOOGLE_CLIENT_ID, oauthState?.nonce || '');
           providerSubject = claims.sub;
           displayName = claims.name || claims.email?.split('@')[0] || 'Dialtone User';
+          email = claims.email ? claims.email.slice(0, 200) : null;
         } catch {
           return jsonResponse({ error: 'Failed to verify Google identity token' }, 400);
         }
       }
 
-      let user = targetUserRow || (await env.DB.prepare('SELECT id, created_at, status FROM users WHERE provider_subject = ?')
+      const user = targetUserRow || (await env.DB.prepare('SELECT id, created_at, status FROM users WHERE provider_subject = ?')
         .bind(providerSubject)
         .first<UserRow>());
-
-      const now = new Date().toISOString();
-
-      if (!user) {
-        const userId = `usr_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-        const randomUsername = generateRandomUsername();
-
-        const signupStatements: D1PreparedStatement[] = [
-          env.DB.prepare('INSERT INTO users (id, provider_subject, created_at, status) VALUES (?, ?, ?, ?)').bind(
-            userId,
-            providerSubject,
-            now,
-            'active'
-          ),
-          env.DB.prepare(
-            'INSERT INTO profiles (user_id, username, username_normalized, display_name, bio) VALUES (?, ?, ?, ?, ?)'
-          ).bind(userId, randomUsername, normalizeUsername(randomUsername), displayName, ''),
-          env.DB.prepare('INSERT INTO user_settings (user_id) VALUES (?)').bind(userId),
-        ];
-
-        try {
-          await env.DB.batch(signupStatements);
-        } catch (dbErr) {
-          const errMsg = (dbErr as Error).message || '';
-          if (errMsg.includes('UNIQUE constraint') && errMsg.includes('username')) {
-            const retryUsername = generateRandomUsername();
-            await env.DB.batch([
-              signupStatements[0]!,
-              env.DB.prepare(
-                'INSERT INTO profiles (user_id, username, username_normalized, display_name, bio) VALUES (?, ?, ?, ?, ?)'
-              ).bind(userId, retryUsername, normalizeUsername(retryUsername), displayName, ''),
-              signupStatements[2]!,
-            ]);
-          } else {
-            return jsonResponse({ error: 'Failed to create user account' }, 500);
-          }
-        }
-
-        user = {
-          id: userId,
-          provider_subject: providerSubject,
-          created_at: now,
-          status: 'active',
-        };
-      }
-
-      const sessionId = `sess_${generateRandomString(32)}`;
-      const sessionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-      await env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
-        .bind(sessionId, user.id, sessionExpiry)
-        .run();
 
       const clearOauthStateCookie = serializeCookie('oauth_state', '', {
         path: oauthCookiePath,
@@ -719,6 +677,81 @@ export default {
         sameSite: cookieSameSite,
         partitioned: cookiePartitioned,
       });
+
+      // Log in and Sign up are separate. The callback never creates an account: an unknown Google
+      // account either goes back to the login screen (intent=login) or gets a short-lived sign-up
+      // ticket and moves on to onboarding (intent=signup).
+      const urlIntent = url.searchParams.get('intent');
+      const intent: 'login' | 'signup' =
+        oauthState?.intent ??
+        ((isDevelopment || isTest) && urlIntent === 'signup' ? 'signup' : 'login');
+
+      if (!user) {
+        if (intent !== 'signup') {
+          const noAccountHeaders = new Headers();
+          noAccountHeaders.append('Set-Cookie', clearOauthStateCookie);
+          noAccountHeaders.set('Location', '/?auth=no_account');
+          return new Response(null, { status: 302, headers: noAccountHeaders });
+        }
+
+        await purgeExpiredSignupTickets(env);
+        await env.DB.prepare('DELETE FROM signup_tickets WHERE provider_subject = ? AND used_at IS NULL')
+          .bind(providerSubject)
+          .run();
+
+        const ticketId = `tkt_${generateRandomString(32)}`;
+        const ticketNow = Date.now();
+        await env.DB.prepare(
+          `INSERT INTO signup_tickets (id, provider_subject, email, display_name, created_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+          .bind(
+            ticketId,
+            providerSubject,
+            email,
+            displayName.slice(0, 100),
+            new Date(ticketNow).toISOString(),
+            new Date(ticketNow + SIGNUP_TICKET_TTL_MS).toISOString()
+          )
+          .run();
+
+        const ticketHeaders = new Headers();
+        ticketHeaders.append(
+          'Set-Cookie',
+          serializeCookie(SIGNUP_TICKET_COOKIE, ticketId, {
+            path: '/',
+            maxAge: SIGNUP_TICKET_TTL_MS / 1000,
+            httpOnly: true,
+            secure: cookieSecure,
+            sameSite: cookieSameSite,
+            partitioned: cookiePartitioned,
+          })
+        );
+        ticketHeaders.append('Set-Cookie', clearOauthStateCookie);
+        ticketHeaders.set('Location', '/?signup=1');
+        return new Response(null, { status: 302, headers: ticketHeaders });
+      }
+
+      // Existing account: remember the verified email for people who signed up before it was stored.
+      if (email) {
+        try {
+          await env.DB.prepare(
+            `INSERT INTO user_private (user_id, email) VALUES (?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET email = COALESCE(user_private.email, excluded.email)`
+          )
+            .bind(user.id, email)
+            .run();
+        } catch {
+          // Non-critical: login must not fail because of this
+        }
+      }
+
+      const sessionId = `sess_${generateRandomString(32)}`;
+      const sessionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      await env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
+        .bind(sessionId, user.id, sessionExpiry)
+        .run();
 
       const sessionCookie = serializeCookie('session_id', sessionId, {
         path: '/',
@@ -785,10 +818,12 @@ export default {
 
       const row = await env.DB.prepare(
         `SELECT p.user_id, p.username, p.display_name, p.bio, p.avatar_media_id, p.class_id,
-                c.name AS class_name, u.created_at
+                p.campus_id, p.real_name, p.wallpaper_id, p.theme_id, p.text_style_id,
+                c.name AS class_name, cm.name AS campus_name, cm.status AS campus_status, u.created_at
          FROM profiles p
          JOIN users u ON u.id = p.user_id
          LEFT JOIN classes c ON c.id = p.class_id
+         LEFT JOIN campuses cm ON cm.id = p.campus_id
          WHERE p.username_normalized = ? AND u.status = 'active'`
       )
         .bind(normalized)
@@ -799,7 +834,14 @@ export default {
           bio: string;
           avatar_media_id: string | null;
           class_id: string | null;
+          campus_id: string | null;
+          real_name: string | null;
+          wallpaper_id: string | null;
+          theme_id: string | null;
+          text_style_id: string | null;
           class_name: string | null;
+          campus_name: string | null;
+          campus_status: string | null;
           created_at: string;
         }>();
 
@@ -853,6 +895,14 @@ export default {
         avatar_media_id: row.avatar_media_id,
         class_id: row.class_id,
         class_name: row.class_name,
+        campus_id: row.campus_id,
+        // A campus that is still pending approval is only named on the person's own profile.
+        campus_name: row.campus_status === 'approved' || row.user_id === auth.user.id ? row.campus_name : null,
+        // The real name is shown on the profile page only, never in feeds, search or messages.
+        real_name: row.real_name,
+        wallpaper_id: row.wallpaper_id,
+        theme_id: row.theme_id,
+        text_style_id: row.text_style_id,
         created_at: row.created_at,
         is_following: !!isFollowing,
         followers_count: Number(followersCount?.count || 0),
@@ -868,30 +918,11 @@ export default {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
 
-      const classRow = auth.profile.class_id
-        ? await env.DB.prepare('SELECT name FROM classes WHERE id = ?').bind(auth.profile.class_id).first<{ name: string }>()
-        : null;
-
-      return jsonResponse({
-        user: {
-          id: auth.user.id,
-          created_at: auth.user.created_at,
-          status: auth.user.status,
-        },
-        profile: {
-          username: auth.profile.username,
-          username_normalized: auth.profile.username_normalized,
-          display_name: auth.profile.display_name,
-          bio: auth.profile.bio,
-          avatar_media_id: auth.profile.avatar_media_id,
-          class_id: auth.profile.class_id || null,
-          class_name: classRow?.name || null,
-        },
-        settings: {
-          dm_policy: auth.settings.dm_policy,
-          feed_preferences: auth.settings.feed_preferences,
-        },
-      });
+      const me = await buildMeResponse(env.DB, auth.user, auth.settings);
+      if (!me) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
+      }
+      return jsonResponse(me);
     }
 
     // PATCH /api/me - Update profile fields (validated with shared schema, using D1 batch)
@@ -945,6 +976,22 @@ export default {
         }
       }
 
+      // Reserved names (admin, support, ...) cannot be taken; keeping an existing one is allowed
+      if (
+        data.username !== undefined &&
+        normalizeUsername(data.username) !== auth.profile.username_normalized &&
+        isReservedUsername(data.username)
+      ) {
+        return jsonResponse({ error: 'That username is reserved' }, 400);
+      }
+
+      // A campus must be approved, or still pending but requested by this person
+      if (data.campus_id !== undefined && data.campus_id !== null) {
+        if (!(await campusSelectableBy(env, data.campus_id, auth.user.id))) {
+          return jsonResponse({ error: 'Campus not found' }, 400);
+        }
+      }
+
       // Reject class_id values that do not exist in the classes table with 400
       if (data.class_id !== undefined && data.class_id !== null) {
         const classExists = await env.DB.prepare('SELECT 1 FROM classes WHERE id = ?')
@@ -962,7 +1009,12 @@ export default {
         data.display_name !== undefined ||
         data.bio !== undefined ||
         data.avatar_media_id !== undefined ||
-        data.class_id !== undefined
+        data.class_id !== undefined ||
+        data.campus_id !== undefined ||
+        data.real_name !== undefined ||
+        data.wallpaper_id !== undefined ||
+        data.theme_id !== undefined ||
+        data.text_style_id !== undefined
       ) {
         const currentProfile = auth.profile;
         const newUsername = data.username !== undefined ? data.username : currentProfile.username;
@@ -975,12 +1027,35 @@ export default {
         const newClassId =
           data.class_id !== undefined ? data.class_id : (currentProfile.class_id || null);
 
+        const newCampusId = data.campus_id !== undefined ? data.campus_id : currentProfile.campus_id || null;
+        const newRealName = data.real_name !== undefined ? data.real_name : currentProfile.real_name || null;
+        // The default preset is stored as NULL so the column only ever holds a real choice
+        const presetOrNull = (value: string | null | undefined, defaultId: string, current: string | null) =>
+          value === undefined ? current || null : value === null || value === defaultId ? null : value;
+        const newWallpaper = presetOrNull(data.wallpaper_id, DEFAULT_PRESET_IDS.wallpaper, currentProfile.wallpaper_id);
+        const newTheme = presetOrNull(data.theme_id, DEFAULT_PRESET_IDS.theme, currentProfile.theme_id);
+        const newTextStyle = presetOrNull(data.text_style_id, DEFAULT_PRESET_IDS.textStyle, currentProfile.text_style_id);
+
         batchStatements.push(
           env.DB.prepare(
             `UPDATE profiles
-             SET username = ?, username_normalized = ?, display_name = ?, bio = ?, avatar_media_id = ?, class_id = ?
+             SET username = ?, username_normalized = ?, display_name = ?, bio = ?, avatar_media_id = ?, class_id = ?,
+                 campus_id = ?, real_name = ?, wallpaper_id = ?, theme_id = ?, text_style_id = ?
              WHERE user_id = ?`
-          ).bind(newUsername, newNorm, newDisplayName, newBio, newAvatar, newClassId, auth.user.id)
+          ).bind(
+            newUsername,
+            newNorm,
+            newDisplayName,
+            newBio,
+            newAvatar,
+            newClassId,
+            newCampusId,
+            newRealName,
+            newWallpaper,
+            newTheme,
+            newTextStyle,
+            auth.user.id
+          )
         );
       }
 
@@ -1022,23 +1097,15 @@ export default {
         }
       }
 
-      const updatedProfile = await env.DB.prepare('SELECT * FROM profiles WHERE user_id = ?')
-        .bind(auth.user.id)
-        .first<ProfileRow>();
-
       const updatedSettings = await env.DB.prepare('SELECT * FROM user_settings WHERE user_id = ?')
         .bind(auth.user.id)
         .first<UserSettingsRow>();
 
-      return jsonResponse({
-        user: {
-          id: auth.user.id,
-          created_at: auth.user.created_at,
-          status: auth.user.status,
-        },
-        profile: updatedProfile,
-        settings: updatedSettings,
-      });
+      const meResponse = await buildMeResponse(env.DB, auth.user, updatedSettings ?? auth.settings);
+      if (!meResponse) {
+        return jsonResponse({ error: 'Failed to update profile' }, 500);
+      }
+      return jsonResponse(meResponse);
     }
 
     // DELETE /api/me - Account deletion in D1 batch
@@ -1092,6 +1159,8 @@ export default {
 
       const batchStatements: D1PreparedStatement[] = [
         env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
+        env.DB.prepare('DELETE FROM user_private WHERE user_id = ?').bind(userId),
+        env.DB.prepare('DELETE FROM campus_requests WHERE actor_key = ?').bind(userId),
         env.DB.prepare('DELETE FROM user_settings WHERE user_id = ?').bind(userId),
         env.DB.prepare('DELETE FROM profiles WHERE user_id = ?').bind(userId),
       ];
@@ -1383,6 +1452,17 @@ export default {
       const q = (url.searchParams.get('q') || '').trim();
       const limit = parseLimitParam(url.searchParams.get('limit'), 20, 1, 50);
 
+      // scope narrows results to the caller's own class or campus; default is everyone
+      const scope = url.searchParams.get('scope') ?? 'all';
+      if (scope !== 'all' && scope !== 'class' && scope !== 'campus') {
+        return jsonResponse({ error: 'scope must be class, campus or all' }, 400);
+      }
+      const scopeValue = scope === 'class' ? auth.profile.class_id : scope === 'campus' ? auth.profile.campus_id : null;
+      if ((scope === 'class' || scope === 'campus') && !scopeValue) {
+        // Nothing to match against: say so instead of silently searching everyone
+        return jsonResponse({ posts: [], total: 0, scope_missing: scope });
+      }
+
       if (!q) {
         return jsonResponse({ posts: [], total: 0 });
       }
@@ -1396,7 +1476,13 @@ export default {
         ? ` AND p.author_id NOT IN (${blockedIds.map(() => '?').join(',')})`
         : '';
 
+      // Placeholder order: now, 3 patterns, [scope value], [blocked ids...], limit
+      const scopeFilter =
+        scope === 'class' ? ' AND pr.class_id = ?' : scope === 'campus' ? ' AND pr.campus_id = ?' : '';
       const searchParams: unknown[] = [nowIso, searchPattern, searchPattern, searchPattern];
+      if (scopeFilter) {
+        searchParams.push(scopeValue);
+      }
       if (hasBlocked) {
         searchParams.push(...blockedIds);
       }
@@ -1415,7 +1501,7 @@ export default {
              SELECT pt.post_id FROM post_topics pt
              JOIN topics t ON t.id = pt.topic_id
              WHERE t.slug LIKE ? OR t.display_name LIKE ?
-           ))${blockedFilter}
+           ))${scopeFilter}${blockedFilter}
          ORDER BY p.created_at DESC
          LIMIT ?`
       )

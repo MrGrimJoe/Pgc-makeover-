@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createSqliteD1 } from '../worker/db/sqlite-d1.ts';
-import { runMigrations } from '../worker/db/migrate.ts';
+import { runMigrations, MIGRATIONS } from '../worker/db/migrate.ts';
 
 describe('Migrations runner', () => {
   it('applies migrations from an empty database', async () => {
@@ -72,7 +72,7 @@ describe('Migrations runner', () => {
 
     // First run
     const firstRun = await runMigrations(db);
-    expect(firstRun.applied.length).toBe(3);
+    expect(firstRun.applied.length).toBe(MIGRATIONS.length);
 
     // Second run: should not re-run applied migrations
     const secondRun = await runMigrations(db);

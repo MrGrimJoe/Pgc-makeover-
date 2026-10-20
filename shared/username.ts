@@ -22,3 +22,26 @@ export function isValidUsername(username: string): boolean {
   if (typeof username !== 'string') return false;
   return USERNAME_REGEX.test(username);
 }
+
+/**
+ * Usernames nobody can register, to stop impersonation of staff or the app itself.
+ * Checked on sign-up, on username changes and by the availability check.
+ */
+export const RESERVED_USERNAMES: readonly string[] = [
+  'admin',
+  'administrator',
+  'moderator',
+  'mod',
+  'staff',
+  'support',
+  'help',
+  'official',
+  'system',
+  'root',
+  'dialtone',
+  'classsync',
+];
+
+export function isReservedUsername(username: string): boolean {
+  return RESERVED_USERNAMES.includes(normalizeUsername(username));
+}
