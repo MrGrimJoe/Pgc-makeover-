@@ -4,7 +4,7 @@ import { ExpiryChip } from './ExpiryChip.tsx';
 import { Heart, MessageSquare, Flag, Trash2 } from 'lucide-react';
 import { CommentModal } from './CommentModal.tsx';
 import { ReportModal } from './ReportModal.tsx';
-import { avatarInitial } from '../lib/initial.ts';
+import { Avatar } from './Avatar.tsx';
 
 interface PostCardProps {
   post: PostItem;
@@ -30,7 +30,6 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [likePopping, setLikePopping] = useState(false);
 
-  const authorInitial = avatarInitial(post.author_display_name, post.author_username);
 
   const handleToggleLike = async () => {
     const nextLiked = !hasLiked;
@@ -104,11 +103,16 @@ export const PostCard: React.FC<PostCardProps> = ({
         <button
           type="button"
           onClick={() => onViewAuthorProfile && onViewAuthorProfile(post.author_username)}
-          className="w-8 h-8 rounded-full bg-[var(--tint,#EAF0FA)] text-[var(--blue,#244C8A)] flex items-center justify-center font-semibold text-[13px] shrink-0 cursor-pointer border-0 p-0"
+          className="rounded-full shrink-0 cursor-pointer border-0 p-0 bg-transparent"
           title={`View @${post.author_username}`}
           aria-label={`View @${post.author_username}`}
         >
-          {authorInitial}
+          <Avatar
+            mediaId={post.author_avatar_media_id}
+            displayName={post.author_display_name}
+            username={post.author_username}
+            size={32}
+          />
         </button>
 
         <div className="flex-1 min-w-0">

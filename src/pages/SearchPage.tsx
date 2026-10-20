@@ -1,33 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import type { PostItem, TrendItem } from '../../shared/schema.ts';
+import type { PostItem, TrendItem, SuggestedPersonItem } from '../../shared/schema.ts';
 import { PostCard } from '../components/PostCard.tsx';
 import { Search, X } from 'lucide-react';
-import { avatarInitial } from '../lib/initial.ts';
+import { Avatar } from '../components/Avatar.tsx';
 
 interface SearchPageProps {
   currentUserId: string;
+  /** Whether the signed-in person has set a class / campus, which decides the default tab. */
+  hasClass?: boolean;
+  hasCampus?: boolean;
   onViewAuthorProfile: (username: string) => void;
 }
+
+type ScopeTab = 'my_class' | 'campus' | 'everyone';
+
+const SCOPE_PARAM: Record<ScopeTab, 'class' | 'campus' | 'all'> = {
+  my_class: 'class',
+  campus: 'campus',
+  everyone: 'all',
+};
 
 interface SuggestedPerson {
   username: string;
   displayName: string;
-  className: string;
+  avatarMediaId: string | null;
+  /** "Class of 2026 · Central Campus" style line. */
+  subtitle: string;
   isFollowing: boolean;
 }
 
 export const SearchPage: React.FC<SearchPageProps> = ({
   currentUserId,
+  hasClass = true,
+  hasCampus = true,
   onViewAuthorProfile,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearch, setActiveSearch] = useState('');
-  const [scopeTab, setScopeTab] = useState<'my_class' | 'campus' | 'everyone'>('my_class');
+  const [scopeTab, setScopeTab] = useState<ScopeTab>(hasClass ? 'my_class' : hasCampus ? 'campus' : 'everyone');
+  const [scopeMissing, setScopeMissing] = useState<'class' | 'campus' | null>(null);
   const [trends, setTrends] = useState<TrendItem[]>([]);
   const [results, setResults] = useState<PostItem[]>([]);
-  // People come only from a real API result. No suggested-people endpoint exists
-  // yet, so this stays empty (and the empty state shows) until one is wired in.
+  // People come only from a real API result (GET /api/people/suggested).
   const [people, setPeople] = useState<SuggestedPerson[]>([]);
+  const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,23 +57,51 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       .catch(() => {});
   }, []);
 
-  const executeSearch = async (query: string) => {
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/people/suggested?limit=10')
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = (await res.json()) as { people?: SuggestedPersonItem[] };
+        if (cancelled) return;
+        setPeople(
+          (data.people || []).map((p) => ({
+            username: p.username,
+            displayName: p.display_name,
+            avatarMediaId: p.avatar_media_id,
+            subtitle: [p.class_name, p.campus_name].filter(Boolean).join(' · '),
+            isFollowing: false,
+          }))
+        );
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setPeopleLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const executeSearch = async (query: string, tab: ScopeTab = scopeTab) => {
     const q = query.trim();
     if (!q) {
       setResults([]);
       setActiveSearch('');
+      setScopeMissing(null);
       return;
     }
     setActiveSearch(q);
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=30`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&scope=${SCOPE_PARAM[tab]}&limit=30`);
       if (!res.ok) {
         throw new Error('Search failed');
       }
-      const data = (await res.json()) as { posts: PostItem[] };
+      const data = (await res.json()) as { posts: PostItem[]; scope_missing?: 'class' | 'campus' };
       setResults(data.posts || []);
+      setScopeMissing(data.scope_missing ?? null);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -74,6 +118,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
     setSearchQuery('');
     setActiveSearch('');
     setResults([]);
+    setScopeMissing(null);
+  };
+
+  const handleScopeChange = (tab: ScopeTab) => {
+    setScopeTab(tab);
+    // Searching again with the new scope keeps what the person typed
+    if (activeSearch) executeSearch(activeSearch, tab);
   };
 
   const handleTrendClick = (slug: string) => {
@@ -135,7 +186,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             <button
               key={tab}
               type="button"
-              onClick={() => setScopeTab(tab)}
+              onClick={() => handleScopeChange(tab)}
+              aria-pressed={isActive}
               className={`flex-1 min-h-[44px] py-3 text-center text-[14px] font-semibold transition-colors cursor-pointer border-b-2 bg-transparent ${
                 isActive
                   ? 'text-[var(--text,#17233A)] border-[var(--blue,#244C8A)]'
@@ -173,7 +225,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             </div>
           )}
 
-          {!loading && results.length === 0 && !error && (
+          {!loading && scopeMissing && (
+            <div className="py-16 text-center text-[13px] text-[var(--muted,#5B6577)] px-4">
+              Add your {scopeMissing === 'class' ? 'class' : 'campus'} in Edit profile to search it.
+            </div>
+          )}
+
+          {!loading && !scopeMissing && results.length === 0 && !error && (
             <div className="py-16 text-center text-[13px] text-[var(--muted,#5B6577)] px-4">
               No results found for &ldquo;{activeSearch}&rdquo;
             </div>
@@ -230,7 +288,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({
 
           {people.length === 0 && (
             <p className="mx-4 my-3 text-[13px] text-[var(--muted,#5B6577)]">
-              No people to show
+              {!peopleLoaded
+                ? 'Loading...'
+                : hasClass || hasCampus
+                  ? 'No people to show'
+                  : 'Add your class and campus in Edit profile to see people near you'}
             </p>
           )}
 
@@ -243,9 +305,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 type="button"
                 onClick={() => onViewAuthorProfile(person.username)}
                 aria-label={`View profile of @${person.username}`}
-                className="w-8 h-8 rounded-full bg-[var(--tint,#EAF0FA)] text-[var(--blue,#244C8A)] flex items-center justify-center font-semibold text-[13px] shrink-0 border-0 p-0 cursor-pointer"
+                className="shrink-0 border-0 p-0 bg-transparent cursor-pointer rounded-full"
               >
-                {avatarInitial(person.displayName, person.username)}
+                <Avatar mediaId={person.avatarMediaId} displayName={person.displayName} username={person.username} size={32} />
               </button>
               <div
                 className="flex-1 min-w-0 cursor-pointer"
@@ -255,7 +317,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                   {person.displayName}
                 </b>
                 <small className="text-[var(--muted,#5B6577)] block text-[13px] truncate">
-                  {person.className}
+                  {person.subtitle}
                 </small>
               </div>
               <button

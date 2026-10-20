@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import type { PublicProfileResponse, PostItem } from '../../shared/schema.ts';
 import { MoreVertical } from 'lucide-react';
 import { ReportModal } from '../components/ReportModal.tsx';
-import { avatarInitial } from '../lib/initial.ts';
+import { Avatar } from '../components/Avatar.tsx';
+import { resolveProfileStyle } from '../../shared/presets.ts';
 
 interface ProfileViewPageProps {
   initialUsername?: string;
@@ -181,13 +182,28 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
       )}
 
       {/* Profile screen */}
-      {profile && !loading && (
+      {profile && !loading && (() => {
+        const style = resolveProfileStyle(profile);
+        const text = style.textStyleCss as React.CSSProperties;
+        return (
         <div>
+          {/* The chosen wallpaper covers the header; accent colors the avatar ring and the divider below it */}
+          <div
+            data-wallpaper={style.wallpaper.id}
+            style={{
+              ...(style.headerStyle as React.CSSProperties),
+              ...(style.accent ? { borderBottom: `3px solid ${style.accent}` } : {}),
+            }}
+          >
           {/* Header row: 80px avatar and three stats */}
           <div className="flex items-center gap-6 p-4">
-            <div className="w-[80px] h-[80px] rounded-full bg-[var(--tint,#EAF0FA)] text-[var(--blue,#244C8A)] font-semibold text-[30px] flex items-center justify-center shrink-0">
-              {avatarInitial(profile.display_name, profile.username)}
-            </div>
+            <Avatar
+              mediaId={profile.avatar_media_id}
+              displayName={profile.display_name}
+              username={profile.username}
+              size={80}
+              ringColor={style.accent}
+            />
             <div className="flex flex-1 justify-around text-center text-[13px] text-[var(--muted,#5B6577)]">
               <div>
                 <b className="block text-[17px] text-[var(--text,#17233A)] font-semibold leading-tight">
@@ -212,15 +228,24 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
 
           {/* Identity & Bio */}
           <div className="px-4 text-[14px]">
-            <b className="font-semibold text-[15px] block text-[var(--text,#17233A)]">
+            <b
+              className="font-semibold text-[15px] block text-[var(--text,#17233A)]"
+              style={text}
+            >
               {profile.display_name}
             </b>
             <span className="text-[var(--muted,#5B6577)] text-[13px] block">
               @{profile.username}
               {profile.class_name ? ` · ${profile.class_name}` : ''}
+              {profile.campus_name ? ` · ${profile.campus_name}` : ''}
             </span>
+            {profile.real_name && (
+              <span className="text-[var(--muted,#5B6577)] text-[13px] block">
+                Real name: {profile.real_name}
+              </span>
+            )}
             {profile.bio && (
-              <div className="mt-1 text-[14px] text-[var(--text,#17233A)] whitespace-pre-wrap">
+              <div className="mt-1 text-[14px] text-[var(--text,#17233A)] whitespace-pre-wrap" style={text}>
                 {profile.bio}
               </div>
             )}
@@ -311,6 +336,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
               </>
             )}
           </div>
+          </div>
 
           {/* 3-column grid with 2px gaps and square tiles under 1px top line */}
           <div className="grid grid-cols-3 gap-[2px] border-t border-[var(--line,#E8EBF0)] mt-1">
@@ -340,7 +366,8 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Report Modal */}
       {showReport && profile && (

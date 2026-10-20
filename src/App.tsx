@@ -8,6 +8,7 @@ import type { MeResponse } from '../shared/schema.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { BottomTabBar, type AppTab } from './components/BottomTabBar.tsx';
 import { SignInPage } from './pages/SignInPage.tsx';
+import { OnboardingPage } from './pages/OnboardingPage.tsx';
 import { FeedPage } from './pages/FeedPage.tsx';
 import { SearchPage } from './pages/SearchPage.tsx';
 import { PostComposerPage } from './pages/PostComposerPage.tsx';
@@ -17,7 +18,19 @@ import { MessagesPage } from './pages/MessagesPage.tsx';
 // DEV-ONLY: remove before launch
 import { DevBar } from './components/DevBar.tsx';
 
+/** What the OAuth callback asked for, read once from the URL (/?signup=1 or /?auth=no_account). */
+function readAuthRedirect(): { signup: boolean; notice: 'no_account' | 'error' | null } {
+  const params = new URLSearchParams(window.location.search);
+  const auth = params.get('auth');
+  return {
+    signup: params.get('signup') === '1',
+    notice: auth === 'no_account' || auth === 'error' ? auth : null,
+  };
+}
+
 export default function App() {
+  const [authRedirect] = useState(readAuthRedirect);
+  const [authNotice, setAuthNotice] = useState<'no_account' | 'error' | null>(authRedirect.notice);
   const [currentUser, setCurrentUser] = useState<MeResponse | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [activeTab, setActiveTab] = useState<AppTab>('feed');
@@ -38,7 +51,8 @@ export default function App() {
         setActiveTab('feed');
       } else {
         setCurrentUser(null);
-        setActiveTab('signin');
+        // Coming back from Google as a new person: continue with onboarding instead of the sign-in screen
+        setActiveTab(authRedirect.signup ? 'signup' : 'signin');
       }
     } catch {
       setCurrentUser(null);
@@ -49,6 +63,10 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Drop ?signup=1 / ?auth=... from the address bar so a refresh does not repeat the message
+    if (window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
     checkAuth();
   }, []);
 
@@ -105,7 +123,17 @@ export default function App() {
 
         <main className="flex-1 w-full">
           {activeTab === 'signin' && (
-            <SignInPage onSuccessRedirect={() => checkAuth()} />
+            <SignInPage onSuccessRedirect={() => checkAuth()} notice={authNotice} />
+          )}
+
+          {activeTab === 'signup' && !currentUser && (
+            <OnboardingPage
+              onComplete={() => checkAuth()}
+              onRestart={() => {
+                setAuthNotice(null);
+                setActiveTab('signin');
+              }}
+            />
           )}
 
           {activeTab === 'feed' && currentUser && (
@@ -119,6 +147,8 @@ export default function App() {
           {activeTab === 'search' && currentUser && (
             <SearchPage
               currentUserId={currentUser.user.id}
+              hasClass={!!currentUser.profile.class_id}
+              hasCampus={!!currentUser.profile.campus_id}
               onViewAuthorProfile={handleViewAuthorProfile}
             />
           )}
@@ -167,7 +197,7 @@ export default function App() {
             />
           )}
 
-          {(!currentUser && activeTab !== 'signin') && (
+          {(!currentUser && activeTab !== 'signin' && activeTab !== 'signup') && (
             <SignInPage onSuccessRedirect={() => checkAuth()} />
           )}
         </main>

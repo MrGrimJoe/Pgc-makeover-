@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import type { MeResponse, ClassRow, UserInterestTopic, BlockItem } from '../../shared/schema.ts';
+import type { MeResponse, ClassRow, UserInterestTopic, BlockItem, CampusItem } from '../../shared/schema.ts';
+import { CampusPicker } from '../components/CampusPicker.tsx';
+import { Avatar } from '../components/Avatar.tsx';
+import { ProfileStylePicker, type ProfileStyleValue } from '../components/ProfileStylePicker.tsx';
 import { normalizeUsername, isValidUsername } from '../../shared/username.ts';
 import { updateProfileSchema } from '../../shared/schema.ts';
 import { X } from 'lucide-react';
@@ -24,6 +27,24 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
   const [displayName, setDisplayName] = useState(currentUser.profile.display_name);
   const [bio, setBio] = useState(currentUser.profile.bio || '');
   const [classId, setClassId] = useState(currentUser.profile.class_id || '');
+  const [realName, setRealName] = useState(currentUser.profile.real_name || '');
+  const [campus, setCampus] = useState<CampusItem | null>(
+    currentUser.profile.campus_id
+      ? {
+          id: currentUser.profile.campus_id,
+          name: currentUser.profile.campus_name || 'Your campus',
+          city: '',
+          status: 'approved',
+        }
+      : null
+  );
+  const [avatarMediaId, setAvatarMediaId] = useState<string | null>(currentUser.profile.avatar_media_id ?? null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [style, setStyle] = useState<ProfileStyleValue>({
+    wallpaper_id: currentUser.profile.wallpaper_id ?? null,
+    theme_id: currentUser.profile.theme_id ?? null,
+    text_style_id: currentUser.profile.text_style_id ?? null,
+  });
   const [dmPolicy, setDmPolicy] = useState(currentUser.settings.dm_policy || 'everyone');
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
@@ -111,11 +132,19 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
     e.preventDefault();
     setMessage(null);
 
+    const current = currentUser.profile;
     const payload = {
-      username: normalizedPreview !== currentUser.profile.username ? normalizedPreview : undefined,
+      username: normalizedPreview !== current.username ? normalizedPreview : undefined,
       display_name: displayName,
       bio: bio,
       class_id: classId || null,
+      // Only send what changed, so an unchanged pending campus or photo is never re-validated
+      real_name: realName.trim() && realName.trim() !== (current.real_name || '') ? realName.trim() : undefined,
+      campus_id: (campus?.id ?? null) !== (current.campus_id ?? null) ? (campus?.id ?? null) : undefined,
+      avatar_media_id: avatarMediaId !== (current.avatar_media_id ?? null) ? avatarMediaId : undefined,
+      wallpaper_id: style.wallpaper_id !== (current.wallpaper_id ?? null) ? style.wallpaper_id : undefined,
+      theme_id: style.theme_id !== (current.theme_id ?? null) ? style.theme_id : undefined,
+      text_style_id: style.text_style_id !== (current.text_style_id ?? null) ? style.text_style_id : undefined,
       dm_policy: dmPolicy as 'everyone' | 'following' | 'none',
     };
 
@@ -148,6 +177,25 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
       setMessage({ type: 'error', text: (err as Error).message });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePhotoChosen = async (file: File | undefined) => {
+    if (!file) return;
+    setUploadingPhoto(true);
+    setMessage(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/media/uploads', { method: 'POST', body: form });
+      const data = (await res.json()) as { id?: string; media?: { id?: string }; error?: string };
+      const mediaId = data.id ?? data.media?.id;
+      if (!res.ok || !mediaId) throw new Error(data.error || 'Could not upload that photo');
+      setAvatarMediaId(mediaId);
+    } catch (err) {
+      setMessage({ type: 'error', text: (err as Error).message });
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -189,7 +237,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={saving || !isUsernameValid || !displayName.trim()}
+          disabled={saving || uploadingPhoto || !isUsernameValid || !displayName.trim()}
           className="text-[15px] font-semibold text-primary hover:text-primary-hover disabled:opacity-40 cursor-pointer min-h-[44px] flex items-center transition-colors"
         >
           {saving ? 'Saving...' : 'Done'}
@@ -211,10 +259,42 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
 
       {/* Form Fields */}
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Name */}
+        {/* Profile photo */}
+        <div className="flex items-center gap-4">
+          <Avatar mediaId={avatarMediaId} displayName={displayName} username={username} size={64} />
+          <div className="flex flex-wrap gap-2">
+            <input
+              id="profile-photo"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only peer"
+              onChange={(e) => {
+                handlePhotoChosen(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            <label
+              htmlFor="profile-photo"
+              className="min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold flex items-center cursor-pointer peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--blue,#244C8A)]"
+            >
+              {uploadingPhoto ? 'Uploading...' : avatarMediaId ? 'Change photo' : 'Add photo'}
+            </label>
+            {avatarMediaId && (
+              <button
+                type="button"
+                onClick={() => setAvatarMediaId(null)}
+                className="min-h-[44px] px-3 text-[13px] font-semibold text-[var(--muted,#5B6577)] cursor-pointer bg-transparent border-0"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Display name (shown on posts and messages) */}
         <div>
           <label htmlFor="display-name" className="block text-[13px] font-medium text-text-muted mb-1">
-            Name
+            Display name
           </label>
           <input
             id="display-name"
@@ -223,8 +303,32 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
             onChange={(e) => setDisplayName(e.target.value)}
             maxLength={50}
             required
+            aria-describedby="display-name-help"
             className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[15px] text-text focus:outline-none focus:border-primary transition-colors"
           />
+          <p id="display-name-help" className="mt-1 text-[12px] text-text-muted">
+            Shown on your posts and messages.
+          </p>
+        </div>
+
+        {/* Real name (profile page only) */}
+        <div>
+          <label htmlFor="real-name" className="block text-[13px] font-medium text-text-muted mb-1">
+            Real name
+          </label>
+          <input
+            id="real-name"
+            type="text"
+            autoComplete="name"
+            value={realName}
+            onChange={(e) => setRealName(e.target.value)}
+            maxLength={60}
+            aria-describedby="real-name-help"
+            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[15px] text-text focus:outline-none focus:border-primary transition-colors"
+          />
+          <p id="real-name-help" className="mt-1 text-[12px] text-text-muted">
+            Shown on your profile page only.
+          </p>
         </div>
 
         {/* Username */}
@@ -287,6 +391,9 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
           </select>
         </div>
 
+        {/* Campus */}
+        <CampusPicker id="edit-campus" label="Campus" value={campus} onChange={setCampus} />
+
         {/* DM Policy */}
         <div>
           <label htmlFor="dm-policy-select" className="block text-[13px] font-medium text-text-muted mb-1">
@@ -304,6 +411,19 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
           </select>
         </div>
       </form>
+
+      {/* Profile style */}
+      <div className="pt-4 border-t border-border space-y-3">
+        <span className="text-[13px] font-semibold text-text">Profile style</span>
+        <ProfileStylePicker
+          value={style}
+          onChange={setStyle}
+          displayName={displayName}
+          username={normalizedPreview || currentUser.profile.username}
+          bio={bio}
+          avatarMediaId={avatarMediaId}
+        />
+      </div>
 
       {/* Discovery Interests */}
       {interests.length > 0 && (

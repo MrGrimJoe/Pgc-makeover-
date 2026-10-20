@@ -1,7 +1,7 @@
 import React from 'react';
 import { Home, Search, PlusSquare, User } from 'lucide-react';
 
-export type AppTab = 'feed' | 'search' | 'post' | 'profile' | 'signin' | 'messages';
+export type AppTab = 'feed' | 'search' | 'post' | 'profile' | 'signin' | 'signup' | 'messages';
 
 interface BottomTabBarProps {
   activeTab: AppTab;

@@ -1,5 +1,28 @@
 @import "tailwindcss";
 
+/*
+ * Semantic utility names used across the app (bg-primary, text-text, border-border, ...).
+ * They were never defined, so Tailwind generated no CSS for them and those elements were unstyled.
+ * "inline" keeps them pointing at the CSS variables below, so light and dark mode both work.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--bg);
+  --color-text: var(--text);
+  --color-text-muted: var(--muted);
+  --color-border: var(--line);
+  --color-primary: var(--blue);
+  --color-primary-hover: color-mix(in srgb, var(--blue) 85%, var(--text));
+  --color-primary-tint: var(--tint);
+  /* the page background reads well on top of the primary color in both light and dark mode */
+  --color-on-primary: var(--bg);
+  --color-danger: var(--danger);
+  --color-danger-tint: color-mix(in srgb, var(--danger) 12%, var(--bg));
+  --radius-sm: 8px;
+  --shadow-sheet: 0 8px 28px rgba(15, 21, 34, 0.18);
+  --animate-skeleton: pulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 :root {
   box-sizing: border-box;
   --bg: #FFFFFF;

@@ -1,0 +1,273 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import axe from 'axe-core';
+import { OnboardingPage } from '../src/pages/OnboardingPage.tsx';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+interface Recorded {
+  url: string;
+  method: string;
+  body: unknown;
+}
+
+const CAMPUSES = [
+  { id: 'c1', name: 'Central Campus', city: 'Lahore', status: 'approved' },
+  { id: 'c2', name: 'North Campus', city: 'Karachi', status: 'approved' },
+];
+
+let calls: Recorded[];
+let sessionValid: boolean;
+let completeStatus: number;
+let takenUsernames: string[];
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = String(input);
+  const method = (init?.method ?? 'GET').toUpperCase();
+  let body: unknown = undefined;
+  if (typeof init?.body === 'string') body = JSON.parse(init.body);
+  calls.push({ url, method, body });
+
+  if (url === '/api/signup/session') {
+    return Promise.resolve(
+      sessionValid ? json({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com' }) : json({ error: 'expired' }, 401)
+    );
+  }
+  if (url === '/api/classes') return Promise.resolve(json({ classes: [{ id: 'cls_2026', name: 'Class of 2026' }] }));
+  if (url === '/api/campuses/cities') return Promise.resolve(json({ cities: ['Karachi', 'Lahore'] }));
+  if (url.startsWith('/api/campuses?')) {
+    const q = (new URL(url, 'http://x').searchParams.get('q') ?? '').toLowerCase();
+    return Promise.resolve(json({ campuses: CAMPUSES.filter((c) => c.name.toLowerCase().includes(q)) }));
+  }
+  if (url.startsWith('/api/username-available')) {
+    const u = new URL(url, 'http://x').searchParams.get('u') ?? '';
+    return Promise.resolve(
+      takenUsernames.includes(u) ? json({ available: false, reason: 'taken', message: 'Username is already taken' }) : json({ available: true })
+    );
+  }
+  if (url === '/api/signup/complete' && method === 'POST') {
+    if (completeStatus !== 201) return Promise.resolve(json({ error: 'Username is already taken' }, completeStatus));
+    return Promise.resolve(
+      json(
+        { success: true, me: { user: { id: 'usr_1' }, profile: { username: (body as { username: string }).username, display_name: (body as { username: string }).username } } },
+        201
+      )
+    );
+  }
+  return Promise.resolve(json({ error: 'not found' }, 404));
+}
+
+let container: HTMLDivElement;
+let root: Root;
+
+async function flush(ms = 0) {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, ms));
+  });
+}
+
+async function waitFor(check: () => boolean, label: string, timeout = 2000) {
+  const start = Date.now();
+  while (!check()) {
+    if (Date.now() - start > timeout) throw new Error(`Timed out waiting for: ${label}`);
+    await flush(25);
+  }
+}
+
+function byId<T = HTMLInputElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`#${id} not found`);
+  return el as unknown as T;
+}
+
+async function type(id: string, value: string) {
+  const el = byId<HTMLInputElement>(id);
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    setter.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+async function choose(id: string, value: string) {
+  const el = byId<HTMLSelectElement>(id);
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!;
+    setter.call(el, value);
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+async function mouseDown(el: Element) {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  });
+}
+
+async function click(el: Element) {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
+const submitButton = () => [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Create account')) as HTMLButtonElement;
+
+async function fillValidForm() {
+  await type('signup-real-name', 'Ayesha Khan');
+  await type('signup-username', 'ayesha_k');
+  await waitFor(() => /is available/.test(container.textContent ?? ''), 'username availability');
+  await choose('signup-class', 'cls_2026');
+  await type('signup-roll', '907');
+  // pick a campus with the keyboard: type, arrow down, enter
+  const input = byId<HTMLInputElement>('signup-campus-input');
+  await act(async () => input.focus());
+  await type('signup-campus-input', 'cent');
+  // wait for the filtered results: "cent" leaves only Central Campus (plus the "not listed" option)
+  await waitFor(
+    () => [...container.querySelectorAll('[role="option"]')].some((o) => o.textContent?.includes('Central Campus')) && container.querySelectorAll('[role="option"]').length === 2,
+    'filtered campus results'
+  );
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+  });
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  });
+}
+
+beforeEach(() => {
+  calls = [];
+  sessionValid = true;
+  completeStatus = 201;
+  takenUsernames = [];
+  vi.stubGlobal('fetch', vi.fn(fakeFetch));
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  container.remove();
+  vi.unstubAllGlobals();
+});
+
+async function mount(onComplete = () => {}, onRestart = () => {}) {
+  await act(async () => {
+    root.render(<OnboardingPage onComplete={onComplete} onRestart={onRestart} />);
+  });
+  await waitFor(() => !!document.getElementById('signup-real-name'), 'form to appear');
+}
+
+describe('Onboarding page (interactive)', () => {
+  it('prefills the name and email from the Google account and has no axe violations', async () => {
+    await mount();
+    expect(byId<HTMLInputElement>('signup-real-name').value).toBe('Ayesha K');
+    expect(container.textContent).toContain('Signing up as ayesha@gmail.com');
+    await waitFor(() => byId<HTMLSelectElement>('signup-class').options.length > 1, 'classes to load');
+
+    const results = await axe.run(container, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] }, rules: { 'color-contrast': { enabled: false } } });
+    expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`)).toEqual([]);
+  });
+
+  it('keeps Create account disabled until every field is valid', async () => {
+    await mount();
+    expect(submitButton().disabled).toBe(true);
+    await type('signup-username', 'Bad Name!');
+    expect(container.textContent).toContain('3 to 20 lowercase letters');
+    expect(submitButton().disabled).toBe(true);
+    await fillValidForm();
+    expect(submitButton().disabled).toBe(false);
+  });
+
+  it('only lets the roll number hold three digits', async () => {
+    await mount();
+    await type('signup-roll', '9a0b7c1');
+    expect(byId<HTMLInputElement>('signup-roll').value).toBe('907');
+  });
+
+  it('shows when a username is taken and blocks submitting', async () => {
+    takenUsernames = ['ayesha_k'];
+    await mount();
+    await type('signup-username', 'ayesha_k');
+    await waitFor(() => /already taken/.test(container.textContent ?? ''), 'taken message');
+    expect(byId<HTMLInputElement>('signup-username').getAttribute('aria-invalid')).toBe('true');
+    expect(submitButton().disabled).toBe(true);
+  });
+
+  it('chooses a campus by keyboard and submits the right data, then offers a photo step', async () => {
+    await mount();
+    await fillValidForm();
+    expect(container.textContent).toContain('Central Campus');
+    expect(container.textContent).toContain('Change');
+    await click(submitButton());
+    await waitFor(() => /Add a profile photo/.test(container.textContent ?? ''), 'photo step');
+
+    const post = calls.find((c) => c.url === '/api/signup/complete');
+    expect(post?.body).toEqual({
+      real_name: 'Ayesha Khan',
+      username: 'ayesha_k',
+      campus_id: 'c1',
+      class_id: 'cls_2026',
+      roll_last3: '907',
+    });
+  });
+
+  it('the photo step can be skipped', async () => {
+    const onComplete = vi.fn();
+    await mount(onComplete);
+    await fillValidForm();
+    await click(submitButton());
+    await waitFor(() => /Skip for now/.test(container.textContent ?? ''), 'skip button');
+    await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Skip for now')!);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the server error and stays on the form when sign-up fails', async () => {
+    completeStatus = 409;
+    await mount();
+    await fillValidForm();
+    await click(submitButton());
+    await waitFor(() => !!container.querySelector('[role="alert"]'), 'error message');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('already taken');
+    expect(byId<HTMLInputElement>('signup-username').value).toBe('ayesha_k');
+  });
+
+  it('offers to start again when the sign-up session has expired', async () => {
+    sessionValid = false;
+    const onRestart = vi.fn();
+    await act(async () => {
+      root.render(<OnboardingPage onComplete={() => {}} onRestart={onRestart} />);
+    });
+    await waitFor(() => /sign-up session ended/.test(container.textContent ?? ''), 'expired message');
+    await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Start again')!);
+    expect(onRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it('requests a missing campus and selects it as pending', async () => {
+    const original = fakeFetch;
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/campuses' && init?.method === 'POST') {
+        calls.push({ url: '/api/campuses', method: 'POST', body: JSON.parse(String(init.body)) });
+        return Promise.resolve(json({ campus: { id: 'cmp_new', name: 'Green Valley College', city: 'Multan', status: 'pending' }, existing: false }, 201));
+      }
+      return original(input, init);
+    });
+    await mount();
+    const input = byId<HTMLInputElement>('signup-campus-input');
+    await act(async () => input.focus());
+    await type('signup-campus-input', 'Green Valley College');
+    await waitFor(() => /My campus is not listed/.test(container.textContent ?? ''), 'add option');
+    await mouseDown([...container.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes('not listed'))!);
+    await type('signup-campus-request-city', 'Multan');
+    await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Request campus')!);
+    await waitFor(() => /Waiting for review/.test(container.textContent ?? ''), 'pending campus selected');
+    expect(calls.find((c) => c.url === '/api/campuses' && c.method === 'POST')?.body).toEqual({ name: 'Green Valley College', city: 'Multan' });
+  });
+});
