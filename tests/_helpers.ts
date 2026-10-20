@@ -1,6 +1,7 @@
 import worker from '../worker/index.ts';
 import { createSqliteD1 } from '../worker/db/sqlite-d1.ts';
 import { createMemoryR2Bucket } from '../worker/db/r2-shim.ts';
+import { CAMPUSES } from '../shared/campuses.ts';
 import { runMigrations, ALL_MIGRATIONS } from '../worker/db/migrate.ts';
 import type { Env } from '../worker/types.ts';
 
@@ -54,21 +55,12 @@ export async function call(env: Env, method: string, path: string, opts: CallOpt
 
 const FAR_FUTURE = () => new Date(Date.now() + 86_400_000).toISOString();
 
-export async function seedClassCampus(env: Env) {
-  // classes are seeded by migration 003: cls_2026, cls_2027, ...
-  const now = new Date().toISOString();
-  const campuses: Array<[string, string, string, string]> = [
-    ['cmp_x', 'Central Campus', 'Lahore', 'approved'],
-    ['cmp_y', 'North Campus', 'Karachi', 'approved'],
-  ];
-  for (const [id, name, city, status] of campuses) {
-    await env.DB.prepare(
-      'INSERT INTO campuses (id, name, name_normalized, city, city_normalized, status, created_at) VALUES (?,?,?,?,?,?,?)'
-    )
-      .bind(id, name, name.toLowerCase(), city, city.toLowerCase(), status, now)
-      .run();
-  }
-}
+/** Two real bundled campuses in different cities (campus names ship inside the app, not in D1). */
+export const CAMPUS_X = CAMPUSES.find((c) => c.city === 'Lahore')!.id;
+export const CAMPUS_Y = CAMPUSES.find((c) => c.city !== 'Lahore')!.id;
+
+/** Kept so older tests read the same: campuses need no seeding any more. */
+export async function seedClassCampus(_env: Env): Promise<void> {}
 
 export interface SeedUserOptions {
   classId?: string | null;

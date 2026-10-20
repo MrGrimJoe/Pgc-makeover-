@@ -47,6 +47,7 @@ export interface ProfileRow {
   avatar_media_id: string | null;
   class_id: string | null;
   campus_id: string | null;
+  campus_other: string | null;
   real_name: string | null;
   wallpaper_id: string | null;
   theme_id: string | null;
@@ -166,16 +167,6 @@ export interface ReportEvidenceRow {
   snapshot: string;
   created_at: string;
   expires_at: string;
-}
-
-export interface CampusRow {
-  id: string;
-  name: string;
-  name_normalized: string;
-  city: string;
-  city_normalized: string;
-  status: 'approved' | 'pending';
-  created_at: string;
 }
 
 export interface SignupTicketRow {

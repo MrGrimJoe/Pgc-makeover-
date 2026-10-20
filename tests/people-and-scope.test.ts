@@ -1,5 +1,6 @@
+import { campusName } from '../shared/campus.ts';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { makeEnv, call, seedUser, seedClassCampus } from './_helpers.ts';
+import { makeEnv, call, seedUser, seedClassCampus, CAMPUS_X, CAMPUS_Y } from './_helpers.ts';
 import type { Env } from '../worker/types.ts';
 
 /**
@@ -16,10 +17,10 @@ describe('Search scope and suggested people', () => {
   beforeEach(async () => {
     env = await makeEnv();
     await seedClassCampus(env);
-    alice = await seedUser(env, 'usr_alice', 'alice', { classId: 'cls_2026', campusId: 'cmp_x', realName: 'Alice Real' });
-    bob = await seedUser(env, 'usr_bob', 'bob', { classId: 'cls_2026', campusId: 'cmp_x', realName: 'Bob Real' });
-    carol = await seedUser(env, 'usr_carol', 'carol', { classId: 'cls_2027', campusId: 'cmp_x' });
-    dave = await seedUser(env, 'usr_dave', 'dave', { classId: 'cls_2027', campusId: 'cmp_y' });
+    alice = await seedUser(env, 'usr_alice', 'alice', { classId: 'cls_2026', campusId: CAMPUS_X, realName: 'Alice Real' });
+    bob = await seedUser(env, 'usr_bob', 'bob', { classId: 'cls_2026', campusId: CAMPUS_X, realName: 'Bob Real' });
+    carol = await seedUser(env, 'usr_carol', 'carol', { classId: 'cls_2027', campusId: CAMPUS_X });
+    dave = await seedUser(env, 'usr_dave', 'dave', { classId: 'cls_2027', campusId: CAMPUS_Y });
     erin = await seedUser(env, 'usr_erin', 'erin');
     for (const [cookie, name] of [[alice, 'alice'], [bob, 'bob'], [carol, 'carol'], [dave, 'dave'], [erin, 'erin']] as const) {
       const res = await call(env, 'POST', '/api/posts', { cookie, json: { body: `hello from ${name}` } });
@@ -79,7 +80,7 @@ describe('Search scope and suggested people', () => {
         ['bob', 'class'],
         ['carol', 'campus'],
       ]);
-      expect(res.json.people[0]).toMatchObject({ class_name: expect.any(String), campus_name: 'Central Campus' });
+      expect(res.json.people[0]).toMatchObject({ class_name: expect.any(String), campus_name: campusName(CAMPUS_X) });
     });
 
     it('excludes people already followed', async () => {
@@ -113,13 +114,17 @@ describe('Search scope and suggested people', () => {
       expect(res.text).not.toContain('real_name');
     });
 
-    it('does not suggest suspended accounts and hides pending campus names', async () => {
+    it('does not suggest suspended accounts, and free-text campuses never count as the same campus', async () => {
+      // positive control: before the change carol shares alice's campus and is suggested
+      const before = await call(env, 'GET', '/api/people/suggested', { cookie: alice });
+      expect(before.json.people.map((p: any) => p.username)).toContain('carol');
+
       await env.DB.prepare("UPDATE users SET status = 'suspended' WHERE id = ?").bind('usr_bob').run();
-      const pending = await call(env, 'POST', '/api/campuses', { cookie: carol, json: { name: 'Pending College' } });
-      await call(env, 'PATCH', '/api/me', { cookie: carol, json: { campus_id: pending.json.campus.id } });
+      const patch = await call(env, 'PATCH', '/api/me', { cookie: carol, json: { campus_other: 'Green Valley College' } });
+      expect(patch.status).toBe(200);
       const res = await call(env, 'GET', '/api/people/suggested', { cookie: alice });
       expect(res.json.people.map((p: any) => p.username)).not.toContain('bob');
-      // carol moved to a pending campus, so she is no longer on alice's campus
+      // carol moved to a free-text campus, so she is no longer on alice's campus
       expect(res.json.people).toEqual([]);
     });
   });

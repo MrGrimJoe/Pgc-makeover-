@@ -1,252 +1,141 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { makeEnv, call, seedUser, startSignup } from './_helpers.ts';
+import { makeEnv, call, seedUser, CAMPUS_X, CAMPUS_Y } from './_helpers.ts';
+import { createSqliteD1 } from '../worker/db/sqlite-d1.ts';
+import { runMigrations, ALL_MIGRATIONS } from '../worker/db/migrate.ts';
+import { CAMPUSES } from '../shared/campuses.ts';
+import { findCampus, campusName, cleanCampusOther } from '../shared/campus.ts';
 import type { Env } from '../worker/types.ts';
 
-async function addCampus(env: Env, id: string, name: string, city: string, status: 'approved' | 'pending' = 'approved') {
-  await env.DB.prepare(
-    'INSERT INTO campuses (id, name, name_normalized, city, city_normalized, status, created_at) VALUES (?,?,?,?,?,?,?)'
-  )
-    .bind(id, name, name.toLowerCase(), city, city.toLowerCase(), status, new Date().toISOString())
-    .run();
-}
-
-describe('Campuses', () => {
+describe('Bundled campuses', () => {
   let env: Env;
   let alice: string;
   let bob: string;
 
   beforeEach(async () => {
     env = await makeEnv();
-    alice = await seedUser(env, 'usr_alice', 'alice');
-    bob = await seedUser(env, 'usr_bob', 'bob');
-    await addCampus(env, 'c1', 'Central Campus', 'Lahore');
-    await addCampus(env, 'c2', 'North Central College', 'Karachi');
-    await addCampus(env, 'c3', 'Riverside Campus', 'Lahore');
-    await addCampus(env, 'c4', 'Hilltop Institute', 'Central Valley');
+    alice = await seedUser(env, 'usr_alice', 'alice', { classId: 'cls_2026' });
+    bob = await seedUser(env, 'usr_bob', 'bob', { classId: 'cls_2026' });
   });
 
-  it('requires a session or a sign-up ticket', async () => {
-    expect((await call(env, 'GET', '/api/campuses')).status).toBe(401);
-    expect((await call(env, 'GET', '/api/campuses/cities')).status).toBe(401);
-    expect((await call(env, 'POST', '/api/campuses', { json: { name: 'Nowhere Campus' } })).status).toBe(401);
-  });
-
-  it('positive control: lists campuses with no query', async () => {
-    const res = await call(env, 'GET', '/api/campuses', { cookie: alice });
-    expect(res.status).toBe(200);
-    // alphabetical by name
-    expect(res.json.campuses.map((c: any) => c.id)).toEqual(['c1', 'c4', 'c2', 'c3']);
-  });
-
-  it('ranks name prefix first, then name contains, then city-only matches', async () => {
-    const res = await call(env, 'GET', '/api/campuses?q=central', { cookie: alice });
-    expect(res.status).toBe(200);
-    // c1 starts with "central", c2 contains it, c4 only matches through its city
-    expect(res.json.campuses.map((c: any) => c.id)).toEqual(['c1', 'c2', 'c4']);
-  });
-
-  it('ignores case and extra spaces in the query', async () => {
-    const res = await call(env, 'GET', `/api/campuses?q=${encodeURIComponent('  RIVERSIDE   camp ')}`, { cookie: alice });
-    expect(res.json.campuses.map((c: any) => c.id)).toEqual(['c3']);
-  });
-
-  it('treats LIKE wildcards literally', async () => {
-    expect((await call(env, 'GET', '/api/campuses?q=%25', { cookie: alice })).json.campuses).toEqual([]);
-    expect((await call(env, 'GET', '/api/campuses?q=_', { cookie: alice })).json.campuses).toEqual([]);
-    expect((await call(env, 'GET', `/api/campuses?q=${encodeURIComponent("' OR 1=1 --")}`, { cookie: alice })).json.campuses).toEqual([]);
-  });
-
-  it('filters by city and still applies the text query (bind order regression)', async () => {
-    const res = await call(env, 'GET', '/api/campuses?q=campus&city=Lahore', { cookie: alice });
-    expect(res.json.campuses.map((c: any) => c.id).sort()).toEqual(['c1', 'c3']);
-    const none = await call(env, 'GET', '/api/campuses?q=campus&city=Karachi', { cookie: alice });
-    expect(none.json.campuses).toEqual([]);
-  });
-
-  it('caps results at 20 and never returns more than the limit asked for', async () => {
-    for (let i = 0; i < 30; i++) await addCampus(env, `bulk${i}`, `Bulk College ${String(i).padStart(2, '0')}`, 'Multan');
-    const res = await call(env, 'GET', '/api/campuses?q=bulk', { cookie: alice });
-    expect(res.json.campuses).toHaveLength(20);
-    const small = await call(env, 'GET', '/api/campuses?q=bulk&limit=3', { cookie: alice });
-    expect(small.json.campuses).toHaveLength(3);
-  });
-
-  it('lists each city once for the city filter', async () => {
-    const res = await call(env, 'GET', '/api/campuses/cities', { cookie: alice });
-    expect(res.json.cities).toEqual(['Central Valley', 'Karachi', 'Lahore']);
-  });
-
-  describe('requesting a campus that is not listed', () => {
-    it('creates a pending campus visible only to the requester', async () => {
-      const res = await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: '  Green   Valley College ', city: 'Multan' } });
-      expect(res.status).toBe(201);
-      expect(res.json.campus).toMatchObject({ name: 'Green Valley College', city: 'Multan', status: 'pending' });
-      const id = res.json.campus.id;
-
-      const mine = await call(env, 'GET', '/api/campuses?q=green', { cookie: alice });
-      expect(mine.json.campuses.map((c: any) => c.id)).toEqual([id]);
-      const theirs = await call(env, 'GET', '/api/campuses?q=green', { cookie: bob });
-      expect(theirs.json.campuses).toEqual([]);
-      // not in the city list either
-      expect((await call(env, 'GET', '/api/campuses/cities', { cookie: bob })).json.cities).not.toContain('Multan');
+  describe('the list', () => {
+    it('has unique ids and unique name+city pairs, and findCampus resolves each one', () => {
+      expect(CAMPUSES.length).toBeGreaterThan(100);
+      expect(new Set(CAMPUSES.map((c) => c.id)).size).toBe(CAMPUSES.length);
+      expect(new Set(CAMPUSES.map((c) => `${c.name}|${c.city}`)).size).toBe(CAMPUSES.length);
+      for (const c of CAMPUSES) expect(findCampus(c.id)?.name).toBe(c.name);
     });
 
-    it('returns the existing campus for a duplicate (normalized) instead of creating another', async () => {
-      const first = await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: 'Green Valley College', city: 'Multan' } });
-      const dup = await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: 'green  valley college', city: 'MULTAN' } });
-      expect(dup.status).toBe(200);
-      expect(dup.json.existing).toBe(true);
-      expect(dup.json.campus.id).toBe(first.json.campus.id);
-      const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM campuses WHERE name_normalized = 'green valley college'").first<{ n: number }>();
-      expect(n?.n).toBe(1);
+    it('unknown, empty and null ids resolve to no campus', () => {
+      expect(findCampus('cmp_nope')).toBeUndefined();
+      expect(findCampus(null)).toBeUndefined();
+      expect(campusName('')).toBeNull();
+      expect(campusName(CAMPUS_X)).toBe(findCampus(CAMPUS_X)!.name);
     });
 
-    it('lets a second student join an existing pending request', async () => {
-      const first = await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: 'Green Valley College', city: 'Multan' } });
-      const second = await call(env, 'POST', '/api/campuses', { cookie: bob, json: { name: 'Green Valley College', city: 'Multan' } });
-      expect(second.json.campus.id).toBe(first.json.campus.id);
-      const seen = await call(env, 'GET', '/api/campuses?q=green', { cookie: bob });
-      expect(seen.json.campuses).toHaveLength(1);
-    });
-
-    it('returns an approved campus as-is when the name matches one on the list', async () => {
-      const res = await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: 'central campus', city: 'lahore' } });
-      expect(res.status).toBe(200);
-      expect(res.json.campus).toMatchObject({ id: 'c1', status: 'approved' });
-    });
-
-    it('rejects bad names', async () => {
-      for (const body of [
-        { name: 'x' },
-        { name: 'a'.repeat(81) },
-        { name: 'Campus<script>' },
-        { name: 'Bad\u0007Name' },
-        { name: 'Fine Name', city: 'c'.repeat(61) },
-        { name: 123 },
-        { name: 'Fine Name', extra: true },
-      ]) {
-        await env.DB.prepare('DELETE FROM rate_limits').run(); // validation, not the limiter, is under test
-        const res = await call(env, 'POST', '/api/campuses', { cookie: alice, json: body });
-        expect(res.status, JSON.stringify(body)).toBe(400);
+    it('cleans free-text campuses and rejects markup, control characters and bad lengths', () => {
+      expect(cleanCampusOther('  Green   Valley  College ')).toBe('Green Valley College');
+      for (const bad of ['a', 'x'.repeat(81), '<b>Green</b>', 'Bell\u0007', 42, null, undefined]) {
+        expect(cleanCampusOther(bad)).toBeNull();
       }
-      await env.DB.prepare('DELETE FROM rate_limits').run();
-      expect((await call(env, 'POST', '/api/campuses', { cookie: alice, raw: '{nope', headers: { 'Content-Type': 'application/json' } })).status).toBe(400);
     });
+  });
 
-    it('rate limits requests (5 per hour)', async () => {
-      const statuses: number[] = [];
-      for (let i = 0; i < 7; i++) {
-        statuses.push((await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: `Request Campus ${i}`, city: 'Multan' } })).status);
+  describe('removed routes and tables', () => {
+    it('no campus table exists and the campus routes are gone (positive control: a live route answers)', async () => {
+      expect((await call(env, 'GET', '/api/people/suggested', { cookie: alice })).status).toBe(200);
+      const tables = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all<{ name: string }>();
+      const names = (tables.results ?? []).map((t) => t.name);
+      expect(names).not.toContain('campuses');
+      expect(names).not.toContain('campus_requests');
+      for (const [m, path] of [['GET', '/api/campuses'], ['GET', '/api/campuses/cities'], ['POST', '/api/campuses'], ['GET', '/api/admin/campuses'], ['PATCH', '/api/admin/campuses/x']] as const) {
+        const res = await call(env, m, path, { cookie: alice, json: m === 'GET' ? undefined : { name: 'X' } });
+        expect(res.status, `${m} ${path}`).toBe(404);
       }
-      expect(statuses.slice(0, 5)).toEqual([201, 201, 201, 201, 201]);
-      expect(statuses.slice(5)).toEqual([429, 429]);
-    });
-
-    it('works during sign-up with only a ticket, and the request moves to the new account', async () => {
-      const { cookie } = await startSignup(env);
-      const created = await call(env, 'POST', '/api/campuses', { cookie, json: { name: 'Hill Side College', city: 'Quetta' } });
-      expect(created.status).toBe(201);
-      const row = await env.DB.prepare('SELECT actor_key FROM campus_requests WHERE campus_id = ?').bind(created.json.campus.id).first<{ actor_key: string }>();
-      expect(row?.actor_key).toMatch(/^ticket:tkt_/);
-
-      const done = await call(env, 'POST', '/api/signup/complete', {
-        cookie,
-        json: { real_name: 'Stu Dent', username: 'stu_dent', campus_id: created.json.campus.id, class_id: 'cls_2026', roll_last3: '123' },
-      });
-      expect(done.status).toBe(201);
-      const after = await env.DB.prepare('SELECT actor_key FROM campus_requests WHERE campus_id = ?').bind(created.json.campus.id).first<{ actor_key: string }>();
-      expect(after?.actor_key).toMatch(/^usr_/);
     });
   });
 
   describe('choosing a campus on a profile', () => {
-    it('accepts approved campuses, own pending ones, and null to clear', async () => {
-      const ok = await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: 'c1' } });
-      expect(ok.status).toBe(200);
-      expect(ok.json.profile.campus_id).toBe('c1');
-      expect(ok.json.profile.campus_name).toBe('Central Campus');
-
-      const created = await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: 'Green Valley College', city: 'Multan' } });
-      expect((await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: created.json.campus.id } })).status).toBe(200);
-
-      const cleared = await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: null } });
-      expect(cleared.json.profile.campus_id).toBeNull();
+    it('accepts a listed campus and null to clear (positive control)', async () => {
+      const set = await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: CAMPUS_X } });
+      expect(set.status).toBe(200);
+      const me = await call(env, 'GET', '/api/me', { cookie: alice });
+      expect(me.json.profile.campus_id).toBe(CAMPUS_X);
+      expect(me.json.profile.campus_name).toBe(campusName(CAMPUS_X));
+      expect((await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: null } })).status).toBe(200);
+      expect((await call(env, 'GET', '/api/me', { cookie: alice })).json.profile.campus_id).toBeNull();
     });
 
-    it("rejects someone else's pending campus and unknown ids", async () => {
-      const created = await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: 'Green Valley College', city: 'Multan' } });
-      expect((await call(env, 'PATCH', '/api/me', { cookie: bob, json: { campus_id: created.json.campus.id } })).status).toBe(400);
-      expect((await call(env, 'PATCH', '/api/me', { cookie: bob, json: { campus_id: 'cmp_missing' } })).status).toBe(400);
-      expect((await call(env, 'PATCH', '/api/me', { cookie: bob, json: { campus_id: "x'; DROP TABLE campuses; --" } })).status).toBe(400);
+    it('rejects unknown ids', async () => {
+      for (const id of ['cmp_nope', 'c1', '../x']) {
+        expect((await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: id } })).status).toBe(400);
+      }
     });
 
-    it("hides a pending campus name on other people's profile pages", async () => {
-      const created = await call(env, 'POST', '/api/campuses', { cookie: alice, json: { name: 'Green Valley College', city: 'Multan' } });
-      await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: created.json.campus.id } });
-      const asBob = await call(env, 'GET', '/api/users/alice', { cookie: bob });
-      expect(asBob.json.campus_name).toBeNull();
-      const asSelf = await call(env, 'GET', '/api/users/alice', { cookie: alice });
-      expect(asSelf.json.campus_name).toBe('Green Valley College');
+    it('campus_other and campus_id are mutually exclusive: setting one clears the other', async () => {
+      await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: CAMPUS_X } });
+      const other = await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_other: 'Green  Valley College' } });
+      expect(other.status).toBe(200);
+      let p = (await call(env, 'GET', '/api/me', { cookie: alice })).json.profile;
+      expect(p).toMatchObject({ campus_id: null, campus_name: null, campus_other: 'Green Valley College' });
+
+      await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: CAMPUS_Y } });
+      p = (await call(env, 'GET', '/api/me', { cookie: alice })).json.profile;
+      expect(p).toMatchObject({ campus_id: CAMPUS_Y, campus_other: null });
+    });
+
+    it('rejects sending both, markup, and bad lengths', async () => {
+      const both = await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: CAMPUS_X, campus_other: 'Green Valley' } });
+      expect(both.status).toBe(400);
+      for (const bad of ['<script>', 'x', 'y'.repeat(81)]) {
+        expect((await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_other: bad } })).status).toBe(400);
+      }
+      // nothing was stored by the rejected requests
+      expect((await call(env, 'GET', '/api/me', { cookie: alice })).json.profile.campus_other).toBeNull();
+    });
+
+    it('shows campus_other on the profile page, but it never drives the campus search scope', async () => {
+      await call(env, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: CAMPUS_X } });
+      await call(env, 'PATCH', '/api/me', { cookie: bob, json: { campus_other: 'Green Valley College' } });
+      const view = await call(env, 'GET', '/api/users/bob', { cookie: alice });
+      expect(view.json.campus_other).toBe('Green Valley College');
+      expect(view.json.campus_id).toBeNull();
+
+      expect((await call(env, 'POST', '/api/posts', { cookie: bob, json: { body: 'hello from bob' } })).status).toBe(201);
+      // positive control: bob's post is found when the scope is everyone
+      const all = await call(env, 'GET', '/api/search?q=hello&scope=all', { cookie: alice });
+      expect(all.json.posts.map((p: any) => p.author_username)).toContain('bob');
+      const scoped = await call(env, 'GET', '/api/search?q=hello&scope=campus', { cookie: alice });
+      expect(scoped.status).toBe(200);
+      expect(scoped.json.posts.map((p: any) => p.author_username)).not.toContain('bob');
     });
   });
 
-  describe('admin moderation', () => {
-    let prod: Env;
-    const secret = { 'x-admin-secret': 's3cret-value' };
-
-    beforeEach(async () => {
-      prod = { ...env, ENVIRONMENT: 'production', ADMIN_SECRET: 's3cret-value' };
-      await call(prod, 'POST', '/api/campuses', { cookie: alice, json: { name: 'Green Valley College', city: 'Multan' } });
-      await call(prod, 'POST', '/api/campuses', { cookie: bob, json: { name: 'green valley college', city: 'Multan' } });
+  describe('old data', () => {
+    it('a profile whose campus id is no longer in the list reads as "no campus" without crashing', async () => {
+      await env.DB.prepare('UPDATE profiles SET campus_id = ? WHERE user_id = ?').bind('cmp_removed', 'usr_bob').run();
+      const me = await call(env, 'GET', '/api/me', { cookie: bob });
+      expect(me.status).toBe(200);
+      expect(me.json.profile.campus_id).toBeNull();
+      expect(me.json.profile.campus_name).toBeNull();
+      const view = await call(env, 'GET', '/api/users/bob', { cookie: alice });
+      expect(view.status).toBe(200);
+      expect(view.json.campus_name).toBeNull();
     });
 
-    it('rejects missing and wrong secrets', async () => {
-      expect((await call(prod, 'GET', '/api/admin/campuses')).status).toBe(401);
-      expect((await call(prod, 'GET', '/api/admin/campuses', { headers: { 'x-admin-secret': 'nope' } })).status).toBe(403);
-      expect((await call(prod, 'PATCH', '/api/admin/campuses/c1', { cookie: alice, json: { action: 'reject' } })).status).toBe(401);
-      expect((await call({ ...prod, ADMIN_SECRET: undefined }, 'GET', '/api/admin/campuses')).status).toBe(401);
-    });
-
-    it('lists pending campuses with how many people asked', async () => {
-      const res = await call(prod, 'GET', '/api/admin/campuses', { headers: secret });
-      expect(res.status).toBe(200);
-      expect(res.json.campuses).toHaveLength(1);
-      expect(res.json.campuses[0]).toMatchObject({ name: 'Green Valley College', status: 'pending', requesters: 2 });
-      expect((await call(prod, 'GET', '/api/admin/campuses?status=bogus', { headers: secret })).status).toBe(400);
-    });
-
-    it('approve makes the campus visible to everyone', async () => {
-      const id = (await call(prod, 'GET', '/api/admin/campuses', { headers: secret })).json.campuses[0].id;
-      const carol = await seedUser(prod, 'usr_carol', 'carol');
-      expect((await call(prod, 'GET', '/api/campuses?q=green', { cookie: carol })).json.campuses).toEqual([]);
-      expect((await call(prod, 'PATCH', `/api/admin/campuses/${id}`, { headers: secret, json: { action: 'approve' } })).status).toBe(200);
-      const seen = await call(prod, 'GET', '/api/campuses?q=green', { cookie: carol });
-      expect(seen.json.campuses).toEqual([{ id, name: 'Green Valley College', city: 'Multan', status: 'approved' }]);
-    });
-
-    it('merge moves students to an approved campus and removes the duplicate', async () => {
-      const id = (await call(prod, 'GET', '/api/admin/campuses', { headers: secret })).json.campuses[0].id;
-      await call(prod, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: id } });
-
-      expect((await call(prod, 'PATCH', `/api/admin/campuses/${id}`, { headers: secret, json: { action: 'merge', into: id } })).status).toBe(400);
-      const pendingTarget = await call(prod, 'POST', '/api/campuses', { cookie: bob, json: { name: 'Other New College' } });
-      expect((await call(prod, 'PATCH', `/api/admin/campuses/${id}`, { headers: secret, json: { action: 'merge', into: pendingTarget.json.campus.id } })).status).toBe(400);
-
-      const res = await call(prod, 'PATCH', `/api/admin/campuses/${id}`, { headers: secret, json: { action: 'merge', into: 'c1' } });
-      expect(res.status).toBe(200);
-      const me = await call(prod, 'GET', '/api/me', { cookie: alice });
-      expect(me.json.profile.campus_id).toBe('c1');
-      const gone = await env.DB.prepare('SELECT 1 FROM campuses WHERE id = ?').bind(id).first();
-      expect(gone).toBeNull();
-    });
-
-    it('reject deletes the request and clears it from profiles', async () => {
-      const id = (await call(prod, 'GET', '/api/admin/campuses', { headers: secret })).json.campuses[0].id;
-      await call(prod, 'PATCH', '/api/me', { cookie: alice, json: { campus_id: id } });
-      expect((await call(prod, 'PATCH', `/api/admin/campuses/${id}`, { headers: secret, json: { action: 'reject' } })).status).toBe(200);
-      expect((await call(prod, 'GET', '/api/me', { cookie: alice })).json.profile.campus_id).toBeNull();
-      expect((await call(prod, 'PATCH', `/api/admin/campuses/${id}`, { headers: secret, json: { action: 'approve' } })).status).toBe(404);
-      expect((await call(prod, 'PATCH', '/api/admin/campuses/c1', { headers: secret, json: { action: 'explode' } })).status).toBe(400);
+    it('migration 006 keeps profile data and campus ids, and drops the campus tables', async () => {
+      const db = createSqliteD1(':memory:');
+      await runMigrations(db, ALL_MIGRATIONS.filter((m) => m.name < '006'));
+      const now = new Date().toISOString();
+      await db.prepare("INSERT INTO campuses (id, name, name_normalized, city, city_normalized, status, created_at) VALUES ('cmp_old','Old','old','L','l','approved',?)").bind(now).run();
+      await db.prepare("INSERT INTO users (id, provider_subject, created_at, status) VALUES ('u1','s1',?, 'active')").bind(now).run();
+      await db.prepare("INSERT INTO profiles (user_id, username, username_normalized, display_name, class_id, campus_id, real_name) VALUES ('u1','ann','ann','Ann','cls_2026','cmp_old','Ann Real')").run();
+      await runMigrations(db, ALL_MIGRATIONS);
+      const row = await db.prepare('SELECT username, class_id, campus_id, campus_other, real_name FROM profiles WHERE user_id = ?').bind('u1').first<any>();
+      expect(row).toEqual({ username: 'ann', class_id: 'cls_2026', campus_id: 'cmp_old', campus_other: null, real_name: 'Ann Real' });
+      const t = await db.prepare("SELECT name FROM sqlite_master WHERE name IN ('campuses','campus_requests')").all();
+      expect(t.results).toHaveLength(0);
+      // the DB-level check rejects a row that has both
+      await expect(db.prepare("UPDATE profiles SET campus_other = 'Other' WHERE user_id = 'u1'").run()).rejects.toThrow();
     });
   });
 });

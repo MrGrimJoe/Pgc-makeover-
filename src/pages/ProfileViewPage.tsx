@@ -237,7 +237,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
             <span className="text-[var(--muted,#5B6577)] text-[13px] block">
               @{profile.username}
               {profile.class_name ? ` · ${profile.class_name}` : ''}
-              {profile.campus_name ? ` · ${profile.campus_name}` : ''}
+              {profile.campus_name || profile.campus_other ? ` · ${profile.campus_name || profile.campus_other}` : ''}
             </span>
             {profile.real_name && (
               <span className="text-[var(--muted,#5B6577)] text-[13px] block">

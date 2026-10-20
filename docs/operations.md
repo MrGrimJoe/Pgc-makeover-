@@ -99,7 +99,6 @@ The user initiates deletion via `DELETE /api/me` (authenticated session required
 2. **D1 Deletion**: The Worker runs a transactional batch deleting rows from:
    - `sessions`
    - `user_private` (email and roll number)
-   - `campus_requests` (their pending campus requests)
    - `user_settings`
    - `profiles`
    - `message_media` & `messages`
@@ -119,7 +118,7 @@ If an administrator must manually purge a user account with ID `usr_xxx`:
    ```
 3. Purge the database rows:
    ```bash
-   npx wrangler d1 execute classsync-db --remote --command="DELETE FROM user_private WHERE user_id = 'usr_xxx'; DELETE FROM campus_requests WHERE actor_key = 'usr_xxx'; DELETE FROM users WHERE id = 'usr_xxx';"
+   npx wrangler d1 execute classsync-db --remote --command="DELETE FROM user_private WHERE user_id = 'usr_xxx'; DELETE FROM users WHERE id = 'usr_xxx';"
    ```
 
 ### Verification Checklist
@@ -175,33 +174,19 @@ When rotating the Google OAuth Client Secret:
 
 ## 6. Campuses
 
-### Loading the approved list
-Campuses are not built into the app. Put them in `data/campuses.csv` (header `name,city`; quote values that contain commas), then:
+Campus names ship inside the app; there is no campus table, no seeding step and no moderation.
+
+### Changing the list
+`data/campuses.csv` (header `name,city`; quote values that contain commas) is the single source. After editing it run:
 ```bash
-npm run seed:campuses -- data/campuses.csv > campuses.sql
-npx wrangler d1 execute classsync-db --remote --file=campuses.sql
+npm run generate:campuses
 ```
-The script validates every row and reports all bad lines at once. Re-running is safe: a campus with the same normalized name and city is skipped, and ids are derived from the name and city so they never change.
+This validates every row (all bad lines are reported at once) and rewrites `shared/campuses.ts`. Commit that file. `npm run build` also runs the generator (`prebuild`), and a test fails if the committed file does not match the CSV.
 
-### Reviewing campus requests
-Students whose campus is missing create a `pending` campus that only they (and anyone who asks for the same name) can see. Review them with the admin secret:
-```bash
-# list pending requests, most requested first
-curl -s -H "x-admin-secret: $ADMIN_SECRET" https://YOUR-WORKER/api/admin/campuses
+Ids are `cmp_` plus the first 24 hex characters of the SHA-256 of the normalized `name|city`, so renaming a row changes its id. Students who saved the old id then show as having no campus until they pick again. Removing a row has the same effect and never causes an error.
 
-# approve: everyone can now find and choose it
-curl -s -X PATCH -H "x-admin-secret: $ADMIN_SECRET" -H "content-type: application/json" \
-  -d '{"action":"approve"}' https://YOUR-WORKER/api/admin/campuses/CAMPUS_ID
-
-# it is a misspelling of one you already have: move the students over and delete the duplicate
-curl -s -X PATCH -H "x-admin-secret: $ADMIN_SECRET" -H "content-type: application/json" \
-  -d '{"action":"merge","into":"EXISTING_APPROVED_CAMPUS_ID"}' https://YOUR-WORKER/api/admin/campuses/CAMPUS_ID
-
-# junk: delete it (students who picked it end up with no campus)
-curl -s -X PATCH -H "x-admin-secret: $ADMIN_SECRET" -H "content-type: application/json" \
-  -d '{"action":"reject"}' https://YOUR-WORKER/api/admin/campuses/CAMPUS_ID
-```
-At most 1000 requests can be pending at once; new requests are refused until some are reviewed.
+### Campuses that are not listed
+A student can type a campus instead (`profiles.campus_other`, 2 to 80 characters, no markup). It is shown on their profile but is never used for the campus search scope or suggested people. It is exclusive with the listed campus.
 
 ---
 

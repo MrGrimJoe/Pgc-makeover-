@@ -1,26 +1,29 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { CampusItem } from '../../shared/schema.ts';
+import { CAMPUSES } from '../../shared/campuses.ts';
+import { cleanCampusOther, normalizeCampusText } from '../../shared/campus.ts';
 
-/** What the picker shows. Kept separate from the data fetching so it can be tested on its own. */
+/** What a person picked: a campus from the bundled list, or free text for a campus that is not listed. */
+export type CampusChoice = { campus: CampusItem; other?: undefined } | { campus?: undefined; other: string };
+
+/** What the picker shows. Kept separate from the state handling so it can be tested on its own. */
 export interface CampusPickerViewProps {
   id: string;
   label: string;
-  selected: CampusItem | null;
+  selected: CampusChoice | null;
   /** True while the person is changing an already selected campus. */
   editing: boolean;
   query: string;
   open: boolean;
-  loading: boolean;
   results: CampusItem[];
-  /** Index of the highlighted option; results.length means the "add campus" option. -1 for none. */
+  /** Index of the highlighted option; results.length means the "not listed" option. -1 for none. */
   activeIndex: number;
   cities: string[];
   city: string;
-  canRequest: boolean;
-  requestOpen: boolean;
-  requestCity: string;
-  requesting: boolean;
+  canOther: boolean;
+  otherOpen: boolean;
+  otherText: string;
   message: string | null;
   onQueryChange: (value: string) => void;
   onFocus: () => void;
@@ -28,10 +31,10 @@ export interface CampusPickerViewProps {
   onSelect: (campus: CampusItem) => void;
   onChange: () => void;
   onCityChange: (value: string) => void;
-  onOpenRequest: () => void;
-  onRequestCityChange: (value: string) => void;
-  onSubmitRequest: () => void;
-  onCancelRequest: () => void;
+  onOpenOther: () => void;
+  onOtherTextChange: (value: string) => void;
+  onSubmitOther: () => void;
+  onCancelOther: () => void;
 }
 
 const fieldClass =
@@ -41,8 +44,8 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
   const inputId = `${p.id}-input`;
   const listId = `${p.id}-list`;
   const optionId = (i: number) => `${p.id}-option-${i}`;
-  const optionCount = p.results.length + (p.canRequest ? 1 : 0);
-  const showList = p.open && !p.requestOpen && optionCount > 0;
+  const optionCount = p.results.length + (p.canOther ? 1 : 0);
+  const showList = p.open && !p.otherOpen && optionCount > 0;
 
   if (p.selected && !p.editing) {
     return (
@@ -56,12 +59,12 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
           className="flex items-center justify-between gap-3 min-h-[44px] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 py-1.5"
         >
           <div className="min-w-0">
-            <span className="block text-[15px] text-[var(--text,#17233A)] truncate">{p.selected.name}</span>
-            {(p.selected.city || p.selected.status === 'pending') && (
-              <span className="block text-[12px] text-[var(--muted,#5B6577)] truncate">
-                {[p.selected.city, p.selected.status === 'pending' ? 'Waiting for review' : ''].filter(Boolean).join(' · ')}
-              </span>
-            )}
+            <span className="block text-[15px] text-[var(--text,#17233A)] truncate">
+              {p.selected.campus ? p.selected.campus.name : p.selected.other}
+            </span>
+            <span className="block text-[12px] text-[var(--muted,#5B6577)] truncate">
+              {p.selected.campus ? p.selected.campus.city : 'Other campus'}
+            </span>
           </div>
           <button
             type="button"
@@ -139,27 +142,23 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
                 className={`px-3 py-2 min-h-[44px] cursor-pointer ${i === p.activeIndex ? 'bg-[var(--tint,#EAF0FA)]' : ''}`}
               >
                 <span className="block text-[15px] text-[var(--text,#17233A)]">{c.name}</span>
-                {(c.city || c.status === 'pending') && (
-                  <span className="block text-[12px] text-[var(--muted,#5B6577)]">
-                    {[c.city, c.status === 'pending' ? 'Waiting for review' : ''].filter(Boolean).join(' · ')}
-                  </span>
-                )}
+                {c.city && <span className="block text-[12px] text-[var(--muted,#5B6577)]">{c.city}</span>}
               </li>
             ))}
-            {p.canRequest && (
+            {p.canOther && (
               <li
                 id={optionId(p.results.length)}
                 role="option"
                 aria-selected={p.activeIndex === p.results.length}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  p.onOpenRequest();
+                  p.onOpenOther();
                 }}
                 className={`px-3 py-2 min-h-[44px] cursor-pointer border-t border-[var(--line,#E8EBF0)] text-[14px] font-semibold text-[var(--blue,#244C8A)] ${
                   p.activeIndex === p.results.length ? 'bg-[var(--tint,#EAF0FA)]' : ''
                 }`}
               >
-                My campus is not listed
+                My campus is not listed (type it in)
               </li>
             )}
           </ul>
@@ -167,48 +166,42 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
       </div>
 
       <p role="status" aria-live="polite" className="text-[12px] text-[var(--muted,#5B6577)] min-h-[16px]">
-        {p.loading
-          ? 'Searching campuses'
-          : p.open && p.query.trim() && optionCount === 0
-            ? 'No campus found'
-            : p.open && p.results.length > 0
-              ? `${p.results.length} ${p.results.length === 1 ? 'campus' : 'campuses'} found`
-              : ''}
+        {p.open && p.query.trim() && optionCount === 0
+          ? 'No campus found'
+          : p.open && p.results.length > 0
+            ? `${p.results.length} ${p.results.length === 1 ? 'campus' : 'campuses'} found`
+            : ''}
       </p>
 
-      {p.requestOpen && (
+      {p.otherOpen && (
         <div className="border border-[var(--line,#E8EBF0)] rounded-[8px] p-3 space-y-2">
-          <p className="text-[14px] text-[var(--text,#17233A)]">
-            Request <b className="font-semibold">{p.query.trim()}</b> as a new campus
-          </p>
           <div>
-            <label htmlFor={`${p.id}-request-city`} className="block text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">
-              City (optional)
+            <label htmlFor={`${p.id}-other`} className="block text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">
+              Other campus
             </label>
             <input
-              id={`${p.id}-request-city`}
+              id={`${p.id}-other`}
               type="text"
-              maxLength={60}
-              value={p.requestCity}
-              onChange={(e) => p.onRequestCityChange(e.target.value)}
+              maxLength={80}
+              value={p.otherText}
+              onChange={(e) => p.onOtherTextChange(e.target.value)}
               className={fieldClass}
             />
           </div>
           <p className="text-[12px] text-[var(--muted,#5B6577)]">
-            New campuses are reviewed before everyone can see them. You can keep going while it is reviewed.
+            Other campuses are shown on your profile but are not used to find people on your campus.
           </p>
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={p.onSubmitRequest}
-              disabled={p.requesting}
-              className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[13px] font-semibold disabled:opacity-50 cursor-pointer border-0"
+              onClick={p.onSubmitOther}
+              className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[13px] font-semibold cursor-pointer border-0"
             >
-              {p.requesting ? 'Requesting...' : 'Request campus'}
+              Use this campus
             </button>
             <button
               type="button"
-              onClick={p.onCancelRequest}
+              onClick={p.onCancelOther}
               className="min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer"
             >
               Cancel
@@ -227,13 +220,37 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
 };
 
 interface CampusPickerProps {
-  value: CampusItem | null;
-  onChange: (campus: CampusItem | null) => void;
+  value: CampusChoice | null;
+  onChange: (choice: CampusChoice | null) => void;
   label?: string;
   id?: string;
 }
 
-/** Searchable campus picker with a "my campus is not listed" request. */
+const RESULT_LIMIT = 20;
+const CITIES = [...new Set(CAMPUSES.map((c) => c.city).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+/** Filters the bundled list: name prefix first, then name contains, then city-only matches. */
+export function filterCampuses(query: string, city: string, limit = RESULT_LIMIT): CampusItem[] {
+  const q = normalizeCampusText(query);
+  const c = normalizeCampusText(city);
+  const ranked: Array<{ rank: number; item: CampusItem }> = [];
+  for (const item of CAMPUSES) {
+    if (c && normalizeCampusText(item.city) !== c) continue;
+    const name = item.name.toLowerCase();
+    let rank = 0;
+    if (q) {
+      if (name.startsWith(q)) rank = 0;
+      else if (name.includes(q)) rank = 1;
+      else if (item.city.toLowerCase().includes(q)) rank = 2;
+      else continue;
+    }
+    ranked.push({ rank, item });
+  }
+  ranked.sort((a, b) => a.rank - b.rank || a.item.name.localeCompare(b.item.name));
+  return ranked.slice(0, limit).map((r) => r.item);
+}
+
+/** Searchable campus picker over the list that ships with the app, plus an "other campus" text field. */
 export const CampusPicker: React.FC<CampusPickerProps> = ({ value, onChange, label = 'Campus', id }) => {
   const autoId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const baseId = id ?? `campus-${autoId}`;
@@ -241,60 +258,15 @@ export const CampusPicker: React.FC<CampusPickerProps> = ({ value, onChange, lab
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<CampusItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const [cities, setCities] = useState<string[]>([]);
   const [city, setCity] = useState('');
-  const [requestOpen, setRequestOpen] = useState(false);
-  const [requestCity, setRequestCity] = useState('');
-  const [requesting, setRequesting] = useState(false);
+  const [otherOpen, setOtherOpen] = useState(false);
+  const [otherText, setOtherText] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const inputWasShown = useRef(false);
 
   const inputVisible = !value || editing;
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/campuses/cities')
-      .then(async (res) => {
-        if (!res.ok) return;
-        const data = (await res.json()) as { cities?: string[] };
-        if (!cancelled) setCities(data.cities || []);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Debounced search while the list is open
-  useEffect(() => {
-    if (!inputVisible || !open) return;
-    const controller = new AbortController();
-    setLoading(true);
-    const timer = window.setTimeout(async () => {
-      try {
-        const params = new URLSearchParams();
-        if (query.trim()) params.set('q', query.trim());
-        if (city) params.set('city', city);
-        const res = await fetch(`/api/campuses?${params.toString()}`, { signal: controller.signal });
-        if (!res.ok) throw new Error('Could not load campuses');
-        const data = (await res.json()) as { campuses?: CampusItem[] };
-        setResults(data.campuses || []);
-        setActiveIndex(-1);
-        setMessage(null);
-      } catch (err) {
-        if ((err as Error).name !== 'AbortError') setMessage('Could not load campuses. Check your connection and try again.');
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }, 200);
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [query, city, open, inputVisible]);
+  const results = useMemo(() => (open ? filterCampuses(query, city) : []), [query, city, open]);
 
   // Move focus to the field when the person chooses to change their campus
   useEffect(() => {
@@ -305,42 +277,33 @@ export const CampusPicker: React.FC<CampusPickerProps> = ({ value, onChange, lab
   }, [inputVisible, baseId]);
 
   const trimmed = query.trim();
-  // Offer "not listed" only once the search has settled, so it is never highlighted before real results arrive
-  const canRequest = !loading && trimmed.length >= 2 && !results.some((r) => r.name.toLowerCase() === trimmed.toLowerCase());
-  const optionCount = results.length + (canRequest ? 1 : 0);
+  const canOther = trimmed.length >= 2 && !results.some((r) => r.name.toLowerCase() === trimmed.toLowerCase());
+  const optionCount = results.length + (canOther ? 1 : 0);
 
-  const select = (campus: CampusItem) => {
-    onChange(campus);
+  const finish = (choice: CampusChoice) => {
+    onChange(choice);
     setEditing(false);
     setOpen(false);
-    setRequestOpen(false);
+    setOtherOpen(false);
     setQuery('');
     setMessage(null);
   };
 
-  const openRequest = () => {
-    setRequestOpen(true);
-    setRequestCity(city);
+  const select = (campus: CampusItem) => finish({ campus });
+
+  const openOther = () => {
+    setOtherOpen(true);
+    setOtherText(trimmed);
     setOpen(false);
   };
 
-  const submitRequest = async () => {
-    setRequesting(true);
-    setMessage(null);
-    try {
-      const res = await fetch('/api/campuses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: trimmed, city: requestCity.trim() }),
-      });
-      const data = (await res.json()) as { campus?: CampusItem; error?: string };
-      if (!res.ok || !data.campus) throw new Error(data.error || 'Could not request this campus');
-      select(data.campus);
-    } catch (err) {
-      setMessage((err as Error).message);
-    } finally {
-      setRequesting(false);
+  const submitOther = () => {
+    const cleaned = cleanCampusOther(otherText);
+    if (!cleaned) {
+      setMessage('Enter 2 to 80 characters, without < or >.');
+      return;
     }
+    finish({ other: cleaned });
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -354,11 +317,9 @@ export const CampusPicker: React.FC<CampusPickerProps> = ({ value, onChange, lab
       e.preventDefault();
       const chosen = results[activeIndex];
       if (chosen) select(chosen);
-      else openRequest();
+      else openOther();
     } else if (e.key === 'Escape' && open) {
       e.preventDefault();
-      setOpen(false);
-    } else if (e.key === 'Tab') {
       setOpen(false);
     }
   };
@@ -371,36 +332,34 @@ export const CampusPicker: React.FC<CampusPickerProps> = ({ value, onChange, lab
       editing={editing}
       query={query}
       open={open}
-      loading={loading}
       results={results}
       activeIndex={activeIndex}
-      cities={cities}
+      cities={CITIES}
       city={city}
-      canRequest={canRequest}
-      requestOpen={requestOpen}
-      requestCity={requestCity}
-      requesting={requesting}
+      canOther={canOther}
+      otherOpen={otherOpen}
+      otherText={otherText}
       message={message}
       onQueryChange={(v) => {
         setQuery(v);
         setOpen(true);
-        setRequestOpen(false);
+        setActiveIndex(-1);
       }}
       onFocus={() => setOpen(true)}
       onKeyDown={onKeyDown}
       onSelect={select}
-      onChange={() => {
-        setEditing(true);
-        setOpen(true);
-      }}
+      onChange={() => setEditing(true)}
       onCityChange={(v) => {
         setCity(v);
-        setOpen(true);
+        setActiveIndex(-1);
       }}
-      onOpenRequest={openRequest}
-      onRequestCityChange={setRequestCity}
-      onSubmitRequest={submitRequest}
-      onCancelRequest={() => setRequestOpen(false)}
+      onOpenOther={openOther}
+      onOtherTextChange={setOtherText}
+      onSubmitOther={submitOther}
+      onCancelOther={() => {
+        setOtherOpen(false);
+        setMessage(null);
+      }}
     />
   );
 };

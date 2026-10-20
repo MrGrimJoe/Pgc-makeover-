@@ -3,6 +3,8 @@
  * Names are matched on a normalized form so "  PGC  Lahore " and "pgc lahore" are the same campus.
  */
 
+import { CAMPUSES } from './campuses.ts';
+
 export const CAMPUS_NAME_MIN = 2;
 export const CAMPUS_NAME_MAX = 80;
 export const CAMPUS_CITY_MAX = 60;
@@ -55,4 +57,22 @@ export function checkCampusInput(rawName: unknown, rawCity: unknown): CampusInpu
 /** Escapes LIKE wildcards so user input is matched literally (use with ESCAPE '\'). */
 export function escapeLike(input: string): string {
   return input.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+const CAMPUS_BY_ID: ReadonlyMap<string, (typeof CAMPUSES)[number]> = new Map(CAMPUSES.map((c) => [c.id, c]));
+
+/** Looks up a bundled campus. Unknown ids (old data) give undefined, never an error. */
+export function findCampus(id: string | null | undefined) {
+  return id ? CAMPUS_BY_ID.get(id) : undefined;
+}
+
+/** Display name for a campus id, or null when the id is empty or no longer in the list. */
+export function campusName(id: string | null | undefined): string | null {
+  return findCampus(id)?.name ?? null;
+}
+
+/** Validates the free-text "other campus" (2 to 80 characters, no markup). Returns the cleaned text or null. */
+export function cleanCampusOther(raw: unknown): string | null {
+  const checked = checkCampusInput(raw, '');
+  return checked.ok ? checked.name : null;
 }

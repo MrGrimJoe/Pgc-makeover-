@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { makeEnv, call, seedUser, seedClassCampus, startSignup, deepKeys } from './_helpers.ts';
+import { makeEnv, call, seedUser, seedClassCampus, startSignup, deepKeys, CAMPUS_X } from './_helpers.ts';
+import { CAMPUSES } from '../shared/campuses.ts';
 import type { Env } from '../worker/types.ts';
 
 const VALID = {
   real_name: 'Ayesha Khan',
   username: 'ayesha_k',
-  campus_id: 'cmp_x',
+  campus_id: CAMPUS_X,
   class_id: 'cls_2026',
   roll_last3: '907',
 };
@@ -76,8 +77,8 @@ describe('Sign up and log in', () => {
       expect(res.json.me.profile).toMatchObject({
         username: 'ayesha_k',
         real_name: 'Ayesha Khan',
-        campus_id: 'cmp_x',
-        campus_name: 'Central Campus',
+        campus_id: CAMPUS_X,
+        campus_name: CAMPUSES.find((c) => c.id === CAMPUS_X)!.name,
         class_id: 'cls_2026',
       });
       // until a nickname is chosen the display name is the username, never the real name
@@ -118,18 +119,23 @@ describe('Sign up and log in', () => {
       expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first<{ n: number }>())?.n).toBe(0);
     });
 
-    it('rejects reserved usernames, unknown classes and unknown or foreign campuses', async () => {
+    it('rejects reserved usernames, unknown classes, unknown campuses and bad free-text campuses', async () => {
       const { cookie } = await startSignup(env);
       for (const patch of [{ username: 'admin' }, { username: 'support' }, { class_id: 'cls_nope' }, { campus_id: 'cmp_nope' }]) {
         await env.DB.prepare('DELETE FROM rate_limits').run();
         expect((await call(env, 'POST', '/api/signup/complete', { cookie, json: { ...VALID, ...patch } })).status).toBe(400);
       }
 
-      // another student's pending campus cannot be picked
-      const other = await seedUser(env, 'usr_other', 'other');
-      const pending = await call(env, 'POST', '/api/campuses', { cookie: other, json: { name: 'Secret Pending College' } });
+      // free text and a listed campus together are rejected
       await env.DB.prepare('DELETE FROM rate_limits').run();
-      expect((await call(env, 'POST', '/api/signup/complete', { cookie, json: { ...VALID, campus_id: pending.json.campus.id } })).status).toBe(400);
+      expect((await call(env, 'POST', '/api/signup/complete', { cookie, json: { ...VALID, campus_other: 'Green Valley College' } })).status).toBe(400);
+      // neither is rejected too
+      const { campus_id: _omit, ...noCampus } = VALID;
+      await env.DB.prepare('DELETE FROM rate_limits').run();
+      expect((await call(env, 'POST', '/api/signup/complete', { cookie, json: noCampus })).status).toBe(400);
+      // markup in the free-text campus is rejected
+      await env.DB.prepare('DELETE FROM rate_limits').run();
+      expect((await call(env, 'POST', '/api/signup/complete', { cookie, json: { ...noCampus, campus_other: '<b>Green</b>' } })).status).toBe(400);
     });
 
     it('returns 409 when the username is taken or the Google account already has an account', async () => {
@@ -190,7 +196,7 @@ describe('Sign up and log in', () => {
       const { cookie } = await startSignup(env, { email: 'ayesha.private@gmail.com' });
       const done = await call(env, 'POST', '/api/signup/complete', { cookie, json: VALID });
       const mine = `session_id=${/session_id=([^;]+)/.exec(done.headers.get('Set-Cookie') ?? '')![1]}`;
-      const viewer = await seedUser(env, 'usr_viewer', 'viewer', { classId: 'cls_2026', campusId: 'cmp_x' });
+      const viewer = await seedUser(env, 'usr_viewer', 'viewer', { classId: 'cls_2026', campusId: CAMPUS_X });
 
       await call(env, 'POST', '/api/posts', { cookie: mine, json: { body: 'hello from ayesha #study' } });
 
@@ -217,7 +223,7 @@ describe('Sign up and log in', () => {
       const { cookie } = await startSignup(env);
       const done = await call(env, 'POST', '/api/signup/complete', { cookie, json: VALID });
       const mine = `session_id=${/session_id=([^;]+)/.exec(done.headers.get('Set-Cookie') ?? '')![1]}`;
-      const viewer = await seedUser(env, 'usr_viewer', 'viewer', { classId: 'cls_2026', campusId: 'cmp_x' });
+      const viewer = await seedUser(env, 'usr_viewer', 'viewer', { classId: 'cls_2026', campusId: CAMPUS_X });
       await call(env, 'POST', '/api/posts', { cookie: mine, json: { body: 'hello world' } });
 
       const profile = await call(env, 'GET', '/api/users/ayesha_k', { cookie: viewer });

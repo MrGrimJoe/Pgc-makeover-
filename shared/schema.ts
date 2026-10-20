@@ -54,6 +54,8 @@ export const updateProfileSchema = z
     avatar_media_id: z.string().nullable().optional(),
     class_id: z.string().nullable().optional(),
     campus_id: z.string().min(1).max(100).nullable().optional(),
+    /** Free-text campus for people whose campus is not on the bundled list. Exclusive with campus_id. */
+    campus_other: z.string().max(80).nullable().optional(),
     real_name: realNameSchema.optional(),
     wallpaper_id: z.enum(WALLPAPER_IDS).nullable().optional(),
     theme_id: z.enum(THEME_IDS).nullable().optional(),
@@ -66,39 +68,30 @@ export const updateProfileSchema = z
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 /**
- * Campus request schema for POST /api/campuses
- */
-export const createCampusSchema = z
-  .object({
-    name: z.string().max(200),
-    city: z.string().max(200).optional().default(''),
-  })
-  .strict();
-
-export type CreateCampusInput = z.infer<typeof createCampusSchema>;
-
-/**
  * Sign-up completion schema for POST /api/signup/complete
  */
 export const signupCompleteSchema = z
   .object({
     real_name: realNameSchema,
     username: usernameSchema,
-    campus_id: z.string().min(1).max(100),
+    campus_id: z.string().min(1).max(100).optional(),
+    campus_other: z.string().min(2).max(80).optional(),
     class_id: z.string().min(1).max(100),
     roll_last3: rollLast3Schema,
   })
-  .strict();
+  .strict()
+  .refine((v) => (v.campus_id ? 1 : 0) + (v.campus_other ? 1 : 0) === 1, {
+    message: 'Choose a campus from the list or enter another campus, not both',
+    path: ['campus_id'],
+  });
 
 export type SignupCompleteInput = z.infer<typeof signupCompleteSchema>;
 
-/** A campus as returned by GET /api/campuses */
+/** A campus from the bundled list (shared/campuses.ts). */
 export interface CampusItem {
   id: string;
   name: string;
   city: string;
-  /** 'pending' campuses are visible only to the people who requested them. */
-  status: 'approved' | 'pending';
 }
 
 /** A person suggested on the search screen (GET /api/people/suggested) */
@@ -252,6 +245,8 @@ export interface PublicProfileResponse {
   class_name?: string | null;
   campus_id?: string | null;
   campus_name?: string | null;
+  /** Free-text campus; never used for campus search scope. */
+  campus_other?: string | null;
   /** Shown on the profile page only. */
   real_name?: string | null;
   wallpaper_id?: string | null;
@@ -283,6 +278,7 @@ export interface MeResponse {
     class_name?: string | null;
     campus_id?: string | null;
     campus_name?: string | null;
+    campus_other?: string | null;
     real_name?: string | null;
     wallpaper_id?: string | null;
     theme_id?: string | null;

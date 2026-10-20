@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { parseCsv, parseCampusCsv, buildCampusSeedSql, campusId } from '../scripts/seed-campuses.ts';
-import { makeEnv, call, seedUser } from './_helpers.ts';
-import { MIGRATION_005_ONBOARDING_SQL } from '../worker/db/migrate.ts';
+import { parseCsv, parseCampusCsv, campusId, buildCampusModule } from '../scripts/generate-campuses.ts';
+import { MIGRATION_005_ONBOARDING_SQL, MIGRATION_006_BUNDLED_CAMPUSES_SQL } from '../worker/db/migrate.ts';
 
-describe('seed-campuses', () => {
+describe('generate-campuses', () => {
   it('parses quoted fields, escaped quotes, CRLF and a BOM', () => {
     const csv = '\uFEFFname,city\r\n"Main, Campus",Lahore\r\n"The ""Hill"" College",\r\n';
     expect(parseCsv(csv)).toEqual([['name', 'city'], ['Main, Campus', 'Lahore'], ['The "Hill" College', '']]);
@@ -28,49 +27,23 @@ describe('seed-campuses', () => {
     expect(campusId('Central Campus', 'Lahore')).not.toBe(campusId('Central Campus', 'Karachi'));
   });
 
-  it('generates SQL that loads approved, searchable campuses and is safe to run twice', async () => {
-    const rows = parseCampusCsv("name,city\nSt. Mary's College,Lahore\nRiverside Campus,Multan\n");
-    const sql = buildCampusSeedSql(rows, '2026-10-19T00:00:00.000Z');
-    expect(sql).toContain("'St. Mary''s College'");
-
-    const env = await makeEnv();
-    await env.DB.exec(sql);
-    await env.DB.exec(sql);
-    const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM campuses WHERE status = 'approved'").first<{ n: number }>();
-    expect(count?.n).toBe(2);
-
-    const cookie = await seedUser(env, 'usr_a', 'alice');
-    const res = await call(env, 'GET', `/api/campuses?q=${encodeURIComponent('st. mary')}`, { cookie });
-    expect(res.json.campuses).toEqual([
-      { id: campusId("St. Mary's College", 'Lahore'), name: "St. Mary's College", city: 'Lahore', status: 'approved' },
-    ]);
+  it('the committed shared/campuses.ts matches data/campuses.csv (run npm run generate:campuses after editing the CSV)', () => {
+    const rows = parseCampusCsv(readFileSync('data/campuses.csv', 'utf8'));
+    expect(readFileSync('shared/campuses.ts', 'utf8')).toBe(buildCampusModule(rows));
   });
 
-  it('does not let a malicious name break out of the SQL string', async () => {
-    const evil = "x'); DROP TABLE users; --";
-    const rows = parseCampusCsv(`name,city\n"${evil}",Lahore\n`);
-    const env = await makeEnv();
-    await env.DB.exec(buildCampusSeedSql(rows));
-    const users = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").first();
-    expect(users).not.toBeNull();
-    const row = await env.DB.prepare('SELECT name FROM campuses').first<{ name: string }>();
-    expect(row?.name).toBe(evil);
-  });
-
-  it('ships a valid campus list with no duplicates', () => {
-    const text = readFileSync('data/campuses.csv', 'utf8');
-    const rows = parseCampusCsv(text);
-    expect(rows.length).toBe(text.trim().split('\n').length - 1);
-    expect(rows.length).toBeGreaterThan(100);
-    expect(rows).toContainEqual({ name: 'Johar Town Campus', city: 'Lahore' });
-    expect(rows).toContainEqual({ name: 'Sialkot Campus', city: 'Sialkot' });
-    const ids = new Set(rows.map((r) => campusId(r.name, r.city)));
-    expect(ids.size).toBe(rows.length);
+  it('keeps the id function stable so already-saved profiles still resolve', () => {
+    // fixed expectation: the id function is unchanged from the seed script, so saved campus ids keep resolving
+    expect(campusId('Allama Iqbal Town Campus', 'Lahore')).toBe('cmp_39e1988999d2e811f0291ce8');
   });
 });
 
 describe('migration files', () => {
   it('migrations/005_onboarding.sql matches the copy used by the test runner', () => {
     expect(readFileSync('migrations/005_onboarding.sql', 'utf8').trim()).toBe(MIGRATION_005_ONBOARDING_SQL.trim());
+  });
+
+  it('migrations/006_bundled_campuses.sql matches the copy used by the test runner', () => {
+    expect(readFileSync('migrations/006_bundled_campuses.sql', 'utf8').trim()).toBe(MIGRATION_006_BUNDLED_CAMPUSES_SQL.trim());
   });
 });

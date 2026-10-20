@@ -10,6 +10,7 @@ import worker from '../worker/index.ts';
 import { createSqliteD1 } from '../worker/db/sqlite-d1.ts';
 import { createMemoryR2Bucket } from '../worker/db/r2-shim.ts';
 import { runMigrations, ALL_MIGRATIONS } from '../worker/db/migrate.ts';
+import { CAMPUSES } from '../shared/campuses.ts';
 import { runPostLifecycleExpiry } from '../worker/jobs/expiry.ts';
 
 const db: any = createSqliteD1(':memory:'); const r2: any = createMemoryR2Bucket();
@@ -50,7 +51,7 @@ await db.prepare("INSERT INTO sessions (id,user_id,expires_at) VALUES ('sess_old
 r = await call('GET', '/api/me', { cookie: 'session_id=sess_old' }); ok('expired session -> 401', r.s === 401, `status ${r.s}`);
 await db.prepare("INSERT INTO sessions (id,user_id,expires_at) VALUES ('sess_lo','usr_carol',?)").bind(exp).run();
 await call('POST', '/api/auth/logout', { cookie: 'session_id=sess_lo' }); r = await call('GET', '/api/me', { cookie: 'session_id=sess_lo' }); ok('logout invalidates the session server-side', r.s === 401, `status ${r.s}`);
-const open = ['/api/feed', '/api/me', '/api/search?q=a', '/api/trends', '/api/conversations', '/api/blocks', '/api/classes', '/api/me/interests', '/api/users/alice', '/api/campuses', '/api/campuses/cities', '/api/people/suggested', '/api/username-available?u=abc', '/api/signup/session'];
+const open = ['/api/feed', '/api/me', '/api/search?q=a', '/api/trends', '/api/conversations', '/api/blocks', '/api/classes', '/api/me/interests', '/api/users/alice', '/api/people/suggested', '/api/username-available?u=abc', '/api/signup/session'];
 const openRes = []; for (const p of open) openRes.push(p + ':' + (await call('GET', p)).s); ok('unauthenticated GETs all 401', openRes.every(x => x.endsWith(':401')), openRes.join(' '));
 
 // ---------- IDOR ----------
@@ -136,7 +137,7 @@ r = await call('POST', '/api/conversations', { cookie: C, json: { user_id: 'usr_
 
 // ---------- SIGN UP, CAMPUSES, PRIVACY, STYLES ----------
 await clearRL();
-await db.prepare("INSERT INTO campuses (id,name,name_normalized,city,city_normalized,status,created_at) VALUES ('cmp_a','Central Campus','central campus','Lahore','lahore','approved',?)").bind(now).run();
+const CMP_A = CAMPUSES.find((c) => c.city === 'Lahore')!.id; // campus names ship inside the app, nothing is seeded
 const startSignup = async (sub: string, email: string) => {
   const init = await call('GET', `/api/auth/google?mock=true&intent=signup&mock_sub=${sub}&mock_email=${encodeURIComponent(email)}&mock_name=Test`, { env: dev });
   const state = /oauth_state=([^;]+)/.exec(init.h.get('set-cookie') || '')?.[1] || '';
@@ -144,7 +145,7 @@ const startSignup = async (sub: string, email: string) => {
   const t = /signup_ticket=([^;]+)/.exec(cb.h.get('set-cookie') || '')?.[1];
   return { cookie: t ? 'signup_ticket=' + t : '', location: cb.h.get('location') || '' };
 };
-const VALID = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: 'cmp_a', class_id: 'cls_2026', roll_last3: '907' };
+const VALID = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CMP_A, class_id: 'cls_2026', roll_last3: '907' };
 // log in never creates accounts
 const initLogin = await call('GET', '/api/auth/google?mock=true&intent=login&mock_sub=stranger', { env: dev });
 const cbLogin = await call('GET', initLogin.h.get('location') || '/', { env: dev, cookie: 'oauth_state=' + (/oauth_state=([^;]+)/.exec(initLogin.h.get('set-cookie') || '')?.[1] || '') });
@@ -154,7 +155,7 @@ r = await call('GET', '/api/auth/google?intent=superadmin'); ok('unknown intent 
 // forged and missing tickets
 for (const [label, ck] of [['no cookie', undefined], ['forged ticket', 'signup_ticket=tkt_forged'], ['SQLi ticket', "signup_ticket=' OR '1'='1"]] as const) {
   r = await call('POST', '/api/signup/complete', { cookie: ck, json: VALID }); ok(`signup complete with ${label} -> 401`, r.s === 401, `status ${r.s}`);
-  r = await call('GET', '/api/campuses', { cookie: ck }); ok(`campus search with ${label} -> 401`, r.s === 401, `status ${r.s}`);
+  r = await call('GET', '/api/campuses', { cookie: ck }); ok(`removed campus list route stays gone (${label}) -> 404`, r.s === 404, `status ${r.s}`);
 }
 const t1 = await startSignup('att1', 'attacker.one@gmail.com');
 ok('POSITIVE CONTROL: sign up ticket is issued for a new Google account', t1.cookie.startsWith('signup_ticket=tkt_') && t1.location === '/?signup=1', `cookie ${t1.cookie.slice(0, 20)} loc ${t1.location}`);
@@ -163,16 +164,14 @@ for (const [label, patch] of [['roll 2 digits', { roll_last3: '90' }], ['roll le
   await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: t1.cookie, json: { ...VALID, ...patch } }); ok(`signup complete: ${label} rejected`, r.s >= 400 && r.s < 500, `status ${r.s}`);
 }
 const noUsersYet = (await db.prepare("SELECT COUNT(*) c FROM profiles WHERE username_normalized='ayesha_k'").first()).c; ok('no account was created by the rejected attempts', noUsersYet === 0, `rows ${noUsersYet}`);
-// campus search/request abuse
+// campus input abuse: the list is bundled, so the only free text is campus_other
 await clearRL();
-for (const q of ["' OR 1=1 --", '%', '_', '\\', '"', '\u0000', 'x'.repeat(5000), '😀'.repeat(200)]) { r = await call('GET', '/api/campuses?q=' + encodeURIComponent(q), { cookie: t1.cookie }); ok(`campus search ${JSON.stringify(q).slice(0, 14)} survives`, r.s === 200 && Array.isArray(r.j?.campuses), `status ${r.s}`); }
-r = await call('GET', '/api/campuses?q=central', { cookie: t1.cookie }); ok('POSITIVE CONTROL: campus search finds a seeded campus', r.j?.campuses?.[0]?.id === 'cmp_a', r.text.slice(0, 80));
-r = await call('GET', '/api/campuses?q=%25', { cookie: t1.cookie }); ok('LIKE wildcard is literal (no match)', (r.j?.campuses || []).length === 0, r.text.slice(0, 80));
-for (const body of [{ name: '<script>alert(1)</script>' }, { name: 'a' }, { name: 'x'.repeat(500) }, { name: 'Ok Name', city: 'c'.repeat(300) }, { name: 'Ok Name', status: 'approved' }, { name: ['array'] }]) { await clearRL(); r = await call('POST', '/api/campuses', { cookie: t1.cookie, json: body }); ok(`campus request ${JSON.stringify(body).slice(0, 30)} rejected`, r.s >= 400 && r.s < 500, `status ${r.s}`); }
-await clearRL(); r = await call('POST', '/api/campuses', { cookie: t1.cookie, json: { name: 'Pending Hills College', city: 'Multan' } }); const pendingId = r.j?.campus?.id; ok('POSITIVE CONTROL: a campus can be requested (pending)', r.s === 201 && r.j?.campus?.status === 'pending', `status ${r.s}`);
-r = await call('GET', '/api/campuses?q=pending', { cookie: A }); ok("someone else's pending campus is not listed", !(r.text || '').includes('Pending Hills'), r.text.slice(0, 80));
-r = await call('PATCH', '/api/me', { cookie: A, json: { campus_id: pendingId } }); ok("cannot pick someone else's pending campus", r.s === 400, `status ${r.s}`);
-await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: t1.cookie, json: { ...VALID, campus_id: pendingId } }); ok('can complete sign-up with the pending campus they requested', r.s === 201, `status ${r.s} ${r.text.slice(0, 80)}`);
+for (const [m, path] of [['GET', '/api/campuses'], ['GET', '/api/campuses?q=central'], ['GET', '/api/campuses/cities'], ['POST', '/api/campuses'], ['GET', '/api/admin/campuses'], ['PATCH', '/api/admin/campuses/x']] as const) { r = await call(m, path, { cookie: t1.cookie, headers: { 'x-admin-secret': 's3cret-value' }, json: m === 'GET' ? undefined : { name: 'Pending Hills College' } }); ok(`removed route ${m} ${path.slice(0, 24)} -> 404`, r.s === 404, `status ${r.s}`); }
+const bundledCount = CAMPUSES.length; ok('POSITIVE CONTROL: the bundled campus list is loaded', bundledCount > 100 && CAMPUSES.some((c) => c.id === CMP_A), `count ${bundledCount}`);
+for (const [label, patch] of [['markup', { campus_other: '<script>alert(1)</script>' }], ['one character', { campus_other: 'a' }], ['500 characters', { campus_other: 'x'.repeat(500) }], ['array', { campus_other: ['array'] }], ['control character', { campus_other: 'Bell\u0007' }], ['both fields', { campus_other: 'Green Valley College' }], ['status mass assignment', { campus_other: 'Green Valley College', status: 'approved' }]] as const) { await clearRL(); const { campus_id: _drop, ...rest } = VALID; const body = label === 'both fields' ? { ...VALID, ...patch } : { ...rest, ...patch }; r = await call('POST', '/api/signup/complete', { cookie: t1.cookie, json: body }); ok(`signup campus_other: ${label} rejected`, r.s >= 400 && r.s < 500, `status ${r.s}`); }
+{ const { campus_id: _drop, ...rest } = VALID; await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: t1.cookie, json: rest }); ok('signup with neither campus nor campus_other rejected', r.s >= 400 && r.s < 500, `status ${r.s}`); }
+for (const [label, patch] of [['unknown id', { campus_id: 'cmp_not_in_list' }], ['SQLi id', { campus_id: "x' OR '1'='1" }], ['markup other', { campus_other: '<img src=x onerror=alert(1)>' }], ['both fields', { campus_id: CMP_A, campus_other: 'Green Valley College' }]] as const) { await clearRL(); r = await call('PATCH', '/api/me', { cookie: A, json: patch }); ok(`profile campus: ${label} rejected`, r.s >= 400 && r.s < 500, `status ${r.s}`); }
+await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: t1.cookie, json: VALID }); ok('POSITIVE CONTROL: sign-up completes with a bundled campus', r.s === 201, `status ${r.s} ${r.text.slice(0, 80)}`);
 const ayesha = 'session_id=' + (/session_id=([^;]+)/.exec(r.h.get('set-cookie') || '')?.[1] || '');
 // ticket cannot be replayed, ticket race
 await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: t1.cookie, json: { ...VALID, username: 'ayesha_two' } }); ok('used ticket cannot be replayed', r.s === 401, `status ${r.s}`);
@@ -203,8 +202,8 @@ r = await call('PATCH', '/api/me', { cookie: A, json: { avatar_media_id: aliceMe
 r = await call('GET', '/api/media/' + aliceMedia, { cookie: C }); ok('avatar is visible to other signed-in people', r.s === 200, `status ${r.s}`);
 r = await call('GET', '/api/media/' + aliceMedia); ok('avatar is not visible when signed out', r.s === 401, `status ${r.s}`);
 // search scope + suggested people
-await db.prepare("UPDATE profiles SET class_id='cls_2026', campus_id='cmp_a' WHERE user_id IN ('usr_alice','usr_carol')").run();
-await db.prepare("UPDATE profiles SET class_id='cls_2027', campus_id='cmp_a' WHERE user_id='usr_dave'").run();
+await db.prepare(`UPDATE profiles SET class_id='cls_2026', campus_id='${CMP_A}' WHERE user_id IN ('usr_alice','usr_carol')`).run();
+await db.prepare(`UPDATE profiles SET class_id='cls_2027', campus_id='${CMP_A}' WHERE user_id='usr_dave'`).run();
 await clearRL(); await call('POST', '/api/posts', { cookie: C, json: { body: 'scopetest from carol' } }); await call('POST', '/api/posts', { cookie: D, json: { body: 'scopetest from dave' } });
 // the earlier username race renamed carol or dave, so look the current names up
 const carolName = (await db.prepare("SELECT username FROM profiles WHERE user_id='usr_carol'").first()).username as string;
@@ -224,13 +223,9 @@ r = await call('GET', '/api/people/suggested', { cookie: C }); ok('and the block
 await clearRL();
 for (const body of [{ wallpaper_id: 'url(http://evil.example/x.png)' }, { theme_id: 'red; background:url(javascript:1)' }, { text_style_id: '<script>' }, { wallpaper_id: 7 }]) { r = await call('PATCH', '/api/me', { cookie: B, json: body }); ok(`style ${JSON.stringify(body).slice(0, 36)} rejected`, r.s === 400, `status ${r.s}`); }
 r = await call('PATCH', '/api/me', { cookie: B, json: { wallpaper_id: 'dusk', theme_id: 'ocean', text_style_id: 'mono' } }); ok('POSITIVE CONTROL: valid style presets are accepted', r.s === 200 && r.j?.profile?.wallpaper_id === 'dusk', `status ${r.s}`);
-// campus admin
-r = await call('GET', '/api/admin/campuses'); ok('admin campuses: no secret -> 401', r.s === 401, `status ${r.s}`);
-r = await call('GET', '/api/admin/campuses', { headers: { 'x-admin-secret': 'wrong' } }); ok('admin campuses: wrong secret -> 403', r.s === 403, `status ${r.s}`);
-r = await call('PATCH', '/api/admin/campuses/' + pendingId, { cookie: A, json: { action: 'approve' } }); ok('admin campus approve: a normal user cannot', r.s === 401 || r.s === 403, `status ${r.s}`);
-r = await call('PATCH', '/api/admin/campuses/' + pendingId, { headers: { 'x-admin-secret': 's3cret-value' }, json: { action: 'explode' } }); ok('admin campus: unknown action -> 400', r.s === 400, `status ${r.s}`);
-r = await call('PATCH', '/api/admin/campuses/' + pendingId, { headers: { 'x-admin-secret': 's3cret-value' }, json: { action: 'merge', into: pendingId } }); ok('admin campus: merge into itself -> 400', r.s === 400, `status ${r.s}`);
-r = await call('PATCH', '/api/admin/campuses/' + pendingId, { headers: { 'x-admin-secret': 's3cret-value' }, json: { action: 'approve' } }); ok('POSITIVE CONTROL: admin can approve a pending campus', r.s === 200, `status ${r.s}`);
+// free-text campus: positive control that a good value is accepted, and it clears the listed campus
+await clearRL(); r = await call('PATCH', '/api/me', { cookie: ayesha, json: { campus_other: 'Green Valley College' } }); ok('POSITIVE CONTROL: a free-text campus is accepted', r.s === 200, `status ${r.s}`);
+r = await call('GET', '/api/me', { cookie: ayesha }); ok('free-text campus replaces the listed campus', r.j?.profile?.campus_id === null && r.j?.profile?.campus_other === 'Green Valley College', r.text.slice(0, 120));
 
 // ---------- EXPIRY / LIFECYCLE ----------
 const mk = async (id: string, author: string, ageDays: number, likers: string[], commenter: string[] = []) => {

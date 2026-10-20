@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { MeResponse } from '../shared/schema.ts';
 import type { UserRow, UserSettingsRow } from './types.ts';
+import { campusName, findCampus } from '../shared/campus.ts';
 
 /**
  * Builds the profile part of GET /api/me. Reads named columns only, so private data
@@ -10,11 +11,10 @@ export async function loadMeProfile(db: D1Database, userId: string): Promise<MeR
   const row = await db
     .prepare(
       `SELECT p.username, p.username_normalized, p.display_name, p.bio, p.avatar_media_id,
-              p.class_id, p.campus_id, p.real_name, p.wallpaper_id, p.theme_id, p.text_style_id,
-              c.name AS class_name, cm.name AS campus_name
+              p.class_id, p.campus_id, p.campus_other, p.real_name, p.wallpaper_id, p.theme_id, p.text_style_id,
+              c.name AS class_name
        FROM profiles p
        LEFT JOIN classes c ON c.id = p.class_id
-       LEFT JOIN campuses cm ON cm.id = p.campus_id
        WHERE p.user_id = ?`
     )
     .bind(userId)
@@ -26,12 +26,12 @@ export async function loadMeProfile(db: D1Database, userId: string): Promise<MeR
       avatar_media_id: string | null;
       class_id: string | null;
       campus_id: string | null;
+      campus_other: string | null;
       real_name: string | null;
       wallpaper_id: string | null;
       theme_id: string | null;
       text_style_id: string | null;
       class_name: string | null;
-      campus_name: string | null;
     }>();
 
   if (!row) return null;
@@ -43,8 +43,10 @@ export async function loadMeProfile(db: D1Database, userId: string): Promise<MeR
     avatar_media_id: row.avatar_media_id,
     class_id: row.class_id || null,
     class_name: row.class_name || null,
-    campus_id: row.campus_id || null,
-    campus_name: row.campus_name || null,
+    // An id that is no longer in the bundled list resolves to "no campus".
+    campus_id: findCampus(row.campus_id) ? row.campus_id : null,
+    campus_name: campusName(row.campus_id),
+    campus_other: row.campus_other || null,
     real_name: row.real_name || null,
     wallpaper_id: row.wallpaper_id || null,
     theme_id: row.theme_id || null,

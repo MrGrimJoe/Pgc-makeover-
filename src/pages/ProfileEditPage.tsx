@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { MeResponse, ClassRow, UserInterestTopic, BlockItem, CampusItem } from '../../shared/schema.ts';
-import { CampusPicker } from '../components/CampusPicker.tsx';
+import type { MeResponse, ClassRow, UserInterestTopic, BlockItem } from '../../shared/schema.ts';
+import { CampusPicker, type CampusChoice } from '../components/CampusPicker.tsx';
+import { findCampus } from '../../shared/campus.ts';
 import { Avatar } from '../components/Avatar.tsx';
 import { ProfileStylePicker, type ProfileStyleValue } from '../components/ProfileStylePicker.tsx';
 import { normalizeUsername, isValidUsername } from '../../shared/username.ts';
@@ -28,15 +29,12 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
   const [bio, setBio] = useState(currentUser.profile.bio || '');
   const [classId, setClassId] = useState(currentUser.profile.class_id || '');
   const [realName, setRealName] = useState(currentUser.profile.real_name || '');
-  const [campus, setCampus] = useState<CampusItem | null>(
+  const [campus, setCampus] = useState<CampusChoice | null>(
     currentUser.profile.campus_id
-      ? {
-          id: currentUser.profile.campus_id,
-          name: currentUser.profile.campus_name || 'Your campus',
-          city: '',
-          status: 'approved',
-        }
-      : null
+      ? { campus: { id: currentUser.profile.campus_id, name: currentUser.profile.campus_name || 'Your campus', city: findCampus(currentUser.profile.campus_id)?.city ?? '' } }
+      : currentUser.profile.campus_other
+        ? { other: currentUser.profile.campus_other }
+        : null
   );
   const [avatarMediaId, setAvatarMediaId] = useState<string | null>(currentUser.profile.avatar_media_id ?? null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -133,14 +131,18 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
     setMessage(null);
 
     const current = currentUser.profile;
+    const campusIdChanged = (campus?.campus?.id ?? null) !== (current.campus_id ?? null);
+    const campusOtherChanged = (campus?.other ?? null) !== (current.campus_other ?? null);
     const payload = {
       username: normalizedPreview !== current.username ? normalizedPreview : undefined,
       display_name: displayName,
       bio: bio,
       class_id: classId || null,
-      // Only send what changed, so an unchanged pending campus or photo is never re-validated
+      // Only send what changed, so an unchanged campus or photo is never re-validated
       real_name: realName.trim() && realName.trim() !== (current.real_name || '') ? realName.trim() : undefined,
-      campus_id: (campus?.id ?? null) !== (current.campus_id ?? null) ? (campus?.id ?? null) : undefined,
+      // A listed campus and a free-text campus never go together; the server clears the other one.
+      campus_id: campusIdChanged && !campus?.other ? (campus?.campus?.id ?? null) : undefined,
+      campus_other: campusOtherChanged && !campus?.campus ? (campus?.other ?? null) : undefined,
       avatar_media_id: avatarMediaId !== (current.avatar_media_id ?? null) ? avatarMediaId : undefined,
       wallpaper_id: style.wallpaper_id !== (current.wallpaper_id ?? null) ? style.wallpaper_id : undefined,
       theme_id: style.theme_id !== (current.theme_id ?? null) ? style.theme_id : undefined,

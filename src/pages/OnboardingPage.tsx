@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { CampusItem, ClassRow, MeResponse, SignupSessionResponse } from '../../shared/schema.ts';
-import { CampusPicker } from '../components/CampusPicker.tsx';
+import type { ClassRow, MeResponse, SignupSessionResponse } from '../../shared/schema.ts';
+import { CampusPicker, type CampusChoice } from '../components/CampusPicker.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 
 interface OnboardingPageProps {
@@ -33,7 +33,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
 
   const [realName, setRealName] = useState('');
   const [username, setUsername] = useState('');
-  const [campus, setCampus] = useState<CampusItem | null>(null);
+  const [campus, setCampus] = useState<CampusChoice | null>(null);
   const [classId, setClassId] = useState('');
   const [roll, setRoll] = useState('');
   const [usernameState, setUsernameState] = useState<UsernameState>({ status: 'idle' });
@@ -128,7 +128,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
         body: JSON.stringify({
           real_name: realName.trim(),
           username,
-          campus_id: campus.id,
+          ...(campus.campus ? { campus_id: campus.campus.id } : { campus_other: campus.other }),
           class_id: classId,
           roll_last3: roll,
         }),

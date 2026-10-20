@@ -5,6 +5,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import axe from 'axe-core';
 import { OnboardingPage } from '../src/pages/OnboardingPage.tsx';
 
+import { CAMPUSES as BUNDLED } from '../shared/campuses.ts';
+
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 interface Recorded {
@@ -13,10 +15,8 @@ interface Recorded {
   body: unknown;
 }
 
-const CAMPUSES = [
-  { id: 'c1', name: 'Central Campus', city: 'Lahore', status: 'approved' },
-  { id: 'c2', name: 'North Campus', city: 'Karachi', status: 'approved' },
-];
+// Campus names ship inside the app, so the picker needs no network calls.
+const LISTED = BUNDLED.find((c) => c.city === 'Lahore')!;
 
 let calls: Recorded[];
 let sessionValid: boolean;
@@ -40,11 +40,6 @@ function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
     );
   }
   if (url === '/api/classes') return Promise.resolve(json({ classes: [{ id: 'cls_2026', name: 'Class of 2026' }] }));
-  if (url === '/api/campuses/cities') return Promise.resolve(json({ cities: ['Karachi', 'Lahore'] }));
-  if (url.startsWith('/api/campuses?')) {
-    const q = (new URL(url, 'http://x').searchParams.get('q') ?? '').toLowerCase();
-    return Promise.resolve(json({ campuses: CAMPUSES.filter((c) => c.name.toLowerCase().includes(q)) }));
-  }
   if (url.startsWith('/api/username-available')) {
     const u = new URL(url, 'http://x').searchParams.get('u') ?? '';
     return Promise.resolve(
@@ -118,19 +113,20 @@ async function click(el: Element) {
 
 const submitButton = () => [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Create account')) as HTMLButtonElement;
 
-async function fillValidForm() {
+async function fillValidForm(pickCampus = true) {
   await type('signup-real-name', 'Ayesha Khan');
   await type('signup-username', 'ayesha_k');
   await waitFor(() => /is available/.test(container.textContent ?? ''), 'username availability');
   await choose('signup-class', 'cls_2026');
   await type('signup-roll', '907');
+  if (!pickCampus) return;
   // pick a campus with the keyboard: type, arrow down, enter
   const input = byId<HTMLInputElement>('signup-campus-input');
   await act(async () => input.focus());
-  await type('signup-campus-input', 'cent');
-  // wait for the filtered results: "cent" leaves only Central Campus (plus the "not listed" option)
+  await type('signup-campus-input', LISTED.name);
+  // the full name leaves exactly one result (and no "not listed" option, because it matches exactly)
   await waitFor(
-    () => [...container.querySelectorAll('[role="option"]')].some((o) => o.textContent?.includes('Central Campus')) && container.querySelectorAll('[role="option"]').length === 2,
+    () => [...container.querySelectorAll('[role="option"]')].length === 1 && container.querySelector('[role="option"]')!.textContent!.includes(LISTED.name),
     'filtered campus results'
   );
   await act(async () => {
@@ -204,7 +200,7 @@ describe('Onboarding page (interactive)', () => {
   it('chooses a campus by keyboard and submits the right data, then offers a photo step', async () => {
     await mount();
     await fillValidForm();
-    expect(container.textContent).toContain('Central Campus');
+    expect(container.textContent).toContain(LISTED.name);
     expect(container.textContent).toContain('Change');
     await click(submitButton());
     await waitFor(() => /Add a profile photo/.test(container.textContent ?? ''), 'photo step');
@@ -213,7 +209,7 @@ describe('Onboarding page (interactive)', () => {
     expect(post?.body).toEqual({
       real_name: 'Ayesha Khan',
       username: 'ayesha_k',
-      campus_id: 'c1',
+      campus_id: LISTED.id,
       class_id: 'cls_2026',
       roll_last3: '907',
     });
@@ -250,24 +246,32 @@ describe('Onboarding page (interactive)', () => {
     expect(onRestart).toHaveBeenCalledTimes(1);
   });
 
-  it('requests a missing campus and selects it as pending', async () => {
-    const original = fakeFetch;
-    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === '/api/campuses' && init?.method === 'POST') {
-        calls.push({ url: '/api/campuses', method: 'POST', body: JSON.parse(String(init.body)) });
-        return Promise.resolve(json({ campus: { id: 'cmp_new', name: 'Green Valley College', city: 'Multan', status: 'pending' }, existing: false }, 201));
-      }
-      return original(input, init);
-    });
+  it('filters the bundled list on the device without any campus request', async () => {
     await mount();
+    await fillValidForm();
+    expect(calls.some((c) => c.url.startsWith('/api/campuses'))).toBe(false);
+  });
+
+  it('takes a campus that is not listed as free text and submits campus_other (never campus_id)', async () => {
+    await mount();
+    await fillValidForm(false);
     const input = byId<HTMLInputElement>('signup-campus-input');
     await act(async () => input.focus());
     await type('signup-campus-input', 'Green Valley College');
-    await waitFor(() => /My campus is not listed/.test(container.textContent ?? ''), 'add option');
+    await waitFor(() => /My campus is not listed/.test(container.textContent ?? ''), 'not listed option');
     await mouseDown([...container.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes('not listed'))!);
-    await type('signup-campus-request-city', 'Multan');
-    await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Request campus')!);
-    await waitFor(() => /Waiting for review/.test(container.textContent ?? ''), 'pending campus selected');
-    expect(calls.find((c) => c.url === '/api/campuses' && c.method === 'POST')?.body).toEqual({ name: 'Green Valley College', city: 'Multan' });
+    await type('signup-campus-other', 'Green Valley College');
+    await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Use this campus')!);
+    await waitFor(() => /Other campus/.test(container.textContent ?? '') && /Change/.test(container.textContent ?? ''), 'other campus selected');
+    await click(submitButton());
+    await waitFor(() => /Add a profile photo/.test(container.textContent ?? ''), 'photo step');
+    const post = calls.find((c) => c.url === '/api/signup/complete');
+    expect(post?.body).toEqual({
+      real_name: 'Ayesha Khan',
+      username: 'ayesha_k',
+      campus_other: 'Green Valley College',
+      class_id: 'cls_2026',
+      roll_last3: '907',
+    });
   });
 });

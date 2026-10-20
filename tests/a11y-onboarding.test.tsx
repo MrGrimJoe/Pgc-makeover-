@@ -17,8 +17,8 @@ async function expectClean(element: React.ReactElement) {
 
 const noop = () => {};
 const campuses: CampusItem[] = [
-  { id: 'c1', name: 'Central Campus', city: 'Lahore', status: 'approved' },
-  { id: 'c2', name: 'North Campus', city: 'Karachi', status: 'pending' },
+  { id: 'c1', name: 'Central Campus', city: 'Lahore' },
+  { id: 'c2', name: 'North Campus', city: 'Karachi' },
 ];
 
 function pickerProps(over: Partial<CampusPickerViewProps> = {}): CampusPickerViewProps {
@@ -29,15 +29,13 @@ function pickerProps(over: Partial<CampusPickerViewProps> = {}): CampusPickerVie
     editing: false,
     query: '',
     open: false,
-    loading: false,
     results: [],
     activeIndex: -1,
     cities: [],
     city: '',
-    canRequest: false,
-    requestOpen: false,
-    requestCity: '',
-    requesting: false,
+    canOther: false,
+    otherOpen: false,
+    otherText: '',
     message: null,
     onQueryChange: noop,
     onFocus: noop,
@@ -45,10 +43,10 @@ function pickerProps(over: Partial<CampusPickerViewProps> = {}): CampusPickerVie
     onSelect: noop,
     onChange: noop,
     onCityChange: noop,
-    onOpenRequest: noop,
-    onRequestCityChange: noop,
-    onSubmitRequest: noop,
-    onCancelRequest: noop,
+    onOpenOther: noop,
+    onOtherTextChange: noop,
+    onSubmitOther: noop,
+    onCancelOther: noop,
     ...over,
   };
 }
@@ -74,7 +72,7 @@ describe('Accessibility: sign up and profile styling', () => {
     it('open with results, the add option and a city filter', async () => {
       const html = renderToStaticMarkup(
         <CampusPickerView
-          {...pickerProps({ query: 'cen', open: true, results: campuses, activeIndex: 1, cities: ['Karachi', 'Lahore'], canRequest: true })}
+          {...pickerProps({ query: 'cen', open: true, results: campuses, activeIndex: 1, cities: ['Karachi', 'Lahore'], canOther: true })}
         />
       );
       expect(html).toContain('role="listbox"');
@@ -92,15 +90,22 @@ describe('Accessibility: sign up and profile styling', () => {
       expect(results.violations, describeViolations(results)).toEqual([]);
     });
 
-    it('request form open, with an error', async () => {
+    it('other-campus form open, with an error', async () => {
       await expectClean(
-        <CampusPickerView {...pickerProps({ query: 'Green Valley', requestOpen: true, requestCity: 'Multan', message: 'Too many campus requests.' })} />
+        <CampusPickerView {...pickerProps({ query: 'Green Valley', otherOpen: true, otherText: 'Green Valley', message: 'Enter 2 to 80 characters, without < or >.' })} />
       );
     });
 
-    it('a campus is selected (pending review)', async () => {
-      const html = renderToStaticMarkup(<CampusPickerView {...pickerProps({ selected: campuses[1]! })} />);
-      expect(html).toContain('Waiting for review');
+    it('a listed campus is selected', async () => {
+      const html = renderToStaticMarkup(<CampusPickerView {...pickerProps({ selected: { campus: campuses[1]! } })} />);
+      expect(html).toContain('North Campus');
+      const results = await scanMarkup(html);
+      expect(results.violations, describeViolations(results)).toEqual([]);
+    });
+
+    it('an other campus is selected', async () => {
+      const html = renderToStaticMarkup(<CampusPickerView {...pickerProps({ selected: { other: 'Green Valley College' } })} />);
+      expect(html).toContain('Other campus');
       const results = await scanMarkup(html);
       expect(results.violations, describeViolations(results)).toEqual([]);
     });

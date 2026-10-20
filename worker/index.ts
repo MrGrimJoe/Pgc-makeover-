@@ -19,7 +19,8 @@ import {
   verifyGoogleIdToken,
 } from './auth.ts';
 import { normalizeUsername, isReservedUsername } from '../shared/username.ts';
-import { handleOnboardingRoutes, getValidSignupTicket, purgeExpiredSignupTickets, SIGNUP_TICKET_COOKIE, SIGNUP_TICKET_TTL_MS, campusSelectableBy } from './onboarding.ts';
+import { findCampus, campusName, cleanCampusOther } from '../shared/campus.ts';
+import { handleOnboardingRoutes, getValidSignupTicket, purgeExpiredSignupTickets, SIGNUP_TICKET_COOKIE, SIGNUP_TICKET_TTL_MS } from './onboarding.ts';
 import { buildMeResponse } from './me.ts';
 import { DEFAULT_PRESET_IDS } from '../shared/presets.ts';
 import {
@@ -818,12 +819,11 @@ export default {
 
       const row = await env.DB.prepare(
         `SELECT p.user_id, p.username, p.display_name, p.bio, p.avatar_media_id, p.class_id,
-                p.campus_id, p.real_name, p.wallpaper_id, p.theme_id, p.text_style_id,
-                c.name AS class_name, cm.name AS campus_name, cm.status AS campus_status, u.created_at
+                p.campus_id, p.campus_other, p.real_name, p.wallpaper_id, p.theme_id, p.text_style_id,
+                c.name AS class_name, u.created_at
          FROM profiles p
          JOIN users u ON u.id = p.user_id
          LEFT JOIN classes c ON c.id = p.class_id
-         LEFT JOIN campuses cm ON cm.id = p.campus_id
          WHERE p.username_normalized = ? AND u.status = 'active'`
       )
         .bind(normalized)
@@ -840,8 +840,7 @@ export default {
           theme_id: string | null;
           text_style_id: string | null;
           class_name: string | null;
-          campus_name: string | null;
-          campus_status: string | null;
+          campus_other: string | null;
           created_at: string;
         }>();
 
@@ -895,9 +894,9 @@ export default {
         avatar_media_id: row.avatar_media_id,
         class_id: row.class_id,
         class_name: row.class_name,
-        campus_id: row.campus_id,
-        // A campus that is still pending approval is only named on the person's own profile.
-        campus_name: row.campus_status === 'approved' || row.user_id === auth.user.id ? row.campus_name : null,
+        campus_id: findCampus(row.campus_id) ? row.campus_id : null,
+        campus_name: campusName(row.campus_id),
+        campus_other: row.campus_other,
         // The real name is shown on the profile page only, never in feeds, search or messages.
         real_name: row.real_name,
         wallpaper_id: row.wallpaper_id,
@@ -995,11 +994,15 @@ export default {
         }
       }
 
-      // A campus must be approved, or still pending but requested by this person
-      if (data.campus_id !== undefined && data.campus_id !== null) {
-        if (!(await campusSelectableBy(env, data.campus_id, auth.user.id))) {
-          return jsonResponse({ error: 'Campus not found' }, 400);
-        }
+      // A campus must be on the bundled list; free text goes in campus_other and the two never coexist.
+      if (data.campus_id !== undefined && data.campus_id !== null && !findCampus(data.campus_id)) {
+        return jsonResponse({ error: 'Campus not found' }, 400);
+      }
+      if (data.campus_other !== undefined && data.campus_other !== null) {
+        const cleaned = cleanCampusOther(data.campus_other);
+        if (!cleaned) return jsonResponse({ error: 'Other campus must be 2 to 80 characters with no markup' }, 400);
+        if (data.campus_id) return jsonResponse({ error: 'Choose a campus from the list or enter another campus, not both' }, 400);
+        data.campus_other = cleaned;
       }
 
       // Reject class_id values that do not exist in the classes table with 400
@@ -1021,6 +1024,7 @@ export default {
         data.avatar_media_id !== undefined ||
         data.class_id !== undefined ||
         data.campus_id !== undefined ||
+        data.campus_other !== undefined ||
         data.real_name !== undefined ||
         data.wallpaper_id !== undefined ||
         data.theme_id !== undefined ||
@@ -1037,7 +1041,11 @@ export default {
         const newClassId =
           data.class_id !== undefined ? data.class_id : (currentProfile.class_id || null);
 
-        const newCampusId = data.campus_id !== undefined ? data.campus_id : currentProfile.campus_id || null;
+        let newCampusId = data.campus_id !== undefined ? data.campus_id : currentProfile.campus_id || null;
+        let newCampusOther = data.campus_other !== undefined ? data.campus_other : currentProfile.campus_other || null;
+        // Setting one clears the other.
+        if (data.campus_id) newCampusOther = null;
+        else if (data.campus_other) newCampusId = null;
         const newRealName = data.real_name !== undefined ? data.real_name : currentProfile.real_name || null;
         // The default preset is stored as NULL so the column only ever holds a real choice
         const presetOrNull = (value: string | null | undefined, defaultId: string, current: string | null) =>
@@ -1050,7 +1058,7 @@ export default {
           env.DB.prepare(
             `UPDATE profiles
              SET username = ?, username_normalized = ?, display_name = ?, bio = ?, avatar_media_id = ?, class_id = ?,
-                 campus_id = ?, real_name = ?, wallpaper_id = ?, theme_id = ?, text_style_id = ?
+                 campus_id = ?, campus_other = ?, real_name = ?, wallpaper_id = ?, theme_id = ?, text_style_id = ?
              WHERE user_id = ?`
           ).bind(
             newUsername,
@@ -1060,6 +1068,7 @@ export default {
             newAvatar,
             newClassId,
             newCampusId,
+            newCampusOther,
             newRealName,
             newWallpaper,
             newTheme,
@@ -1170,7 +1179,6 @@ export default {
       const batchStatements: D1PreparedStatement[] = [
         env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
         env.DB.prepare('DELETE FROM user_private WHERE user_id = ?').bind(userId),
-        env.DB.prepare('DELETE FROM campus_requests WHERE actor_key = ?').bind(userId),
         env.DB.prepare('DELETE FROM user_settings WHERE user_id = ?').bind(userId),
         env.DB.prepare('DELETE FROM profiles WHERE user_id = ?').bind(userId),
       ];

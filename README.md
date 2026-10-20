@@ -146,7 +146,7 @@ Executes Vitest tests verifying:
 - Strict isolation preventing a user from editing another user's profile
 - Migrations execution from an empty database
 - Log in vs sign up, sign-up tickets, onboarding validation, username availability and the privacy of the roll number and email
-- Campus search, requests and admin moderation, the campus seed script, search scopes, suggested people and profile style presets (including WCAG contrast of every preset)
+- The bundled campus list and its generator, free-text campuses, search scopes, suggested people and profile style presets (including WCAG contrast of every preset)
 - Profile pictures: ownership, visibility, blocks, and survival of the cleanup job
 - Accessibility (axe-core) and interactive tests of the sign-in, onboarding, campus picker and style picker screens
 
@@ -202,15 +202,10 @@ npm run db:migrate:remote
 ```
 *(Alternatively: `npx wrangler d1 migrations apply classsync-db --remote`)*
 
-Migration `005_onboarding.sql` adds the campus tables, the private sign-up data table, sign-up tickets and the profile style columns. People who already have an account keep working: their campus, real name and styles start empty and can be filled in from Edit profile.
+Migration `005_onboarding.sql` adds the private sign-up data table, sign-up tickets and the profile style columns. People who already have an account keep working: their campus, real name and styles start empty and can be filled in from Edit profile.
 
-#### Load the campus list
-No campus names are built into the app. Put your campuses in `data/campuses.csv` (header `name,city`), then generate and run the SQL:
-```bash
-npm run seed:campuses -- data/campuses.csv > campuses.sql
-npx wrangler d1 execute classsync-db --remote --file=campuses.sql
-```
-It is safe to run again: campuses that already exist (same normalized name and city) are skipped. Students can also request a campus that is missing; see "Campuses" in `docs/operations.md` for reviewing those requests.
+#### Campus list
+Campus names are bundled into the app (`shared/campuses.ts`, generated from `data/campuses.csv` by `npm run generate:campuses`, also run by `prebuild`). Migration `006_bundled_campuses.sql` drops the old `campuses` and `campus_requests` tables and adds `profiles.campus_other`; nothing needs loading. See "Campuses" in `docs/operations.md`.
 
 ### 5. Create Google OAuth Client Credentials
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and create or select your project.
@@ -331,7 +326,7 @@ Built on top of `2971c1d`. Each change is its own commit.
 - **Onboarding** (`POST /api/signup/complete`) creates the user, profile, settings, private record and session in one D1 batch. Fields: real name, unique username (live availability check, reserved names such as `admin` and `support` are refused), campus, class, last three digits of the roll number. The profile photo is an optional last step. A forged, expired or reused ticket is rejected, two people racing for one username get one winner and one `409`, and a double submit creates one account.
 - **Private data.** Email and `roll_last3` live in `user_private`, not in `profiles`, so no `SELECT *` can leak them; `GET/PATCH /api/me` now build their response from named columns only. They are never returned by any endpoint and cannot be set through `PATCH /api/me`. Deleting an account removes them.
 - **Real name** is stored in `profiles.real_name` and shown on the profile page only. Posts, feeds, search, suggestions and messages keep using the display name, which starts as the username.
-- **Campuses.** Searchable picker backed by a `campuses` table. Search ranks name-prefix matches first, then name-contains, then city matches, treats `%` and `_` literally, and can be narrowed by city. A student whose campus is missing can request it; it stays `pending` and visible only to the people who asked until an admin approves it, merges it into an existing campus or rejects it. Requests are normalized to avoid duplicates and are rate limited.
+- **Campuses.** Searchable picker over the list bundled in the app (filtered on the device, no network call). Search ranks name-prefix matches first, then name-contains, then city matches, and can be narrowed by city. A student whose campus is missing types it in (`campus_other`); it is shown on their profile but never drives campus search or suggestions. The server validates `campus_id` against the bundled list; ids no longer in the list read as no campus.
 - **Search tabs work.** `GET /api/search?scope=class|campus|all` filters by the caller's class or campus. If the caller has none set, the response says so (`scope_missing`) instead of silently searching everyone.
 - **Suggested people.** `GET /api/people/suggested` returns classmates first, then people on the same campus, never yourself, people you follow, or anyone blocked in either direction.
 - **Profile pictures are visible.** Avatars now render as images with the one-letter fallback. Setting a profile picture requires owning the upload (previously any media id was accepted), and a profile picture can be read by signed-in people who are not blocked with its owner.
@@ -340,7 +335,7 @@ Built on top of `2971c1d`. Each change is its own commit.
 
 ### Regression tests added
 
-- `tests/signup.test.ts`, `tests/campuses.test.ts`, `tests/people-and-scope.test.ts`, `tests/presets.test.ts`, `tests/avatars.test.ts`, `tests/seed-campuses.test.ts` (backend behavior, privacy and abuse cases).
+- `tests/signup.test.ts`, `tests/campuses.test.ts`, `tests/people-and-scope.test.ts`, `tests/presets.test.ts`, `tests/avatars.test.ts`, `tests/generate-campuses.test.ts` (backend behavior, privacy and abuse cases).
 - `tests/a11y-onboarding.test.tsx` and `tests/onboarding-ui.test.tsx` (axe scans plus a jsdom walk through the whole sign-up form, including keyboard selection of a campus).
 - `scripts/attack-suite.mts` (`npm run attack`) is now part of the repository.
 - Mutation-checked: deliberately breaking the scope bind order, the block filter on suggestions and the private-data query makes the matching tests fail.
@@ -372,6 +367,7 @@ Built on top of `2971c1d`. Each change is its own commit.
   - Search indexes on `posts.body`.
 - **`004_messaging.sql`**: Direct messaging, 1:1 `conversations`, `conversation_members`, ephemeral `messages`, `message_media`, and `blocks` table.
 - **`005_onboarding.sql`**: `campuses` and `campus_requests` (approved list plus student-requested pending entries), `profiles.campus_id / real_name / wallpaper_id / theme_id / text_style_id`, `user_private` (email and roll number, never returned by any API) and `signup_tickets` (15-minute single-use sign-up proof).
+- **`006_bundled_campuses.sql`**: rebuilds `profiles` without the `campus_id` foreign key, adds `campus_other`, drops `campuses` and `campus_requests`.
 
 ---
 
@@ -390,12 +386,7 @@ Built on top of `2971c1d`. Each change is its own commit.
 | `PATCH` | `/api/me` | **Yes** | Updates profile (display name, real name, bio, class, campus, profile picture, wallpaper/theme/text style) and settings |
 | `DELETE` | `/api/me` | **Yes** | Permanently deletes user, posts, media, and sessions |
 | `GET` | `/api/classes` | Session or ticket | Returns list of available classes |
-| `GET` | `/api/campuses?q=&city=&limit=` | Session or ticket | Searches campuses (approved ones, plus your own pending requests) |
-| `GET` | `/api/campuses/cities` | Session or ticket | Cities that have approved campuses |
-| `POST` | `/api/campuses` | Session or ticket | Requests a campus that is not listed (pending until approved; rate-limited) |
 | `GET` | `/api/people/suggested` | **Yes** | Classmates, then campus mates; excludes yourself, followed and blocked people |
-| `GET` | `/api/admin/campuses` | Admin Secret | Lists campuses (default: pending) with requester and student counts |
-| `PATCH` | `/api/admin/campuses/:id` | Admin Secret | `approve`, `merge` (into an approved campus) or `reject` a campus |
 | `GET` | `/api/feed` | **Yes** | Chronological or ranked discovery feed with cursor pagination |
 | `POST` | `/api/posts` | **Yes** | Creates post with #hashtag and keyword topic extraction (rate-limited) |
 | `GET` | `/api/posts/:id` | **Yes** | Retrieves single post with media, likes, comments, topics |
