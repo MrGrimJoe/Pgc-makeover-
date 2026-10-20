@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WALLPAPER_IDS, THEME_IDS, TEXT_STYLE_IDS } from './presets.ts';
 
 /**
  * Username constraints:
@@ -10,19 +11,36 @@ import { z } from 'zod';
 export const usernameRegex = /^[a-z0-9](?:[a-z0-9]|_(?=[a-z0-9])){1,18}[a-z0-9]$/;
 
 /**
+ * Username rules, shared by sign-up, profile edit and the availability check.
+ */
+export const usernameSchema = z
+  .string()
+  .trim()
+  .min(3, { message: 'Username must be at least 3 characters' })
+  .max(20, { message: 'Username cannot exceed 20 characters' })
+  .regex(usernameRegex, {
+    message: 'Username must be lowercase letters, digits, and underscores, without leading/trailing/consecutive underscores',
+  });
+
+/** Real (legal) name collected at sign-up. Shown on the person's own profile page only. */
+export const realNameSchema = z
+  .string()
+  .trim()
+  .min(2, { message: 'Enter your real name' })
+  .max(60, { message: 'Real name cannot exceed 60 characters' })
+  .refine((v) => !/[\u0000-\u001F\u007F<>]/.test(v), { message: 'Real name contains invalid characters' });
+
+/** Last three digits of the roll number. Private: stored, never returned by any API. */
+export const rollLast3Schema = z
+  .string()
+  .regex(/^[0-9]{3}$/, { message: 'Enter exactly the last three digits of your roll number' });
+
+/**
  * Profile update schema for PATCH /api/me
  */
 export const updateProfileSchema = z
   .object({
-    username: z
-      .string()
-      .trim()
-      .min(3, { message: 'Username must be at least 3 characters' })
-      .max(20, { message: 'Username cannot exceed 20 characters' })
-      .regex(usernameRegex, {
-        message: 'Username must be lowercase letters, digits, and underscores, without leading/trailing/consecutive underscores',
-      })
-      .optional(),
+    username: usernameSchema.optional(),
     display_name: z
       .string()
       .trim()
@@ -35,12 +53,73 @@ export const updateProfileSchema = z
       .optional(),
     avatar_media_id: z.string().nullable().optional(),
     class_id: z.string().nullable().optional(),
+    campus_id: z.string().min(1).max(100).nullable().optional(),
+    real_name: realNameSchema.optional(),
+    wallpaper_id: z.enum(WALLPAPER_IDS).nullable().optional(),
+    theme_id: z.enum(THEME_IDS).nullable().optional(),
+    text_style_id: z.enum(TEXT_STYLE_IDS).nullable().optional(),
     dm_policy: z.enum(['everyone', 'followed_only', 'nobody', 'following', 'none']).optional(),
     feed_preferences: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
   })
   .strict();
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/**
+ * Campus request schema for POST /api/campuses
+ */
+export const createCampusSchema = z
+  .object({
+    name: z.string().max(200),
+    city: z.string().max(200).optional().default(''),
+  })
+  .strict();
+
+export type CreateCampusInput = z.infer<typeof createCampusSchema>;
+
+/**
+ * Sign-up completion schema for POST /api/signup/complete
+ */
+export const signupCompleteSchema = z
+  .object({
+    real_name: realNameSchema,
+    username: usernameSchema,
+    campus_id: z.string().min(1).max(100),
+    class_id: z.string().min(1).max(100),
+    roll_last3: rollLast3Schema,
+  })
+  .strict();
+
+export type SignupCompleteInput = z.infer<typeof signupCompleteSchema>;
+
+/** A campus as returned by GET /api/campuses */
+export interface CampusItem {
+  id: string;
+  name: string;
+  city: string;
+  /** 'pending' campuses are visible only to the people who requested them. */
+  status: 'approved' | 'pending';
+}
+
+/** A person suggested on the search screen (GET /api/people/suggested) */
+export interface SuggestedPersonItem {
+  username: string;
+  display_name: string;
+  avatar_media_id: string | null;
+  class_name: string | null;
+  campus_name: string | null;
+  /** Why this person is suggested. */
+  relation: 'class' | 'campus';
+}
+
+/** Response of GET /api/signup/session */
+export interface SignupSessionResponse {
+  valid: true;
+  /** Name from the Google account, to prefill the form. */
+  suggested_name: string;
+  /** The verified Google email, shown back to the person signing up. */
+  email: string | null;
+}
 
 /**
  * Create post schema for POST /api/posts
@@ -171,6 +250,13 @@ export interface PublicProfileResponse {
   avatar_media_id: string | null;
   class_id?: string | null;
   class_name?: string | null;
+  campus_id?: string | null;
+  campus_name?: string | null;
+  /** Shown on the profile page only. */
+  real_name?: string | null;
+  wallpaper_id?: string | null;
+  theme_id?: string | null;
+  text_style_id?: string | null;
   created_at: string;
   is_following?: boolean;
   followers_count?: number;
@@ -195,6 +281,12 @@ export interface MeResponse {
     avatar_media_id: string | null;
     class_id?: string | null;
     class_name?: string | null;
+    campus_id?: string | null;
+    campus_name?: string | null;
+    real_name?: string | null;
+    wallpaper_id?: string | null;
+    theme_id?: string | null;
+    text_style_id?: string | null;
   };
   settings: {
     dm_policy: string;

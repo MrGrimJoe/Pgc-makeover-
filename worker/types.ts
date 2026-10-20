@@ -46,6 +46,11 @@ export interface ProfileRow {
   bio: string;
   avatar_media_id: string | null;
   class_id: string | null;
+  campus_id: string | null;
+  real_name: string | null;
+  wallpaper_id: string | null;
+  theme_id: string | null;
+  text_style_id: string | null;
 }
 
 export interface UserSettingsRow {
@@ -121,6 +126,8 @@ export interface OAuthStatePayload {
   codeVerifier: string;
   nonce: string;
   createdAt: number;
+  /** Whether the person pressed "Log in" or "Sign up". Missing means login. */
+  intent?: 'login' | 'signup';
 }
 
 export interface ConversationRow {
@@ -159,4 +166,24 @@ export interface ReportEvidenceRow {
   snapshot: string;
   created_at: string;
   expires_at: string;
+}
+
+export interface CampusRow {
+  id: string;
+  name: string;
+  name_normalized: string;
+  city: string;
+  city_normalized: string;
+  status: 'approved' | 'pending';
+  created_at: string;
+}
+
+export interface SignupTicketRow {
+  id: string;
+  provider_subject: string;
+  email: string | null;
+  display_name: string;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
 }

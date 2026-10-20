@@ -149,6 +149,9 @@ export function decodeOAuthState(str: string): OAuthStatePayload | null {
     if (!parsed.state || !parsed.codeVerifier || !parsed.nonce) {
       return null;
     }
+    if (parsed.intent !== undefined && parsed.intent !== 'login' && parsed.intent !== 'signup') {
+      return null;
+    }
     // Check if expired (10 minutes)
     if (Date.now() - parsed.createdAt > 10 * 60 * 1000) {
       return null;
