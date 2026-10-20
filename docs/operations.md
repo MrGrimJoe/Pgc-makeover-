@@ -98,6 +98,8 @@ The user initiates deletion via `DELETE /api/me` (authenticated session required
 1. **R2 Deletion**: The Worker queries all `object_key` values for media owned by the user (`WHERE owner_id = ?`) as well as media attached to messages sent by the user, and immediately issues `MEDIA_BUCKET.delete(object_key)`.
 2. **D1 Deletion**: The Worker runs a transactional batch deleting rows from:
    - `sessions`
+   - `user_private` (email and roll number)
+   - `campus_requests` (their pending campus requests)
    - `user_settings`
    - `profiles`
    - `message_media` & `messages`
@@ -117,7 +119,7 @@ If an administrator must manually purge a user account with ID `usr_xxx`:
    ```
 3. Purge the database rows:
    ```bash
-   npx wrangler d1 execute classsync-db --remote --command="DELETE FROM users WHERE id = 'usr_xxx';"
+   npx wrangler d1 execute classsync-db --remote --command="DELETE FROM user_private WHERE user_id = 'usr_xxx'; DELETE FROM campus_requests WHERE actor_key = 'usr_xxx'; DELETE FROM users WHERE id = 'usr_xxx';"
    ```
 
 ### Verification Checklist
@@ -127,6 +129,7 @@ npx wrangler d1 execute classsync-db --remote --command="SELECT COUNT(*) FROM us
 npx wrangler d1 execute classsync-db --remote --command="SELECT COUNT(*) FROM profiles WHERE user_id = 'usr_xxx';"
 npx wrangler d1 execute classsync-db --remote --command="SELECT COUNT(*) FROM media WHERE owner_id = 'usr_xxx';"
 npx wrangler d1 execute classsync-db --remote --command="SELECT COUNT(*) FROM sessions WHERE user_id = 'usr_xxx';"
+npx wrangler d1 execute classsync-db --remote --command="SELECT COUNT(*) FROM user_private WHERE user_id = 'usr_xxx';"
 ```
 All queries must return `0`.
 
@@ -167,3 +170,46 @@ When rotating the Google OAuth Client Secret:
    Paste the new secret when prompted.
 3. Test Google Sign-In on the live web app to confirm sign-in succeeds and cookies are issued.
 4. Return to the Google Cloud Console and delete the deprecated old secret.
+
+---
+
+## 6. Campuses
+
+### Loading the approved list
+Campuses are not built into the app. Put them in `data/campuses.csv` (header `name,city`; quote values that contain commas), then:
+```bash
+npm run seed:campuses -- data/campuses.csv > campuses.sql
+npx wrangler d1 execute classsync-db --remote --file=campuses.sql
+```
+The script validates every row and reports all bad lines at once. Re-running is safe: a campus with the same normalized name and city is skipped, and ids are derived from the name and city so they never change.
+
+### Reviewing campus requests
+Students whose campus is missing create a `pending` campus that only they (and anyone who asks for the same name) can see. Review them with the admin secret:
+```bash
+# list pending requests, most requested first
+curl -s -H "x-admin-secret: $ADMIN_SECRET" https://YOUR-WORKER/api/admin/campuses
+
+# approve: everyone can now find and choose it
+curl -s -X PATCH -H "x-admin-secret: $ADMIN_SECRET" -H "content-type: application/json" \
+  -d '{"action":"approve"}' https://YOUR-WORKER/api/admin/campuses/CAMPUS_ID
+
+# it is a misspelling of one you already have: move the students over and delete the duplicate
+curl -s -X PATCH -H "x-admin-secret: $ADMIN_SECRET" -H "content-type: application/json" \
+  -d '{"action":"merge","into":"EXISTING_APPROVED_CAMPUS_ID"}' https://YOUR-WORKER/api/admin/campuses/CAMPUS_ID
+
+# junk: delete it (students who picked it end up with no campus)
+curl -s -X PATCH -H "x-admin-secret: $ADMIN_SECRET" -H "content-type: application/json" \
+  -d '{"action":"reject"}' https://YOUR-WORKER/api/admin/campuses/CAMPUS_ID
+```
+At most 1000 requests can be pending at once; new requests are refused until some are reviewed.
+
+---
+
+## 7. Private sign-up data
+
+`user_private` holds each person's Google email and the last three digits of their roll number. No API returns them, `PATCH /api/me` cannot set them, and deleting an account (self-service or manual) removes the row. Keep it that way:
+- Never add these columns to `profiles` or to a `SELECT *` that is sent to a client.
+- `npm run attack` includes checks that fail if the roll number or email appears in any response.
+- The roll number is unverified. Do not use it to grant any access.
+- Backups from `npm run db:backup` contain this table; handle them like the database itself.
+

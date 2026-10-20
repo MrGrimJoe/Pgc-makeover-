@@ -94,7 +94,7 @@ curl -i -X PATCH http://localhost:8787/api/me -H "Content-Type: application/json
 For rapid local testing without active Google Cloud OAuth credentials, a dev-only sign-in toolbar (`DevBar`) is mounted on every page during development:
 
 - **Visibility**: Rendered strictly when `import.meta.env.DEV === true`. It is completely stripped out of production builds (`npm run build`) via Vite dead-code elimination.
-- **Workflow**: Clicking "Sign in as test user" initiates `/api/auth/google?mock=true`. The worker validates state and nonce, generates a random username (`user_` + 6 random chars), creates an isolated D1 session, and sets session cookies without the `Secure` flag so `http://localhost` works across all browsers (including Safari).
+- **Workflow**: Clicking "Sign up as test user" initiates `/api/auth/google?mock=true&intent=signup`. The worker validates state and nonce and, because no account exists yet, issues a sign-up ticket and sends you to the real onboarding screen (name, username, campus, class, roll number). Once the account exists, the same button logs you in. Session cookies are set without the `Secure` flag so `http://localhost` works across all browsers (including Safari). Tests and previews can sign up as different mock Google accounts with `mock_sub`, `mock_email` and `mock_name` query parameters (development and test only).
 - **Production Guardrails**: In any environment other than `ENVIRONMENT === 'development'`, mock codes and mock flags are strictly rejected with HTTP 400.
 - **Embedded Preview Cookie Notice**: If the embedded preview or iframe blocks cookies, open the app in its own browser tab so session and state cookies are stored and sent normally.
 
@@ -103,7 +103,7 @@ For rapid local testing without active Google Cloud OAuth credentials, a dev-onl
 Every dev-only block is annotated with `// DEV-ONLY: remove before launch`. To completely purge the dev shortcut before launch:
 1. Search the codebase for `// DEV-ONLY: remove before launch`.
 2. In `src/App.tsx`, remove `<DevBar />` and delete `src/components/DevBar.tsx`.
-3. In `worker/index.ts`, remove the `isMockRequested` and `isMockCode` blocks in `/api/auth/google` and `/api/auth/callback`.
+3. In `worker/index.ts`, remove the `isMockRequested` and `isMockCode` blocks (and the `mock_sub` / `mock_email` / `mock_name` handling) in `/api/auth/google` and `/api/auth/callback`.
 4. In `server.ts`, remove the placeholder fallbacks for `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 5. Run `npm test` and `npm run type-check` to confirm clean removal.
 
@@ -145,6 +145,16 @@ Executes Vitest tests verifying:
 - 401 Unauthorized rejection on `PATCH /api/me` and `GET /api/users/:username` without session
 - Strict isolation preventing a user from editing another user's profile
 - Migrations execution from an empty database
+- Log in vs sign up, sign-up tickets, onboarding validation, username availability and the privacy of the roll number and email
+- Campus search, requests and admin moderation, the campus seed script, search scopes, suggested people and profile style presets (including WCAG contrast of every preset)
+- Profile pictures: ownership, visibility, blocks, and survival of the cleanup job
+- Accessibility (axe-core) and interactive tests of the sign-in, onboarding, campus picker and style picker screens
+
+### 4b. Adversarial Suite
+```bash
+npm run attack
+```
+Runs `scripts/attack-suite.mts` (Node 22+): about 150 abuse cases against the Worker and an in-memory D1 (IDOR, mass assignment, forged and replayed sign-up tickets, SQL injection and LIKE wildcards in search inputs, private-data leaks, blocks, uploads, rate limits, expiry and account deletion). It must report `BROKEN: 0` and `5xx-crashes: 0`; it exits non-zero otherwise. Every check that asserts something is hidden has a positive control next to it.
 
 ### 5. Strict Type-Checking
 ```bash
@@ -186,11 +196,21 @@ database_id = "<YOUR_D1_DATABASE_ID>"
 ```
 
 ### 4. Run Migrations on Remote D1
-Apply all database schema migrations (`001_init.sql` through `004_messaging.sql`) to your remote production D1 database:
+Apply all database schema migrations (`001_init.sql` through `005_onboarding.sql`) to your remote production D1 database:
 ```bash
 npm run db:migrate:remote
 ```
 *(Alternatively: `npx wrangler d1 migrations apply classsync-db --remote`)*
+
+Migration `005_onboarding.sql` adds the campus tables, the private sign-up data table, sign-up tickets and the profile style columns. People who already have an account keep working: their campus, real name and styles start empty and can be filled in from Edit profile.
+
+#### Load the campus list
+No campus names are built into the app. Put your campuses in `data/campuses.csv` (header `name,city`), then generate and run the SQL:
+```bash
+npm run seed:campuses -- data/campuses.csv > campuses.sql
+npx wrangler d1 execute classsync-db --remote --file=campuses.sql
+```
+It is safe to run again: campuses that already exist (same normalized name and city) are skipped. Students can also request a campus that is missing; see "Campuses" in `docs/operations.md` for reviewing those requests.
 
 ### 5. Create Google OAuth Client Credentials
 1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and create or select your project.
@@ -272,7 +292,7 @@ Before opening the platform to real students, verify all production hardening cr
   ```bash
   npm run prelaunch-check
   ```
-  Must print `=== PRELAUNCH CHECK: PASS ===` before students are invited.
+  Must print `Prelaunch Check: PASS` before students are invited.
 - [ ] **Google OAuth Status**: Move Google OAuth Consent Screen publishing status from "Testing" to "In production" so any school student can sign in without needing manual inclusion on a whitelist.
 - [ ] **Establish Database Backups**: Verify backup commands work as documented in `docs/operations.md` (`npm run db:backup`).
 
@@ -303,13 +323,37 @@ Changes made on top of baseline commit `6f12617`. Each is its own commit.
 
 `axe-core`, `jsdom` and `@types/jsdom` were added as devDependencies. Saving them also resynced `package-lock.json`, which previously lacked wrangler entries and made `npm ci` fail.
 
+### Log in, sign up, campuses and profile styles
+
+Built on top of `2971c1d`. Each change is its own commit.
+
+- **Log in and Sign up are separate.** The sign-in screen has "Log in with Google" and "Sign up with Google". The OAuth callback never creates an account any more. Log in with an unknown Google account returns to the sign-in screen with a message (`/?auth=no_account`). Sign up issues a 15-minute, single-use ticket (stored in D1 as `signup_tickets`, sent as an HttpOnly cookie) and continues to onboarding (`/?signup=1`). An existing account logs in with either button.
+- **Onboarding** (`POST /api/signup/complete`) creates the user, profile, settings, private record and session in one D1 batch. Fields: real name, unique username (live availability check, reserved names such as `admin` and `support` are refused), campus, class, last three digits of the roll number. The profile photo is an optional last step. A forged, expired or reused ticket is rejected, two people racing for one username get one winner and one `409`, and a double submit creates one account.
+- **Private data.** Email and `roll_last3` live in `user_private`, not in `profiles`, so no `SELECT *` can leak them; `GET/PATCH /api/me` now build their response from named columns only. They are never returned by any endpoint and cannot be set through `PATCH /api/me`. Deleting an account removes them.
+- **Real name** is stored in `profiles.real_name` and shown on the profile page only. Posts, feeds, search, suggestions and messages keep using the display name, which starts as the username.
+- **Campuses.** Searchable picker backed by a `campuses` table. Search ranks name-prefix matches first, then name-contains, then city matches, treats `%` and `_` literally, and can be narrowed by city. A student whose campus is missing can request it; it stays `pending` and visible only to the people who asked until an admin approves it, merges it into an existing campus or rejects it. Requests are normalized to avoid duplicates and are rate limited.
+- **Search tabs work.** `GET /api/search?scope=class|campus|all` filters by the caller's class or campus. If the caller has none set, the response says so (`scope_missing`) instead of silently searching everyone.
+- **Suggested people.** `GET /api/people/suggested` returns classmates first, then people on the same campus, never yourself, people you follow, or anyone blocked in either direction.
+- **Profile pictures are visible.** Avatars now render as images with the one-letter fallback. Setting a profile picture requires owning the upload (previously any media id was accepted), and a profile picture can be read by signed-in people who are not blocked with its owner.
+- **Profile style.** Wallpaper, accent color and text style are fixed presets (`shared/presets.ts`); the database stores only the preset id and the server rejects anything else. There are no user-uploaded wallpapers. Every wallpaper keeps text at WCAG AA (4.5:1) and every accent reaches 3:1 on every wallpaper and on the light and dark app surfaces; a test enforces this for all combinations.
+- **Missing style tokens.** `bg-primary`, `text-text`, `border-border`, `bg-surface` and similar classes were used across the app but never defined, so Tailwind generated no CSS for them (the old sign-in button, Edit profile and the comment and report modals were affected). `src/index.css` now maps them to the existing light and dark color variables.
+
+### Regression tests added
+
+- `tests/signup.test.ts`, `tests/campuses.test.ts`, `tests/people-and-scope.test.ts`, `tests/presets.test.ts`, `tests/avatars.test.ts`, `tests/seed-campuses.test.ts` (backend behavior, privacy and abuse cases).
+- `tests/a11y-onboarding.test.tsx` and `tests/onboarding-ui.test.tsx` (axe scans plus a jsdom walk through the whole sign-up form, including keyboard selection of a campus).
+- `scripts/attack-suite.mts` (`npm run attack`) is now part of the repository.
+- Mutation-checked: deliberately breaking the scope bind order, the block filter on suggestions and the private-data query makes the matching tests fail.
+
 ### Open items
 
-- There is no suggested-people endpoint, so the People section on the search screen always shows its empty state until one exists.
-- The My class / Campus / Everyone tabs on the search screen only change styling, not results.
-- Color contrast is not verified: jsdom has no layout engine, so axe reports `color-contrast` as incomplete. Check it in a real browser.
-- `npm run prelaunch-check` is expected to fail until the DEV-ONLY code is removed (including the "Sign in as test user" button in `SignInPage.tsx`) and `database_id` in `wrangler.toml` is replaced.
-- Step 9 above says the check prints `=== PRELAUNCH CHECK: PASS ===`, but the script currently prints `Prelaunch Check: PASS`.
+- Color contrast of the UI is still not verified in a real browser (jsdom has no layout engine). The style presets are checked numerically.
+- The roll number is not editable after sign-up and is not verified; it only helps place students in their class. Treat it as a hint, not proof of enrollment.
+- Classes are still one global list (for example "Class of 2026"), not per campus.
+- Messages still show initials instead of profile pictures.
+- Only Google sign-in exists. Other email providers need email verification and a mail service, and are left for later.
+- `npm run prelaunch-check` is expected to fail until the DEV-ONLY code is removed (including the "Sign up as test user" button in `SignInPage.tsx`) and `database_id` in `wrangler.toml` is replaced.
+- The block/unblock menu and blocked-users list in the UI have not been tested in a browser (the backend is covered by the attack suite).
 
 ---
 
@@ -327,6 +371,7 @@ Changes made on top of baseline commit `6f12617`. Each is its own commit.
   - `rate_limits`: D1-backed atomic window rate limiting table.
   - Search indexes on `posts.body`.
 - **`004_messaging.sql`**: Direct messaging, 1:1 `conversations`, `conversation_members`, ephemeral `messages`, `message_media`, and `blocks` table.
+- **`005_onboarding.sql`**: `campuses` and `campus_requests` (approved list plus student-requested pending entries), `profiles.campus_id / real_name / wallpaper_id / theme_id / text_style_id`, `user_private` (email and roll number, never returned by any API) and `signup_tickets` (15-minute single-use sign-up proof).
 
 ---
 
@@ -334,14 +379,23 @@ Changes made on top of baseline commit `6f12617`. Each is its own commit.
 
 | Method | Endpoint | Auth Required | Description |
 |---|---|---|---|
-| `GET` | `/api/auth/google` | No | Initiates Google OAuth with PKCE, state & nonce |
-| `GET` | `/api/auth/callback` | No | Exchanges code, verifies ID token, sets session cookie |
+| `GET` | `/api/auth/google?intent=login\|signup` | No | Initiates Google OAuth with PKCE, state & nonce |
+| `GET` | `/api/auth/callback` | No | Exchanges code, verifies ID token. Existing account: sets session cookie. Unknown account: back to login (`login`) or a sign-up ticket (`signup`). Never creates an account |
+| `GET` | `/api/signup/session` | Sign-up ticket | Checks the ticket and returns the Google name and email to prefill |
+| `POST` | `/api/signup/complete` | Sign-up ticket | Creates the account (real name, username, campus, class, roll last 3) and a session (rate-limited) |
+| `GET` | `/api/username-available?u=` | Session or ticket | Whether a username is free, reserved or invalid (rate-limited) |
 | `POST` | `/api/auth/logout` | No | Deletes session and clears cookie |
 | `GET` | `/api/users/:username` | **Yes** | Returns public profile fields only |
-| `GET` | `/api/me` | **Yes** | Returns current user profile, class, and settings |
-| `PATCH` | `/api/me` | **Yes** | Updates user profile (display name, bio, class_id) and settings |
+| `GET` | `/api/me` | **Yes** | Returns current user profile (including campus, real name and style ids), class, and settings |
+| `PATCH` | `/api/me` | **Yes** | Updates profile (display name, real name, bio, class, campus, profile picture, wallpaper/theme/text style) and settings |
 | `DELETE` | `/api/me` | **Yes** | Permanently deletes user, posts, media, and sessions |
-| `GET` | `/api/classes` | No | Returns list of available campus classes |
+| `GET` | `/api/classes` | Session or ticket | Returns list of available classes |
+| `GET` | `/api/campuses?q=&city=&limit=` | Session or ticket | Searches campuses (approved ones, plus your own pending requests) |
+| `GET` | `/api/campuses/cities` | Session or ticket | Cities that have approved campuses |
+| `POST` | `/api/campuses` | Session or ticket | Requests a campus that is not listed (pending until approved; rate-limited) |
+| `GET` | `/api/people/suggested` | **Yes** | Classmates, then campus mates; excludes yourself, followed and blocked people |
+| `GET` | `/api/admin/campuses` | Admin Secret | Lists campuses (default: pending) with requester and student counts |
+| `PATCH` | `/api/admin/campuses/:id` | Admin Secret | `approve`, `merge` (into an approved campus) or `reject` a campus |
 | `GET` | `/api/feed` | **Yes** | Chronological or ranked discovery feed with cursor pagination |
 | `POST` | `/api/posts` | **Yes** | Creates post with #hashtag and keyword topic extraction (rate-limited) |
 | `GET` | `/api/posts/:id` | **Yes** | Retrieves single post with media, likes, comments, topics |
@@ -352,11 +406,11 @@ Changes made on top of baseline commit `6f12617`. Each is its own commit.
 | `DELETE` | `/api/comments/:id` | **Yes** | Author-only comment deletion |
 | `POST` | `/api/users/:id/follow` | **Yes** | Follows/unfollows user (no self-follow, rate-limited) |
 | `POST` | `/api/media/uploads` | **Yes** | Uploads image with Content-Length, 5MB, and magic bytes check (rate-limited) |
-| `GET` | `/api/media/:id` | **Yes** | Serves image bytes from R2 with `X-Content-Type-Options: nosniff` |
+| `GET` | `/api/media/:id` | **Yes** | Serves image bytes from R2 with `X-Content-Type-Options: nosniff` (owner, attached to a visible post or message, or a profile picture of someone not blocked with you) |
 | `POST` | `/api/reports` | **Yes** | Reports post, comment, or user (verifies target, single open report, rate-limited) |
 | `GET` | `/api/admin/reports` | Admin Secret | Lists moderation reports (401/403 auth check) |
 | `PATCH` | `/api/admin/reports/:id` | Admin Secret | Updates report status (`reviewed` or `dismissed`) |
-| `GET` | `/api/search` | **Yes** | Searches posts across class, campus, or all scopes (rate-limited) |
+| `GET` | `/api/search?q=&scope=class\|campus\|all` | **Yes** | Searches posts, optionally within your class or campus (rate-limited) |
 | `GET` | `/api/trends` | **Yes** | Returns trending topics for 24h or 7d windows |
 | `GET` | `/api/me/interests` | **Yes** | Returns user topic interest profile with decayed weights |
 | `DELETE` | `/api/me/interests` | **Yes** | Resets user topic interest signals |
