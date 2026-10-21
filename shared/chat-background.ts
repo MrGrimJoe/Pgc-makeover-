@@ -12,8 +12,8 @@ export type ChatBackgroundId = (typeof CHAT_BACKGROUND_IDS)[number];
 
 /** Surface and text colors of the app in each mode (mirrors the tokens in src/index.css). */
 export const CHAT_TOKENS = {
-  light: { surface: '#FFFFFF', surface2: '#F8F9FC', text: '#17233A', muted: '#5B6577', blue: '#244C8A' },
-  dark: { surface: '#0F1522', surface2: '#0B101B', text: '#EEF1F7', muted: '#9AA5BA', blue: '#7FA6E6' },
+  light: { surface: '#FFFFFF', surface2: '#F8F9FC', text: '#17233A', muted: '#5B6577', blue: '#244C8A', danger: '#B23A40', accent: '#8A6A00' },
+  dark: { surface: '#0F1522', surface2: '#0B101B', text: '#EEF1F7', muted: '#9AA5BA', blue: '#7FA6E6', danger: '#E5767C', accent: '#F2C94C' },
 } as const satisfies Record<ThemeMode, Record<string, string>>;
 
 /** How much of the app surface color covers an imported image. Chosen so the worst-case image still passes AA. */
@@ -69,6 +69,15 @@ export function blendWithScrim(image: string, surface: string, alpha: number): s
 
 /** Colors an imported picture can have at its extremes: black, white, the three primaries and secondaries, mid-gray. */
 export const WORST_CASE_IMAGE_COLORS = ['#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#00FFFF', '#FF00FF', '#808080'] as const;
+
+/**
+ * Expiry chips and other status text sit on an opaque pill in the surface color, never directly on the wallpaper,
+ * so their contrast is measured against the surface.
+ */
+export function chipContrast(mode: ThemeMode): number {
+  const t = CHAT_TOKENS[mode];
+  return Math.min(contrastRatio(t.danger, t.surface), contrastRatio(t.accent, t.surface), contrastRatio(t.muted, t.surface));
+}
 
 /** Lowest text contrast (body text and timestamps) over the worst-case images when covered by the scrim. */
 export function worstCaseImageContrast(mode: ThemeMode, alpha = IMAGE_SCRIM_ALPHA): number {

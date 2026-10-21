@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   CHAT_BACKGROUNDS, CHAT_BACKGROUND_IDS, IMAGE_SCRIM_ALPHA, WORST_CASE_IMAGE_COLORS, CHAT_TOKENS,
-  presetContrast, worstCaseImageContrast, bubbleContrast, presetStyle, blendWithScrim, isChatBackgroundId, presetById,
+  presetContrast, worstCaseImageContrast, bubbleContrast, chipContrast, presetStyle, blendWithScrim, isChatBackgroundId, presetById,
 } from '../shared/chat-background.ts';
 import { contrastRatio } from '../shared/presets.ts';
+import { readFileSync } from 'node:fs';
 
 const MODES = ['light', 'dark'] as const;
 const AA = 4.5;
@@ -23,6 +24,10 @@ describe('chat background contrast (WCAG AA, numeric)', () => {
 
     it(`worst-case imported image (${mode}) stays at or above 4.5:1 under the scrim`, () => {
       expect(worstCaseImageContrast(mode)).toBeGreaterThanOrEqual(AA);
+    });
+
+    it(`expiry chips on their opaque pill are readable (${mode})`, () => {
+      expect(chipContrast(mode)).toBeGreaterThanOrEqual(AA);
     });
 
     it(`bubble text is readable (${mode})`, () => {
@@ -67,5 +72,21 @@ describe('chat background contrast (WCAG AA, numeric)', () => {
     expect(isChatBackgroundId('mint')).toBe(true);
     expect(isChatBackgroundId('../x')).toBe(false);
     expect(presetById('nope').id).toBe('plain');
+  });
+
+  it('the contrast model matches the real tokens in src/index.css (so it cannot drift from the app)', () => {
+    const css = readFileSync('src/index.css', 'utf8');
+    const lightBlock = /:root \{([^}]*)\}/.exec(css)![1]!;
+    const darkBlock = /:root\[data-theme="dark"\] \{([^}]*)\}/.exec(css)![1]!;
+    const names = { surface: '--bg', surface2: '--bg2', text: '--text', muted: '--muted', blue: '--blue', danger: '--danger', accent: '--accent-text' } as const;
+    const get = (block: string, name: string) => new RegExp(`${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(block)?.[1]?.toUpperCase();
+    for (const [mode, block] of [['light', lightBlock], ['dark', darkBlock]] as const) {
+      for (const [key, cssName] of Object.entries(names)) {
+        expect(get(block, cssName), `${mode} ${cssName}`).toBe(CHAT_TOKENS[mode][key as keyof typeof names].toUpperCase());
+      }
+    }
+    // the media-query copy of the dark tokens must agree with the data-theme copy
+    const mq = /prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\) \{([^}]*)\}/.exec(css)![1]!;
+    for (const cssName of Object.values(names)) expect(get(mq, cssName), cssName).toBe(get(darkBlock, cssName));
   });
 });

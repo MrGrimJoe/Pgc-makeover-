@@ -49,6 +49,7 @@
     --muted: #9AA5BA;
     --blue: #7FA6E6;
     --tint: #1B2740;
+    --danger: #E5767C;
     --accent-text: #F2C94C;
   }
 }
@@ -62,6 +63,7 @@
   --muted: #9AA5BA;
   --blue: #7FA6E6;
   --tint: #1B2740;
+  --danger: #E5767C;
   --accent-text: #F2C94C;
 }
 
