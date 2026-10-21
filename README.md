@@ -367,6 +367,7 @@ Built on top of `2971c1d`. Each change is its own commit.
   - Search indexes on `posts.body`.
 - **`004_messaging.sql`**: Direct messaging, 1:1 `conversations`, `conversation_members`, ephemeral `messages`, `message_media`, and `blocks` table.
 - **`005_onboarding.sql`**: `campuses` and `campus_requests` (approved list plus student-requested pending entries), `profiles.campus_id / real_name / wallpaper_id / theme_id / text_style_id`, `user_private` (email and roll number, never returned by any API) and `signup_tickets` (15-minute single-use sign-up proof).
+- **`007_media_foundation.sql`**: media `kind`, size metadata, `sha256` (per-owner dedupe), thumbnails, and the `sticker_library` table.
 - **`006_bundled_campuses.sql`**: rebuilds `profiles` without the `campus_id` foreign key, adds `campus_other`, drops `campuses` and `campus_requests`.
 
 ---
@@ -396,7 +397,12 @@ Built on top of `2971c1d`. Each change is its own commit.
 | `POST` | `/api/posts/:id/comments` | **Yes** | Adds comment to a post (+3 interest signal, rate-limited) |
 | `DELETE` | `/api/comments/:id` | **Yes** | Author-only comment deletion |
 | `POST` | `/api/users/:id/follow` | **Yes** | Follows/unfollows user (no self-follow, rate-limited) |
-| `POST` | `/api/media/uploads` | **Yes** | Uploads image with Content-Length, 5MB, and magic bytes check (rate-limited) |
+| `POST` | `/api/media/uploads` | **Yes** | Uploads a photo, sticker, GIF, background or short clip (`kind` field). Per-kind size caps, per-kind hourly limits, 200 MB quota, magic bytes check, JPEG metadata stripped, per-owner dedupe (see `docs/operations.md` section 8) |
+| `DELETE` | `/api/media/:id` | **Yes** | Owner only; `409` while a post, message or profile picture still uses it |
+| `GET` | `/api/media/:id/thumb` | **Yes** | Thumbnail, same read rules |
+| `GET` `POST` | `/api/stickers/library` | **Yes** | List or add to your sticker/GIF library (max 200) |
+| `DELETE` | `/api/stickers/library/:mediaId` | **Yes** | Remove from your library |
+| `POST` | `/api/messages/:id/forward` | **Yes** | Forward a message you can read to another conversation (references the same media) |
 | `GET` | `/api/media/:id` | **Yes** | Serves image bytes from R2 with `X-Content-Type-Options: nosniff` (owner, attached to a visible post or message, or a profile picture of someone not blocked with you) |
 | `POST` | `/api/reports` | **Yes** | Reports post, comment, or user (verifies target, single open report, rate-limited) |
 | `GET` | `/api/admin/reports` | Admin Secret | Lists moderation reports (401/403 auth check) |

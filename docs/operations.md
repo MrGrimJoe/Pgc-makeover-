@@ -198,3 +198,41 @@ A student can type a campus instead (`profiles.campus_other`, 2 to 80 characters
 - The roll number is unverified. Do not use it to grant any access.
 - Backups from `npm run db:backup` contain this table; handle them like the database itself.
 
+---
+
+## 8. Media: kinds, caps, quotas and retention
+
+The numbers live as named constants in `shared/media-rules.ts`; change them there (the client and the Worker both read that file).
+
+| Kind | Allowed types | Largest file | Upload limit |
+|---|---|---|---|
+| `photo` | JPEG, PNG, WebP | 2.5 MB | 60 per hour per person |
+| `sticker` | WebP, PNG, GIF | 300 KB | 120 per hour (shared with `gif`) |
+| `gif` | GIF, WebP, MP4, WebM | 3 MB | 120 per hour (shared with `sticker`) |
+| `background` | WebP, JPEG, PNG | 400 KB | 10 per hour |
+| `video` | MP4, WebM | 8 MB (no server transcoding) | 60 per hour (shared with `photo`) |
+| thumbnail (optional extra file) | WebP, JPEG | 80 KB | counted with its upload |
+
+- **Quota:** each person can hold 200 MB of live media (files plus thumbnails). Over that, uploads answer `413 Storage full`.
+- **Checks:** the file's first bytes must match its declared type (SVG and HTML are refused), size is checked against the kind's cap (`413` with the cap in the message), and the rate limit is charged only for files that pass.
+- **Metadata:** JPEGs have APP1 (EXIF, GPS, XMP), APP13 (IPTC) and comment segments removed on the server. A JPEG that cannot be parsed is refused rather than stored untouched. The client also re-encodes photos, which drops EXIF before upload.
+- **Dedupe:** per owner only (`owner_id` + `sha256` + `kind`). The same bytes from the same person reuse the existing row and nothing new is stored. Different people never share a row, because a shared hash would reveal whether someone else already has a file.
+- **Serving:** `GET /api/media/:id` (and `/thumb`) sends the stored type, `X-Content-Type-Options: nosniff`, `Cache-Control: private, max-age=86400` and an `ETag` (`304` for a matching `If-None-Match`).
+- **Who can read:** the owner; people who can see a post it is attached to (not blocked with its author); members of the conversation for message media; signed-in people not blocked with the owner for a profile picture. Library items are private to the owner unless attached somewhere visible.
+- **Forwarding:** `POST /api/messages/:id/forward {conversation_id}` needs current membership of the original conversation and of the target, and respects blocks and the recipient's DM policy. It references the same media id; nothing is re-uploaded. People cannot attach media they do not own through the normal send route.
+
+### Retention (reference-based)
+A media row is deleted only when **nothing references it** (`post_media`, `message_media`, `profiles.avatar_media_id`, `sticker_library`) **and** it is older than 24 hours.
+- A message's media goes when its last referencing message expires (14 days). Forwarded media therefore lives until the last copy expires.
+- A post's media goes when the post expires, unless a library item or message still uses it.
+- Library items and profile pictures do not expire.
+- `DELETE /api/media/:id` answers `409` while the file is still used.
+- An R2 delete failure keeps the row so the next run retries.
+
+Fixed in this version: the orphan cleanup used to ignore `message_media`, so a message photo older than 24 hours was deleted from storage while the message still existed. `tests/media-retention.test.ts` covers every reference type.
+
+### Sticker library
+`GET/POST /api/stickers/library`, `DELETE /api/stickers/library/:mediaId`. Up to 200 items per person; only your own stickers and GIFs can be added.
+
+### Client compression (`src/lib/media.ts`)
+Photos are scaled to at most 1600 px on the long edge and re-encoded as WebP at about 0.8 (JPEG where WebP encoding is unsupported), with a 320 px thumbnail. Stickers are 512x512 WebP, contain-fit with transparent padding. GIFs and clips are uploaded as they are within the cap; over the cap they are refused with a "trim it" message (conversion to a looping WebM is offered only where WebCodecs `ImageDecoder` and `VideoEncoder` exist, never required). Cloudflare Image Transformations are deliberately not used: the free plan allows 5,000 unique transformations a month and each extra size counts separately. They remain a possible future option.
