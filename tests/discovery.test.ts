@@ -105,15 +105,15 @@ describe('Milestone 3 Discovery Engine & Phase B Fixes', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'image/png',
-          'Content-Length': '6000000', // Exceeds 5 MB
+          'Content-Length': '6000000', // Exceeds the 2.5 MB photo cap
           Cookie: aliceSessionCookie,
         },
         body: new Uint8Array([137, 80, 78, 71]),
       });
       const res = await worker.fetch(req, env);
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(413);
       const data = (await res.json()) as { error: string };
-      expect(data.error).toContain('exceeds maximum size of 5 MB');
+      expect(data.error).toContain('a photo can be at most 2.50 MB');
     });
 
     it('rejects image with mismatched magic bytes', async () => {

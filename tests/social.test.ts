@@ -410,7 +410,7 @@ describe('Milestone 2 Social Feed, Media, Interactions & Expiry Lifecycle', () =
 
   // 5. Media Upload Validation
   describe('Media Upload Validation', () => {
-    it('rejects unsupported MIME types and files exceeding 5 MB', async () => {
+    it('rejects unsupported MIME types and photos above the 2.5 MB cap', async () => {
       // 1. Reject invalid MIME type
       const textUpload = new Request('http://localhost:3000/api/media/uploads', {
         method: 'POST',
@@ -420,19 +420,19 @@ describe('Milestone 2 Social Feed, Media, Interactions & Expiry Lifecycle', () =
       const textRes = await worker.fetch(textUpload, env);
       expect(textRes.status).toBe(400);
       const textBody = (await textRes.json()) as { error: string };
-      expect(textBody.error).toContain('Only JPEG, PNG, and WebP');
+      expect(textBody.error).toContain('Use JPEG, PNG, WebP, GIF, MP4 or WebM');
 
-      // 2. Reject file exceeding 5 MB
-      const bigFile = new Uint8Array(5 * 1024 * 1024 + 100);
+      // 2. Reject a photo above the 2.5 MB cap
+      const bigFile = new Uint8Array(Math.floor(2.5 * 1024 * 1024) + 100);
       const bigUpload = new Request('http://localhost:3000/api/media/uploads', {
         method: 'POST',
         headers: { 'Content-Type': 'image/jpeg', Cookie: aliceSessionCookie },
         body: bigFile,
       });
       const bigRes = await worker.fetch(bigUpload, env);
-      expect(bigRes.status).toBe(400);
+      expect(bigRes.status).toBe(413);
       const bigBody = (await bigRes.json()) as { error: string };
-      expect(bigBody.error).toContain('exceeds maximum size of 5 MB');
+      expect(bigBody.error).toContain('a photo can be at most 2.50 MB');
     });
   });
 

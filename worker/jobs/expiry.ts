@@ -1,3 +1,4 @@
+import { pruneOrphanMedia, deleteMediaIfUnreferenced } from '../media.ts';
 import type { Env } from '../types.ts';
 
 export interface ExpiryJobResult {
@@ -99,39 +100,9 @@ export async function runPostLifecycleExpiry(
     }
   }
 
-  // Orphan media cleanup: delete media older than 24 hours not attached to any post
-  const orphanCutoffIso = new Date(referenceTime - 24 * 60 * 60 * 1000).toISOString();
-  const orphanMediaResult = await env.DB.prepare(
-    `SELECT id, object_key
-     FROM media
-     WHERE id NOT IN (SELECT media_id FROM post_media)
-       AND (id NOT IN (SELECT avatar_media_id FROM profiles WHERE avatar_media_id IS NOT NULL))
-       AND created_at <= ?`
-  )
-    .bind(orphanCutoffIso)
-    .all<{ id: string; object_key: string }>();
-
-  const orphanMedia = orphanMediaResult.results || [];
-  let prunedOrphanMedia = 0;
-
-  for (const m of orphanMedia) {
-    let r2Success = true;
-    if (env.MEDIA_BUCKET) {
-      try {
-        await env.MEDIA_BUCKET.delete(m.object_key);
-      } catch (err) {
-        console.error(`Failed to delete R2 object for orphan media ${m.object_key}:`, err);
-        r2Success = false;
-      }
-    }
-
-    if (r2Success) {
-      await env.DB.prepare('DELETE FROM media WHERE id = ?')
-        .bind(m.id)
-        .run();
-      prunedOrphanMedia++;
-    }
-  }
+  // Orphan media cleanup is reference-based: only media nothing references (posts, messages, profile pictures,
+  // sticker library) and older than 24 hours is deleted.
+  const prunedOrphanMedia = await pruneOrphanMedia(env, referenceTime);
 
   // Prune impressions older than 30 days
   const thirtyDaysAgoIso = new Date(referenceTime - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -151,46 +122,16 @@ export async function runPostLifecycleExpiry(
     const msgIds = (expiredMessages.results || []).map((m) => m.id);
 
     for (const msgId of msgIds) {
-      const mediaList = await env.DB.prepare(
-        `SELECT m.id, m.object_key
-         FROM media m
-         JOIN message_media mm ON mm.media_id = m.id
-         WHERE mm.message_id = ?`
-      )
+      const mediaList = await env.DB.prepare('SELECT media_id FROM message_media WHERE message_id = ?')
         .bind(msgId)
-        .all<{ id: string; object_key: string }>();
-
-      let allR2Deleted = true;
-      const mediaToDelete: string[] = [];
-
-      for (const m of mediaList.results || []) {
-        let r2Deleted = true;
-        if (env.MEDIA_BUCKET) {
-          try {
-            await env.MEDIA_BUCKET.delete(m.object_key);
-          } catch (err) {
-            console.error(`Failed to delete message R2 object ${m.object_key}:`, err);
-            r2Deleted = false;
-            allR2Deleted = false;
-          }
-        }
-        if (r2Deleted) {
-          mediaToDelete.push(m.id);
-        }
-      }
-
-      // If an R2 delete fails, keep the DB row so it retries
-      if (allR2Deleted) {
-        const batchStatements = [
-          env.DB.prepare('DELETE FROM message_media WHERE message_id = ?').bind(msgId),
-        ];
-        for (const mid of mediaToDelete) {
-          batchStatements.push(env.DB.prepare('DELETE FROM media WHERE id = ?').bind(mid));
-        }
-        batchStatements.push(env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(msgId));
-        await env.DB.batch(batchStatements);
-        prunedMessages++;
-      }
+        .all<{ media_id: string }>();
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM message_media WHERE message_id = ?').bind(msgId),
+        env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(msgId),
+      ]);
+      // The media goes only if nothing else still references it (a forward, the library, a profile picture)
+      await deleteMediaIfUnreferenced(env, (mediaList.results || []).map((m) => m.media_id));
+      prunedMessages++;
     }
   } catch {
     // messages table does not exist if migration 004 has not yet run
@@ -220,41 +161,17 @@ export async function runPostLifecycleExpiry(
  * Deletes post, linked media records, and corresponding R2 objects in D1 batch.
  */
 export async function deletePostAndMedia(env: Env, postId: string): Promise<void> {
-  // 1. Fetch linked media records
-  const linkedMedia = await env.DB.prepare(
-    `SELECT m.id, m.object_key
-     FROM media m
-     JOIN post_media pm ON pm.media_id = m.id
-     WHERE pm.post_id = ?`
-  )
+  const linked = await env.DB.prepare('SELECT media_id FROM post_media WHERE post_id = ?')
     .bind(postId)
-    .all<{ id: string; object_key: string }>();
+    .all<{ media_id: string }>();
 
-  const mediaList = linkedMedia.results || [];
-
-  // 2. Delete objects from R2 storage
-  if (env.MEDIA_BUCKET && mediaList.length > 0) {
-    for (const m of mediaList) {
-      try {
-        await env.MEDIA_BUCKET.delete(m.object_key);
-      } catch (err) {
-        console.error(`Failed to delete R2 object ${m.object_key}:`, err);
-      }
-    }
-  }
-
-  // 3. Batch delete database rows
-  const statements = [
+  await env.DB.batch([
     env.DB.prepare('DELETE FROM post_media WHERE post_id = ?').bind(postId),
     env.DB.prepare('DELETE FROM post_reactions WHERE post_id = ?').bind(postId),
     env.DB.prepare('DELETE FROM comments WHERE post_id = ?').bind(postId),
-  ];
+    env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(postId),
+  ]);
 
-  for (const m of mediaList) {
-    statements.push(env.DB.prepare('DELETE FROM media WHERE id = ?').bind(m.id));
-  }
-
-  statements.push(env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(postId));
-
-  await env.DB.batch(statements);
+  // Media goes with the post unless something else still uses it (sticker library, a message, a profile picture)
+  await deleteMediaIfUnreferenced(env, (linked.results || []).map((m) => m.media_id));
 }

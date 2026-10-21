@@ -227,6 +227,44 @@ r = await call('PATCH', '/api/me', { cookie: B, json: { wallpaper_id: 'dusk', th
 await clearRL(); r = await call('PATCH', '/api/me', { cookie: ayesha, json: { campus_other: 'Green Valley College' } }); ok('POSITIVE CONTROL: a free-text campus is accepted', r.s === 200, `status ${r.s}`);
 r = await call('GET', '/api/me', { cookie: ayesha }); ok('free-text campus replaces the listed campus', r.j?.profile?.campus_id === null && r.j?.profile?.campus_other === 'Green Valley College', r.text.slice(0, 120));
 
+// ---------- MEDIA FOUNDATION: kinds, caps, read rules, library, forwarding ----------
+{
+  const enc = (t: string) => [...t].map((c) => c.charCodeAt(0));
+  const webp = (n: number) => new Uint8Array([...enc('RIFF'), 8, 0, 0, 0, ...enc('WEBP'), n, 0]);
+  const upKind = async (cookie: string, bytes: Uint8Array, type: string, kind: string) => { const f = new FormData(); f.append('file', new Blob([bytes], { type }), 'f'); f.append('kind', kind); return call('POST', '/api/media/uploads', { cookie, form: f }); };
+  const SND = await seed('usr_snd', 'sender'), RCV = await seed('usr_rcv', 'receiver'), OUT = await seed('usr_out', 'outsider');
+  await clearRL();
+  r = await upKind(A, new Uint8Array(enc('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>')), 'image/svg+xml', 'sticker'); ok('SVG sticker rejected', r.s === 400, `status ${r.s}`);
+  r = await upKind(A, new Uint8Array(enc('<svg onload=alert(1)>')), 'image/webp', 'sticker'); ok('SVG disguised as webp rejected (magic bytes)', r.s === 400, `status ${r.s}`);
+  r = await upKind(A, new Uint8Array(enc('<html><script>alert(1)</script>')), 'image/gif', 'gif'); ok('HTML disguised as gif rejected', r.s === 400, `status ${r.s}`);
+  for (const kind of ['../etc', 'photo; DROP TABLE media', 'admin', '']) { r = await upKind(A, webp(1), 'image/webp', kind); ok(`unknown media kind ${JSON.stringify(kind).slice(0, 24)} rejected`, r.s === 400, `status ${r.s}`); }
+  const big = new Uint8Array(300 * 1024 + 1); big.set(webp(2)); r = await upKind(A, big, 'image/webp', 'sticker'); ok('sticker over 300 KB -> 413', r.s === 413, `status ${r.s}`);
+  r = await upKind(A, webp(3), 'image/webp', 'sticker'); const stickerId = idOf(r.j); ok('POSITIVE CONTROL: a valid sticker uploads', r.s === 201 && !!stickerId, `status ${r.s}`);
+  r = await upKind(A, webp(3), 'image/webp', 'sticker'); ok('same bytes by the same owner reuse the row', r.s === 200 && idOf(r.j) === stickerId, `status ${r.s}`);
+  r = await upKind(B, webp(3), 'image/webp', 'sticker'); ok('same bytes by another owner never reuse alice’s row (no cross-user dedupe leak)', r.s === 201 && idOf(r.j) !== stickerId, `status ${r.s}`);
+  r = await call('POST', '/api/media/uploads', { form: (() => { const f = new FormData(); f.append('file', new Blob([webp(4)], { type: 'image/webp' })); return f; })() }); ok('upload without a session -> 401', r.s === 401, `status ${r.s}`);
+  r = await call('GET', `/api/media/${stickerId}/thumb`); ok('thumbnail without a session -> 401', r.s === 401, `status ${r.s}`);
+  r = await call('GET', `/api/media/${stickerId}`, { cookie: B }); ok('another person cannot read a sticker that is not attached anywhere -> 403', r.s === 403, `status ${r.s}`);
+  r = await call('POST', '/api/stickers/library', { cookie: B, json: { media_id: stickerId } }); ok('cannot add someone else’s sticker to your library -> 404', r.s === 404, `status ${r.s}`);
+  for (const bad of ["x' OR '1'='1", '../x', 123, null, ['a']]) { r = await call('POST', '/api/stickers/library', { cookie: A, json: { media_id: bad } }); ok(`library media_id ${JSON.stringify(bad).slice(0, 20)} rejected`, r.s === 400, `status ${r.s}`); }
+  r = await call('POST', '/api/stickers/library', { cookie: A, json: { media_id: stickerId } }); ok('POSITIVE CONTROL: owner adds own sticker to the library', r.s === 201, `status ${r.s}`);
+  r = await call('DELETE', `/api/stickers/library/${stickerId}`, { cookie: B }); ok('removing from someone else’s library -> 404', r.s === 404, `status ${r.s}`);
+  r = await call('DELETE', `/api/media/${stickerId}`, { cookie: B }); ok('deleting someone else’s media -> 403', r.s === 403, `status ${r.s}`);
+  // forwarding: sender -> receiver message with media; outsider is not in the conversation
+  const fwdMedia = await upKind(SND, webp(9), 'image/webp', 'sticker').then((x: any) => idOf(x.j));
+  const ab = await call('POST', '/api/conversations', { cookie: SND, json: { user_id: 'usr_rcv' } }); const abId = ab.j?.id ?? ab.j?.conversation?.id;
+  const sent = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { body: 'x', media_ids: [fwdMedia] } }); const msgId = sent.j?.message?.id; ok('setup: sender sends media to receiver', sent.s === 201 && !!msgId, `status ${sent.s}`);
+  r = await call('GET', `/api/media/${fwdMedia}`, { cookie: OUT }); ok('an outsider cannot read message media -> 403', r.s === 403, `status ${r.s}`);
+  r = await call('GET', `/api/media/${fwdMedia}`, { cookie: RCV }); ok('POSITIVE CONTROL: the recipient reads message media', r.s === 200, `status ${r.s}`);
+  const ca = await call('POST', '/api/conversations', { cookie: OUT, json: { user_id: 'usr_snd' } }); const caId = ca.j?.id ?? ca.j?.conversation?.id;
+  r = await call('POST', `/api/messages/${msgId}/forward`, { cookie: OUT, json: { conversation_id: caId } }); ok('an outsider cannot forward a message they are not in -> 404', r.s === 404, `status ${r.s}`);
+  r = await call('POST', `/api/messages/nope/forward`, { cookie: OUT, json: { conversation_id: caId } }); ok('forwarding a missing message gives the same 404', r.s === 404, `status ${r.s}`);
+  r = await call('POST', `/api/messages/${msgId}/forward`, { cookie: RCV, json: { conversation_id: caId } }); ok('forwarding into a conversation you are not in -> 403', r.s === 403, `status ${r.s}`);
+  for (const bad of [null, 5, ['x'], {}]) { r = await call('POST', `/api/messages/${msgId}/forward`, { cookie: RCV, json: { conversation_id: bad } }); ok(`forward conversation_id ${JSON.stringify(bad)} rejected`, r.s === 400, `status ${r.s}`); }
+  r = await call('POST', `/api/conversations/${caId}/messages`, { cookie: OUT, json: { body: 'x', media_ids: [fwdMedia] } }); ok('sending someone else’s media id through the normal route -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('POST', `/api/messages/${msgId}/forward`, { json: { conversation_id: abId } }); ok('forward without a session -> 401', r.s === 401, `status ${r.s}`);
+}
+
 // ---------- EXPIRY / LIFECYCLE ----------
 const mk = async (id: string, author: string, ageDays: number, likers: string[], commenter: string[] = []) => {
   const created = new Date(Date.now() - ageDays * 864e5).toISOString();

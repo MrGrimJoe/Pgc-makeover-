@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseCsv, parseCampusCsv, campusId, buildCampusModule } from '../scripts/generate-campuses.ts';
-import { MIGRATION_005_ONBOARDING_SQL, MIGRATION_006_BUNDLED_CAMPUSES_SQL } from '../worker/db/migrate.ts';
+import { MIGRATION_005_ONBOARDING_SQL, MIGRATION_006_BUNDLED_CAMPUSES_SQL, MIGRATION_007_MEDIA_FOUNDATION_SQL } from '../worker/db/migrate.ts';
 
 describe('generate-campuses', () => {
   it('parses quoted fields, escaped quotes, CRLF and a BOM', () => {
@@ -41,6 +41,10 @@ describe('generate-campuses', () => {
 describe('migration files', () => {
   it('migrations/005_onboarding.sql matches the copy used by the test runner', () => {
     expect(readFileSync('migrations/005_onboarding.sql', 'utf8').trim()).toBe(MIGRATION_005_ONBOARDING_SQL.trim());
+  });
+
+  it('migrations/007_media_foundation.sql matches the copy used by the test runner', () => {
+    expect(readFileSync('migrations/007_media_foundation.sql', 'utf8').trim()).toBe(MIGRATION_007_MEDIA_FOUNDATION_SQL.trim());
   });
 
   it('migrations/006_bundled_campuses.sql matches the copy used by the test runner', () => {

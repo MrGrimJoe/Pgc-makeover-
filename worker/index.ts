@@ -44,6 +44,8 @@ import {
   type BlockItem,
 } from '../shared/schema.ts';
 import { checkRateLimit } from './rate-limit.ts';
+import { isBlockedBetween, canSendDmTo } from './permissions.ts';
+import { handleUpload, serveMedia, deleteOwnMedia, listLibrary, addToLibrary, removeFromLibrary, forwardMessage } from './media.ts';
 import { runPostLifecycleExpiry, deletePostAndMedia } from './jobs/expiry.ts';
 import { extractTopicsFromText } from './content/topics.ts';
 import { rankPosts, type CandidatePost, type UserRankingContext } from './ranking/engine.ts';
@@ -122,20 +124,6 @@ function decodeCursor(cursorStr: string): { createdAt: string; id: string } | nu
 }
 
 /**
- * Checks if userA has blocked userB or vice versa.
- */
-async function isBlockedBetween(db: D1Database, userA: string, userB: string): Promise<boolean> {
-  try {
-    const row = await db.prepare(
-      'SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1'
-    ).bind(userA, userB, userB, userA).first();
-    return !!row;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Gets all user IDs blocked with the given user in either direction.
  */
 async function getBlockedUserIds(db: D1Database, userId: string): Promise<string[]> {
@@ -149,46 +137,6 @@ async function getBlockedUserIds(db: D1Database, userId: string): Promise<string
   }
 }
 
-
-/**
- * Checks if sender is permitted to send a DM to recipient based on blocks and dm_policy.
- */
-async function canSendDmTo(
-  db: D1Database,
-  senderId: string,
-  recipientId: string
-): Promise<{ allowed: boolean; reason?: string }> {
-  // 1. Check blocking in either direction
-  const blocked = await isBlockedBetween(db, senderId, recipientId);
-  if (blocked) {
-    return { allowed: false, reason: 'Forbidden: Cannot message this user' };
-  }
-
-  // 2. Check recipient DM policy
-  const settings = await db.prepare(
-    'SELECT dm_policy FROM user_settings WHERE user_id = ?'
-  ).bind(recipientId).first<{ dm_policy: string }>();
-
-  // Default dm_policy is followed_only
-  const policy = settings?.dm_policy || 'followed_only';
-
-  if (policy === 'nobody' || policy === 'none') {
-    return { allowed: false, reason: 'Forbidden: User does not accept direct messages' };
-  }
-
-  if (policy === 'followed_only' || policy === 'following') {
-    // Recipient must follow sender
-    const isFollowed = await db.prepare(
-      'SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ? LIMIT 1'
-    ).bind(recipientId, senderId).first();
-
-    if (!isFollowed) {
-      return { allowed: false, reason: 'Forbidden: User only accepts direct messages from users they follow' };
-    }
-  }
-
-  return { allowed: true };
-}
 
 /**
  * Batch-hydrates posts to completely prevent N+1 queries.
@@ -2718,7 +2666,7 @@ export default {
           env.DB.prepare('INSERT INTO message_media (message_id, media_id) VALUES (?, ?)').bind(msgId, m.id)
         );
         batchStatements.push(
-          env.DB.prepare('UPDATE media SET expires_at = ? WHERE id = ?').bind(expiresAt, m.id)
+          env.DB.prepare('UPDATE media SET expires_at = MAX(expires_at, ?) WHERE id = ?').bind(expiresAt, m.id)
         );
       }
 
@@ -3089,248 +3037,59 @@ export default {
     // 7. MEDIA STORAGE (R2) & AUTHORIZED SERVING
     // ==========================================
 
-    // POST /api/media/uploads - Upload media (max 5 MB, jpeg/png/webp only) (FIX #4)
+    // POST /api/media/uploads - kinds, caps, quotas, metadata stripping and per-owner dedupe live in worker/media.ts
     if (pathname === '/api/media/uploads' && method === 'POST') {
       const auth = await authenticateRequest(request, env.DB);
-      if (!auth) {
-        return jsonResponse({ error: 'Unauthorized' }, 401);
-      }
-
-      // FIX #3: D1 rate limiter: max 20 uploads per hour per user
-      const rate = await checkRateLimit(env.DB, `upload:${auth.user.id}`, 20, 60 * 60 * 1000);
-      if (!rate.allowed) {
-        return jsonResponse(
-          { error: 'Rate limit exceeded: maximum 20 uploads per hour. Please try again later.' },
-          429,
-          { 'Retry-After': String(rate.retryAfterSeconds) }
-        );
-      }
-
-      // FIX #4: Reject by Content-Length before reading the body
-      const clHeader = request.headers.get('content-length');
-      const maxSizeBytes = 5 * 1024 * 1024;
-      if (clHeader) {
-        const declaredSize = Number(clHeader);
-        if (declaredSize > maxSizeBytes) {
-          return jsonResponse(
-            { error: `File exceeds maximum size of 5 MB (actual: ${(declaredSize / (1024 * 1024)).toFixed(2)} MB)` },
-            400
-          );
-        }
-      }
-
-      const contentType = request.headers.get('Content-Type') || '';
-      let fileBytes: Uint8Array;
-      let mimeType = '';
-
-      if (contentType.includes('multipart/form-data')) {
-        let formData: FormData;
-        try {
-          formData = await request.formData();
-        } catch {
-          return jsonResponse({ error: 'Invalid form data' }, 400);
-        }
-
-        const file = formData.get('file');
-        if (!file || typeof file === 'string') {
-          return jsonResponse({ error: 'Missing file field in form data' }, 400);
-        }
-
-        mimeType = (file as File).type;
-        const ab = await (file as File).arrayBuffer();
-        fileBytes = new Uint8Array(ab);
-      } else {
-        mimeType = contentType.split(';')[0]!.trim();
-        const ab = await request.arrayBuffer();
-        fileBytes = new Uint8Array(ab);
-      }
-
-      // Validate MIME type
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-      if (!allowedTypes.includes(mimeType)) {
-        return jsonResponse(
-          { error: `Invalid image type: "${mimeType}". Only JPEG, PNG, and WebP are supported.` },
-          400
-        );
-      }
-
-      // Validate file size
-      if (fileBytes.length === 0) {
-        return jsonResponse({ error: 'File is empty' }, 400);
-      }
-      if (fileBytes.length > maxSizeBytes) {
-        return jsonResponse(
-          { error: `File exceeds maximum size of 5 MB (actual: ${(fileBytes.length / (1024 * 1024)).toFixed(2)} MB)` },
-          400
-        );
-      }
-
-      // FIX #4: Verify magic bytes match declared type
-      const isJpeg =
-        fileBytes.length >= 3 && fileBytes[0] === 0xff && fileBytes[1] === 0xd8 && fileBytes[2] === 0xff;
-      const isPng =
-        fileBytes.length >= 4 &&
-        fileBytes[0] === 0x89 &&
-        fileBytes[1] === 0x50 &&
-        fileBytes[2] === 0x4e &&
-        fileBytes[3] === 0x47;
-      const isWebp =
-        fileBytes.length >= 12 &&
-        fileBytes[0] === 0x52 &&
-        fileBytes[1] === 0x49 &&
-        fileBytes[2] === 0x46 &&
-        fileBytes[3] === 0x46 &&
-        fileBytes[8] === 0x57 &&
-        fileBytes[9] === 0x45 &&
-        fileBytes[10] === 0x42 &&
-        fileBytes[11] === 0x50;
-
-      if (mimeType === 'image/jpeg' && !isJpeg) {
-        return jsonResponse({ error: 'File magic bytes do not match declared image/jpeg' }, 400);
-      }
-      if (mimeType === 'image/png' && !isPng) {
-        return jsonResponse({ error: 'File magic bytes do not match declared image/png' }, 400);
-      }
-      if (mimeType === 'image/webp' && !isWebp) {
-        return jsonResponse({ error: 'File magic bytes do not match declared image/webp' }, 400);
-      }
-
-      const mediaId = `med_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-      const objectKey = `media_${generateRandomString(24).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-
-      if (env.MEDIA_BUCKET) {
-        await env.MEDIA_BUCKET.put(objectKey, fileBytes, {
-          httpMetadata: { contentType: mimeType },
-        });
-      }
-
-      const nowMs = Date.now();
-      const createdAt = new Date(nowMs).toISOString();
-      const expiresAt = new Date(nowMs + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-      await env.DB.prepare(
-        'INSERT INTO media (id, owner_id, object_key, mime_type, size_bytes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      )
-        .bind(mediaId, auth.user.id, objectKey, mimeType, fileBytes.length, createdAt, expiresAt)
-        .run();
-
-      return jsonResponse(
-        {
-          id: mediaId,
-          object_key: objectKey,
-          mime_type: mimeType,
-          size_bytes: fileBytes.length,
-          created_at: createdAt,
-        },
-        201
-      );
+      if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+      return handleUpload(request, env, auth.user.id);
     }
 
-    // GET /api/media/:id - Authorized Worker route serving R2 stream with nosniff (FIX #4)
+    // Sticker/GIF library
+    if (pathname === '/api/stickers/library' && (method === 'GET' || method === 'POST')) {
+      const auth = await authenticateRequest(request, env.DB);
+      if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+      if (method === 'GET') return listLibrary(env, auth.user.id);
+      let body: any;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400);
+      }
+      return addToLibrary(env, auth.user.id, body?.media_id);
+    }
+    if (pathname.startsWith('/api/stickers/library/') && method === 'DELETE') {
+      const auth = await authenticateRequest(request, env.DB);
+      if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+      return removeFromLibrary(env, auth.user.id, pathname.slice('/api/stickers/library/'.length));
+    }
+
+    // POST /api/messages/:id/forward
+    if (/^\/api\/messages\/[^/]+\/forward$/.test(pathname) && method === 'POST') {
+      const auth = await authenticateRequest(request, env.DB);
+      if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+      let body: any;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400);
+      }
+      return forwardMessage(env, auth, pathname.split('/')[3]!, body?.conversation_id);
+    }
+
+    // GET /api/media/:id and /api/media/:id/thumb
     if (pathname.startsWith('/api/media/') && method === 'GET') {
       const auth = await authenticateRequest(request, env.DB);
-      if (!auth) {
-        return jsonResponse({ error: 'Unauthorized' }, 401);
-      }
-
-      const mediaId = pathname.slice('/api/media/'.length);
-      const media = await env.DB.prepare(
-        'SELECT id, owner_id, object_key, mime_type FROM media WHERE id = ?'
-      )
-        .bind(mediaId)
-        .first<MediaRow>();
-
-      if (!media) {
-        return jsonResponse({ error: 'Media not found' }, 404);
-      }
-
-      // Only the owner can GET /api/media/:id while it is not attached to any post or message
-      if (media.owner_id !== auth.user.id) {
-        let attached = await env.DB.prepare(
-          'SELECT 1 FROM post_media WHERE media_id = ?'
-        )
-          .bind(mediaId)
-          .first();
-
-        if (!attached) {
-          try {
-            attached = await env.DB.prepare(
-              'SELECT 1 FROM message_media WHERE media_id = ?'
-            )
-              .bind(mediaId)
-              .first();
-          } catch {
-            // message_media table may not exist in environments without migration 004
-          }
-        }
-
-        if (!attached) {
-          // Profile pictures are visible to signed-in people unless blocked in either direction
-          const avatarOwner = await env.DB.prepare('SELECT user_id FROM profiles WHERE avatar_media_id = ?')
-            .bind(mediaId)
-            .first<{ user_id: string }>();
-          if (avatarOwner && !(await isBlockedBetween(env.DB, auth.user.id, avatarOwner.user_id))) {
-            attached = { avatar: 1 };
-          }
-        }
-
-        if (!attached) {
-          return jsonResponse({ error: 'Forbidden' }, 403);
-        }
-      }
-
-      if (!env.MEDIA_BUCKET) {
-        return jsonResponse({ error: 'Storage unavailable' }, 503);
-      }
-
-      const r2Object = await env.MEDIA_BUCKET.get(media.object_key);
-      if (!r2Object) {
-        return jsonResponse({ error: 'Media file missing from storage' }, 404);
-      }
-
-      // FIX #4: add nosniff header on media responses
-      return new Response(r2Object.body as any, {
-        headers: {
-          'Content-Type': media.mime_type,
-          'X-Content-Type-Options': 'nosniff',
-          'Cache-Control': 'private, max-age=86400',
-        },
-      });
+      if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+      const rest = pathname.slice('/api/media/'.length);
+      const wantThumb = rest.endsWith('/thumb');
+      return serveMedia(request, env, auth.user.id, wantThumb ? rest.slice(0, -'/thumb'.length) : rest, wantThumb);
     }
 
-    // DELETE /api/media/:id - Delete media (owner only)
+    // DELETE /api/media/:id - owner only, refused while something still uses the file
     if (pathname.startsWith('/api/media/') && method === 'DELETE') {
       const auth = await authenticateRequest(request, env.DB);
-      if (!auth) {
-        return jsonResponse({ error: 'Unauthorized' }, 401);
-      }
-
-      const mediaId = pathname.slice('/api/media/'.length);
-      const media = await env.DB.prepare(
-        'SELECT id, owner_id, object_key FROM media WHERE id = ?'
-      )
-        .bind(mediaId)
-        .first<MediaRow>();
-
-      if (!media) {
-        return jsonResponse({ error: 'Media not found' }, 404);
-      }
-
-      if (media.owner_id !== auth.user.id) {
-        return jsonResponse({ error: 'Forbidden: You can only delete your own media' }, 403);
-      }
-
-      if (env.MEDIA_BUCKET) {
-        try {
-          await env.MEDIA_BUCKET.delete(media.object_key);
-        } catch {
-          // Ignore R2 error
-        }
-      }
-
-      await env.DB.prepare('DELETE FROM media WHERE id = ?').bind(mediaId).run();
-
-      return jsonResponse({ success: true, message: 'Media deleted successfully' });
+      if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+      return deleteOwnMedia(env, auth.user.id, pathname.slice('/api/media/'.length));
     }
 
     // ==========================================
