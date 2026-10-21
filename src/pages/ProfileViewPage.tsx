@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { PublicProfileResponse, PostItem } from '../../shared/schema.ts';
-import { MoreVertical } from 'lucide-react';
+import { MoreVertical, Settings } from 'lucide-react';
 import { ReportModal } from '../components/ReportModal.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { resolveProfileStyle } from '../../shared/presets.ts';
@@ -11,6 +11,8 @@ interface ProfileViewPageProps {
   currentUsername?: string;
   onNavigateToEditProfile?: () => void;
   onLogout?: () => Promise<void> | void;
+  /** Opens Settings (own profile only). */
+  onOpenSettings?: () => void;
   onOpenDirectMessage?: (user: {
     id?: string;
     username: string;
@@ -25,6 +27,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
   currentUsername,
   onNavigateToEditProfile,
   onLogout,
+  onOpenSettings,
   onOpenDirectMessage,
 }) => {
   const [profile, setProfile] = useState<PublicProfileResponse | null>(null);
@@ -262,6 +265,17 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                 >
                   Edit profile
                 </button>
+                {onOpenSettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    aria-label="Settings"
+                    title="Settings"
+                    className="min-h-[44px] min-w-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
+                  >
+                    <Settings className="w-5 h-5 stroke-[1.7]" aria-hidden="true" />
+                  </button>
+                )}
                 {onLogout && (
                   <button
                     type="button"

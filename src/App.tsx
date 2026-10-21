@@ -14,6 +14,7 @@ import { SearchPage } from './pages/SearchPage.tsx';
 import { PostComposerPage } from './pages/PostComposerPage.tsx';
 import { ProfileEditPage } from './pages/ProfileEditPage.tsx';
 import { ProfileViewPage } from './pages/ProfileViewPage.tsx';
+import { SettingsPage } from './pages/SettingsPage.tsx';
 import { MessagesPage } from './pages/MessagesPage.tsx';
 // DEV-ONLY: remove before launch
 import { DevBar } from './components/DevBar.tsx';
@@ -169,12 +170,20 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'profile' && currentUser && profileSubView === 'edit' && (
-            <ProfileEditPage
+          {activeTab === 'settings' && currentUser && (
+            <SettingsPage
               currentUser={currentUser}
               onProfileUpdated={handleProfileUpdated}
               onAccountDeleted={handleAccountDeleted}
               onLogout={handleLogout}
+              onBack={() => { setProfileSubView('view'); setActiveTab('profile'); }}
+            />
+          )}
+
+          {activeTab === 'profile' && currentUser && profileSubView === 'edit' && (
+            <ProfileEditPage
+              currentUser={currentUser}
+              onProfileUpdated={handleProfileUpdated}
               onViewPublicProfile={(u) => {
                 setViewUsername(u);
                 setProfileSubView('view');
@@ -189,6 +198,7 @@ export default function App() {
               currentUserId={currentUser.user.id}
               currentUsername={currentUser.profile.username}
               onNavigateToEditProfile={() => setProfileSubView('edit')}
+              onOpenSettings={() => setActiveTab('settings')}
               onLogout={handleLogout}
               onOpenDirectMessage={(targetUser) => {
                 setTargetMessageUser(targetUser);
@@ -204,7 +214,7 @@ export default function App() {
 
         {/* Bottom tab bar: icon-only, 4 tabs */}
         <BottomTabBar
-          activeTab={activeTab}
+          activeTab={activeTab === 'settings' ? 'profile' : activeTab}
           setActiveTab={(tab) => {
             if (tab === 'profile') {
               setViewUsername(currentUser?.profile.username || '');
