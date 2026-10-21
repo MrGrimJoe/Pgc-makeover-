@@ -24,4 +24,12 @@ This is the contract for where each feature lives. Navigation: bottom tabs Home,
 
 ## Status
 
-Built so far: the bundled campus list and the Edit profile campus picker. Everything else on this page is planned; see `docs/STATUS.md`.
+Built so far: the bundled campus list and picker; media foundation (kinds, caps, quotas, library, forwarding); Settings page; the chat (conversation list with profile pictures and previews, chat header with Block and Report, background, composer, attach sheet, preview, viewer).
+
+Where the code lives:
+- `src/pages/MessagesPage.tsx` (small shell), `src/components/chat/` (`ConversationList`, `ChatScreen`, `Composer`, `MessageBubble`, `AttachSheet`, `MediaPreview`, `MediaViewer`, `ForwardPicker`, `PickerPanel`, `ChatBackground`, `AnimatedMedia`), `src/lib/keyboard.ts` (`useKeyboardInset`).
+- `src/pages/SettingsPage.tsx`. Settings is reached from the gear on your own profile; it is not a bottom tab (the Profile tab stays highlighted).
+
+Out of scope for now: drawing and text editing on media (the preview offers rotate, crop to a shape, and "Send as" only), third-party GIF search, per-chat backgrounds.
+
+Planned: bundled stickers/GIFs and sticker keys in posts and comments, the profile background from your own image, polls. See `docs/STATUS.md`.

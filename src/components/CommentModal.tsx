@@ -1,3 +1,4 @@
+import { Composer } from './chat/Composer.tsx';
 import React, { useState, useEffect } from 'react';
 import type { CommentItem, CommentsResponse } from '../../shared/schema.ts';
 import { X, Trash2 } from 'lucide-react';
@@ -17,7 +18,6 @@ export const CommentModal: React.FC<CommentModalProps> = ({
 }) => {
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,9 +40,8 @@ export const CommentModal: React.FC<CommentModalProps> = ({
     fetchComments();
   }, [postId]);
 
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!commentText.trim()) return;
+  const addComment = async (text: string) => {
+    if (!text.trim()) return;
 
     setSubmitting(true);
     setError(null);
@@ -50,7 +49,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       const res = await fetch(`/api/posts/${postId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: commentText.trim() }),
+        body: JSON.stringify({ body: text.trim() }),
       });
 
       if (!res.ok) {
@@ -60,10 +59,10 @@ export const CommentModal: React.FC<CommentModalProps> = ({
 
       const newComment = (await res.json()) as CommentItem;
       setComments((prev) => [...prev, newComment]);
-      setCommentText('');
       if (onCommentCountChange) onCommentCountChange(1);
     } catch (err) {
       setError((err as Error).message);
+      throw err; // keeps the text in the box so nothing typed is lost
     } finally {
       setSubmitting(false);
     }
@@ -158,24 +157,9 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         </div>
 
         {/* Input box */}
-        <form onSubmit={handleAddComment} className="pt-3 border-t border-border flex items-center gap-2">
-          <input
-            type="text"
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Add a comment..."
-            aria-label="Add a comment"
-            maxLength={500}
-            className="flex-1 min-h-[44px] bg-bg border border-border rounded-sm px-3 py-2 text-[15px] text-text focus:outline-none focus:border-primary transition-colors"
-          />
-          <button
-            type="submit"
-            disabled={submitting || !commentText.trim()}
-            className="min-h-[44px] px-3 font-semibold text-[14px] text-primary hover:text-primary-hover disabled:opacity-40 cursor-pointer transition-colors"
-          >
-            {submitting ? 'Posting...' : 'Post'}
-          </button>
-        </form>
+        <div className="pt-3 border-t border-border">
+          <Composer variant="compact" onSend={addComment} busy={submitting} placeholder="Add a comment..." label="Add a comment" maxLength={500} />
+        </div>
       </div>
     </div>
   );

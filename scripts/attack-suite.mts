@@ -263,6 +263,13 @@ r = await call('GET', '/api/me', { cookie: ayesha }); ok('free-text campus repla
   for (const bad of [null, 5, ['x'], {}]) { r = await call('POST', `/api/messages/${msgId}/forward`, { cookie: RCV, json: { conversation_id: bad } }); ok(`forward conversation_id ${JSON.stringify(bad)} rejected`, r.s === 400, `status ${r.s}`); }
   r = await call('POST', `/api/conversations/${caId}/messages`, { cookie: OUT, json: { body: 'x', media_ids: [fwdMedia] } }); ok('sending someone else’s media id through the normal route -> 400', r.s === 400, `status ${r.s}`);
   r = await call('POST', `/api/messages/${msgId}/forward`, { json: { conversation_id: abId } }); ok('forward without a session -> 401', r.s === 401, `status ${r.s}`);
+  // message shape rules: media-only is fine, empty is not, at most 4 attachments, unknown fields rejected
+  r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { body: '   ' } }); ok('empty message with no media -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { body: 'x', media_ids: [fwdMedia, fwdMedia, fwdMedia, fwdMedia, fwdMedia] } }); ok('5 attachments -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { body: 'x', media_ids: ['med_does_not_exist'] } }); ok('unknown media id -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { body: 'x', sender_id: 'usr_rcv' } }); ok('extra field (sender_id) rejected', r.s === 400, `status ${r.s}`);
+  r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { media_ids: [fwdMedia] } }); ok('POSITIVE CONTROL: media-only message is accepted', r.s === 201, `status ${r.s}`);
+  r = await call('GET', '/api/conversations', { cookie: RCV }); ok('conversation list previews the media kind of the last message', r.j?.conversations?.[0]?.last_message?.media_kind === 'sticker', JSON.stringify(r.j?.conversations?.[0]?.last_message).slice(0, 120));
 }
 
 // ---------- EXPIRY / LIFECYCLE ----------

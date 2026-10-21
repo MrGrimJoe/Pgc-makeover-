@@ -69,7 +69,11 @@ export const Composer: React.FC<ComposerProps> = ({
   const submit = async () => {
     if (!canSend) return;
     const value = text.trim();
-    await onSend(value);
+    try {
+      await onSend(value);
+    } catch {
+      return; // the caller shows the error; the text stays so nothing typed is lost
+    }
     setText('');
     ta.current?.focus();
   };

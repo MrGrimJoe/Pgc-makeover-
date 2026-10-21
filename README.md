@@ -146,7 +146,7 @@ Executes Vitest tests verifying:
 - Strict isolation preventing a user from editing another user's profile
 - Migrations execution from an empty database
 - Log in vs sign up, sign-up tickets, onboarding validation, username availability and the privacy of the roll number and email
-- The bundled campus list and its generator, free-text campuses, search scopes, suggested people and profile style presets (including WCAG contrast of every preset)
+- The bundled campus list and its generator, free-text campuses, search scopes, the Settings page, chat with photos, stickers and GIFs, and a phone-only chat background, suggested people and profile style presets (including WCAG contrast of every preset)
 - Profile pictures: ownership, visibility, blocks, and survival of the cleanup job
 - Accessibility (axe-core) and interactive tests of the sign-in, onboarding, campus picker and style picker screens
 

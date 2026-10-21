@@ -236,3 +236,17 @@ Fixed in this version: the orphan cleanup used to ignore `message_media`, so a m
 
 ### Client compression (`src/lib/media.ts`)
 Photos are scaled to at most 1600 px on the long edge and re-encoded as WebP at about 0.8 (JPEG where WebP encoding is unsupported), with a 320 px thumbnail. Stickers are 512x512 WebP, contain-fit with transparent padding. GIFs and clips are uploaded as they are within the cap; over the cap they are refused with a "trim it" message (conversion to a looping WebM is offered only where WebCodecs `ImageDecoder` and `VideoEncoder` exist, never required). Cloudflare Image Transformations are deliberately not used: the free plan allows 5,000 unique transformations a month and each extra size counts separately. They remain a possible future option.
+
+---
+
+## 9. Chat, Settings and the chat background
+
+- **Chat background** is a per-phone setting (six plain-CSS presets: Plain, Paper, Mint, Sky, Night, Dots, or the person's own picture). The picture is downscaled in the browser to at most 1280 px WebP under about 300 KB and kept in IndexedDB, keyed by user id. It is never uploaded, so it costs no storage and needs no moderation. It does not follow the person to another phone.
+- **Contrast:** an imported picture always sits under a 90% scrim in the app surface color (`IMAGE_SCRIM_ALPHA` in `shared/chat-background.ts`). `tests/chat-background.test.ts` computes the contrast of body text and timestamps for every preset and for worst-case pictures (black, white, saturated colors) in light and dark, and fails below 4.5:1. The test also reads `src/index.css`, so changing a theme color without updating the model fails the build. Expiry chips and the Report button sit on an opaque pill, not on the wallpaper.
+- **Dark theme `--danger`:** was missing, so red text on the dark background measured about 2.9:1. It is now `#E5767C` in both dark blocks.
+- **Messages** may be media only, with up to 4 attachments (`kind` photo, sticker, gif or video). Conversation previews report the kind of the last attachment (`media_kind`) and the app shows "Photo", "Sticker", "GIF" or "Video" when there is no text.
+- **Reports:** reporting a message stores media ids, kinds and SHA-256 hashes in the evidence snapshot, so a moderator can identify the exact files even after storage cleanup.
+- **Settings** holds: chat background, who can message you, blocked people, interests, my stickers & GIFs, sign out, delete account. Edit profile holds identity and look only.
+
+### Moderation honesty
+There is no automatic image or video scanner. Safety rests on reporting, blocking, short retention (messages 14 days, posts 7 to 14 days), read rules (media is readable only where it is attached, or by its owner) and the upload limits above. Reporting and blocking are available wherever new content appears: the chat menu, each message, the media viewer, posts, comments and profiles.

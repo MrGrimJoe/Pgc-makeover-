@@ -341,3 +341,18 @@ describe('message rendering', () => {
     expect(await axeViolations(m.container)).toBe('');
   });
 });
+
+describe('Composer keeps the text when sending fails', () => {
+  it('does not clear the field when onSend rejects (positive control: it clears when it succeeds)', async () => {
+    let fail = true;
+    const onSend = vi.fn(async () => { if (fail) throw new Error('nope'); });
+    m = await mount(<Composer variant="compact" onSend={onSend} label="Add a comment" />);
+    const field = byLabel(m.container, 'Add a comment') as HTMLTextAreaElement;
+    await typeInto(field, 'keep me');
+    await click(byLabel(m.container, 'Send'));
+    expect(field.value).toBe('keep me');
+    fail = false;
+    await click(byLabel(m.container, 'Send'));
+    expect(field.value).toBe('');
+  });
+});
