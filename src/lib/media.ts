@@ -131,8 +131,9 @@ async function encodeBest(env: MediaEnv, draw: Parameters<MediaEnv['encode']>[0]
  * Decodes, scales to at most 1600 px on the long edge, and encodes WebP at about 0.8 (JPEG as a fallback).
  * Also makes a 320 px thumbnail. Re-encoding strips EXIF. Throws a readable error when the result is still too big.
  */
-export async function compressPhoto(file: Blob, env: MediaEnv, opts: { maxEdge?: number; kind?: 'photo' | 'background'; crop?: CropRect; rotate90?: number } = {}): Promise<PreparedImage> {
+export async function compressPhoto(file: Blob, env: MediaEnv, opts: { maxEdge?: number; maxBytes?: number; kind?: 'photo' | 'background'; crop?: CropRect; rotate90?: number } = {}): Promise<PreparedImage> {
   const kind = opts.kind ?? 'photo';
+  const cap = opts.maxBytes ?? MEDIA_SIZE_CAPS[kind];
   const img = await env.decode(file);
   try {
     const turns = (((opts.rotate90 ?? 0) % 4) + 4) % 4;
@@ -150,11 +151,11 @@ export async function compressPhoto(file: Blob, env: MediaEnv, opts: { maxEdge?:
     let blob = await encodeBest(env, drawAt(size), size);
     let outSize = size;
     // Still over the cap (rare, very detailed photos): step the size down a few times before giving up
-    for (let i = 0; i < 3 && blob.size > MEDIA_SIZE_CAPS[kind]; i++) {
+    for (let i = 0; i < 3 && blob.size > cap; i++) {
       outSize = scaleToLongEdge(outSize.width, outSize.height, Math.round(Math.max(outSize.width, outSize.height) * 0.75));
       blob = await encodeBest(env, drawAt(outSize), outSize);
     }
-    if (blob.size > MEDIA_SIZE_CAPS[kind]) throw new Error(sizeMessage(kind, blob.size));
+    if (blob.size > cap) throw new Error(opts.maxBytes ? `The picture is still ${(blob.size / 1024).toFixed(0)} KB after shrinking. Try a simpler picture.` : sizeMessage(kind, blob.size));
     const thumbSize = scaleToLongEdge(outSize.width, outSize.height, THUMB_MAX_EDGE);
     let thumb: Blob | null = await encodeBest(env, drawAt(thumbSize), thumbSize);
     if (thumb.size > THUMBNAIL_MAX_BYTES) thumb = null; // a missing thumbnail is fine; the server never requires one
