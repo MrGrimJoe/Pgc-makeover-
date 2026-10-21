@@ -165,18 +165,24 @@ export type CreateConversationInput = z.infer<typeof createConversationSchema>;
  */
 export const createMessageSchema = z
   .object({
+    /** Text is optional when the message carries media. */
     body: z
       .string()
       .trim()
-      .min(1, { message: 'Message content cannot be empty' })
-      .max(2000, { message: 'Message content cannot exceed 2000 characters' }),
+      .max(2000, { message: 'Message content cannot exceed 2000 characters' })
+      .optional()
+      .default(''),
     media_ids: z
       .array(z.string().min(1))
-      .max(1, { message: 'Maximum 1 image allowed per message' })
+      .max(4, { message: 'Maximum 4 attachments per message' })
       .optional()
       .default([]),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.body.length > 0 || v.media_ids.length > 0, {
+    message: 'Message content cannot be empty',
+    path: ['body'],
+  });
 
 export type CreateMessageInput = z.infer<typeof createMessageSchema>;
 
@@ -298,6 +304,11 @@ export interface MediaItem {
   object_key: string;
   mime_type: string;
   size_bytes: number;
+  /** photo | sticker | gif | video | background */
+  kind?: string;
+  width?: number | null;
+  height?: number | null;
+  duration_ms?: number | null;
 }
 
 /**
@@ -421,6 +432,8 @@ export interface ConversationItem {
     body: string;
     sent_at: string;
     expires_at: string;
+    /** Kind of the first attachment (photo, sticker, gif, video), or null for a text-only message. */
+    media_kind?: string | null;
   } | null;
 }
 

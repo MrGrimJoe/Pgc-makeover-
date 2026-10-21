@@ -2320,7 +2320,8 @@ export default {
 
       for (const conv of convList) {
         const lastMsg = await env.DB.prepare(
-          `SELECT id, sender_id, body, sent_at, expires_at
+          `SELECT id, sender_id, body, sent_at, expires_at,
+                  (SELECT m.kind FROM message_media mm JOIN media m ON m.id = mm.media_id WHERE mm.message_id = messages.id LIMIT 1) AS media_kind
            FROM messages
            WHERE conversation_id = ? AND expires_at > ?
            ORDER BY sent_at DESC, id DESC
@@ -2333,6 +2334,7 @@ export default {
             body: string;
             sent_at: string;
             expires_at: string;
+            media_kind: string | null;
           }>();
 
         conversations.push({
@@ -2419,14 +2421,15 @@ export default {
       if (existing) {
         const nowIso = new Date().toISOString();
         const lastMsg = await env.DB.prepare(
-          `SELECT id, sender_id, body, sent_at, expires_at
+          `SELECT id, sender_id, body, sent_at, expires_at,
+                  (SELECT m.kind FROM message_media mm JOIN media m ON m.id = mm.media_id WHERE mm.message_id = messages.id LIMIT 1) AS media_kind
            FROM messages
            WHERE conversation_id = ? AND expires_at > ?
            ORDER BY sent_at DESC, id DESC
            LIMIT 1`
         )
           .bind(existing.id, nowIso)
-          .first<{ id: string; sender_id: string; body: string; sent_at: string; expires_at: string }>();
+          .first<{ id: string; sender_id: string; body: string; sent_at: string; expires_at: string; media_kind: string | null }>();
 
         const item: ConversationItem = {
           id: existing.id,
@@ -2538,13 +2541,13 @@ export default {
       if (messageIds.length > 0) {
         const placeholders = messageIds.map(() => '?').join(',');
         const mediaRows = await env.DB.prepare(
-          `SELECT mm.message_id, m.id, m.object_key, m.mime_type, m.size_bytes
+          `SELECT mm.message_id, m.id, m.object_key, m.mime_type, m.size_bytes, m.kind, m.width, m.height, m.duration_ms
            FROM message_media mm
            JOIN media m ON m.id = mm.media_id
            WHERE mm.message_id IN (${placeholders})`
         )
           .bind(...messageIds)
-          .all<{ message_id: string; id: string; object_key: string; mime_type: string; size_bytes: number }>();
+          .all<{ message_id: string; id: string; object_key: string; mime_type: string; size_bytes: number; kind: string; width: number | null; height: number | null; duration_ms: number | null }>();
 
         for (const mr of mediaRows.results || []) {
           const list = mediaMap.get(mr.message_id) || [];
@@ -2553,6 +2556,10 @@ export default {
             object_key: mr.object_key,
             mime_type: mr.mime_type,
             size_bytes: mr.size_bytes,
+            kind: mr.kind,
+            width: mr.width,
+            height: mr.height,
+            duration_ms: mr.duration_ms,
           });
           mediaMap.set(mr.message_id, list);
         }
@@ -2633,10 +2640,10 @@ export default {
       if (media_ids && media_ids.length > 0) {
         for (const mid of media_ids) {
           const m = await env.DB.prepare(
-            'SELECT id, owner_id, object_key, mime_type, size_bytes FROM media WHERE id = ?'
+            'SELECT id, owner_id, object_key, mime_type, size_bytes, kind, width, height, duration_ms FROM media WHERE id = ?'
           )
             .bind(mid)
-            .first<MediaRow>();
+            .first<MediaRow & { kind: string; width: number | null; height: number | null; duration_ms: number | null }>();
 
           if (!m || m.owner_id !== auth.user.id) {
             return jsonResponse({ error: `Invalid media attachment: ${mid}` }, 400);
@@ -2646,6 +2653,10 @@ export default {
             object_key: m.object_key,
             mime_type: m.mime_type,
             size_bytes: m.size_bytes,
+            kind: m.kind,
+            width: m.width,
+            height: m.height,
+            duration_ms: m.duration_ms,
           });
         }
       }
@@ -2864,12 +2875,12 @@ export default {
 
       if (target_type === 'message' && reportedMessage) {
         const mediaRows = await env.DB.prepare(
-          `SELECT m.object_key FROM media m
+          `SELECT m.id, m.object_key, m.kind, m.sha256 FROM media m
            JOIN message_media mm ON mm.media_id = m.id
            WHERE mm.message_id = ?`
         )
           .bind(reportedMessage.id)
-          .all<{ object_key: string }>();
+          .all<{ id: string; object_key: string; kind: string; sha256: string | null }>();
 
         const attachmentKeys = (mediaRows.results || []).map((r) => r.object_key);
         const snapshot = JSON.stringify({
@@ -2880,6 +2891,8 @@ export default {
           sent_at: reportedMessage.sent_at,
           expires_at: reportedMessage.expires_at,
           attachment_keys: attachmentKeys,
+          // Media ids, kinds and hashes so a moderator can identify the exact files even after storage cleanup
+          attachments: (mediaRows.results || []).map((r) => ({ media_id: r.id, kind: r.kind, sha256: r.sha256 })),
         });
 
         const evidenceId = `evi_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;

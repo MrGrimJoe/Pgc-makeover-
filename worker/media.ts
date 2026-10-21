@@ -422,10 +422,10 @@ export async function forwardMessage(
   }
 
   const mediaRows = await env.DB.prepare(
-    `SELECT m.id, m.object_key, m.mime_type, m.size_bytes FROM message_media mm JOIN media m ON m.id = mm.media_id WHERE mm.message_id = ?`
+    `SELECT m.id, m.object_key, m.mime_type, m.size_bytes, m.kind, m.width, m.height, m.duration_ms FROM message_media mm JOIN media m ON m.id = mm.media_id WHERE mm.message_id = ?`
   )
     .bind(messageId)
-    .all<{ id: string; object_key: string; mime_type: string; size_bytes: number }>();
+    .all<{ id: string; object_key: string; mime_type: string; size_bytes: number; kind: string; width: number | null; height: number | null; duration_ms: number | null }>();
   const media = mediaRows.results || [];
 
   const nowMs = Date.now();
@@ -451,7 +451,7 @@ export async function forwardMessage(
         body: original.body,
         sent_at: sentAt,
         expires_at: expiresAt,
-        media: media.map((m) => ({ id: m.id, object_key: m.object_key, mime_type: m.mime_type, size_bytes: m.size_bytes })),
+        media: media.map((m) => ({ id: m.id, object_key: m.object_key, mime_type: m.mime_type, size_bytes: m.size_bytes, kind: m.kind, width: m.width, height: m.height, duration_ms: m.duration_ms })),
       },
     },
     201
