@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "packs": {
+    "placeholder": {
+      "next": 13,
+      "items": {
+        "1": {
+          "file": "placeholder-1.webp",
+          "sha256": "11f5fc6c59f3c4731fd722d4a715d38487e5ae7d3120aab9060590fa776e79cc",
+          "retired": false
+        },
+        "2": {
+          "file": "placeholder-2.webp",
+          "sha256": "afaecfe3568dc8cf7e8b79e52e2934596f6737af401811b5589cd59648b6c6c3",
+          "retired": false
+        },
+        "3": {
+          "file": "placeholder-3.webp",
+          "sha256": "557ccfcc6bb1c9ebb70e03c21282e2871e94af3f2ddc1ba876476f7c76486d17",
+          "retired": false
+        },
+        "4": {
+          "file": "placeholder-4.webp",
+          "sha256": "474c4690054cc0d61402ce82621f04dd9dfdc0fd698252af1f67f737c0adff3b",
+          "retired": false
+        },
+        "5": {
+          "file": "placeholder-5.webp",
+          "sha256": "8793697592cbbd52e85d5d6b0f6df66b65e3ea1596f9779043575e6daec796f7",
+          "retired": false
+        },
+        "6": {
+          "file": "placeholder-6.webp",
+          "sha256": "4a9e4548dc8534f1e43b6228f4a59039fd73dd49af77286d702f55f2462aa77f",
+          "retired": false
+        },
+        "7": {
+          "file": "placeholder-7.webp",
+          "sha256": "4b8b86aca9b9b38e9230524ed63b370184c081faf571e2f4af26d6b30b8f4738",
+          "retired": false
+        },
+        "8": {
+          "file": "placeholder-8.webp",
+          "sha256": "1d4fd00fcc171af7ad7d30f5554885d0e0305ddcb15698d06c7d173e905aa98d",
+          "retired": false
+        },
+        "9": {
+          "file": "placeholder-gif-1.gif",
+          "sha256": "c56fd40f19ec10449ecf98ee29a4d408ec1b318473112950f454d67a76faaab6",
+          "retired": false
+        },
+        "10": {
+          "file": "placeholder-gif-2.gif",
+          "sha256": "22cc3e269c3626f6c6d5a036856fa0323070a94ed1a9a58318cd24d79483639e",
+          "retired": false
+        },
+        "11": {
+          "file": "placeholder-gif-3.gif",
+          "sha256": "61b18e53e0157fc98549b87d004ab556352150e4cf5e4a63bcb3a0419bc9d2bb",
+          "retired": false
+        },
+        "12": {
+          "file": "placeholder-gif-4.gif",
+          "sha256": "1366b790576bca8d1bc2feabf18587f14602f7c106b2eb8cd29a24a97df9cadc",
+          "retired": false
+        }
+      }
+    }
+  }
+}
