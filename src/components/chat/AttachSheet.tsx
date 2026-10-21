@@ -56,8 +56,8 @@ export const AttachSheet: React.FC<AttachSheetProps> = ({ onClose, onFiles, onSt
         <button type="button" onClick={onClose} className="w-full min-h-[44px] rounded-[10px] bg-transparent border-0 text-[var(--muted,#5B6577)] text-[14px] font-semibold cursor-pointer">
           Cancel
         </button>
-        <input ref={camera} type="file" accept="image/*" capture="environment" onChange={pick} className="hidden" aria-label="Take a photo" data-testid="camera-input" />
-        <input ref={gallery} type="file" accept={GALLERY_ACCEPT} multiple onChange={pick} className="hidden" aria-label="Choose from gallery" data-testid="gallery-input" />
+        <input ref={camera} type="file" tabIndex={-1} accept="image/*" capture="environment" onChange={pick} className="hidden" aria-label="Take a photo" data-testid="camera-input" />
+        <input ref={gallery} type="file" tabIndex={-1} accept={GALLERY_ACCEPT} multiple onChange={pick} className="hidden" aria-label="Choose from gallery" data-testid="gallery-input" />
       </div>
     </div>
   );

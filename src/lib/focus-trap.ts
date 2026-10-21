@@ -1,6 +1,7 @@
 import { useEffect, type RefObject } from 'react';
 
-const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+// Hidden file inputs (opened by a button) and anything with tabindex -1 are not part of the tab order
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]):not([type="file"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /**
  * Keeps keyboard focus inside a dialog, closes it on Escape, moves focus in when it opens and gives it back to
@@ -12,7 +13,7 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, onEscape: () =>
     const root = ref.current;
     if (!root) return;
     const opener = document.activeElement as HTMLElement | null;
-    const items = () => [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => !el.hasAttribute('hidden'));
+    const items = () => [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => !el.hasAttribute('hidden') && el.getAttribute('tabindex') !== '-1');
     (items()[0] ?? root).focus();
 
     const onKey = (e: KeyboardEvent) => {

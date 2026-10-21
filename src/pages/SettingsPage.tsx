@@ -176,7 +176,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
               {bgBusy ? 'Preparing...' : 'Your picture'}
             </button>
           </div>
-          <input ref={bgFile} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose a picture for the chat background" className="hidden" data-testid="bg-input"
+          <input ref={bgFile} type="file" tabIndex={-1} accept="image/jpeg,image/png,image/webp" aria-label="Choose a picture for the chat background" className="hidden" data-testid="bg-input"
             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importImage(f); }} />
           <div className="flex items-center justify-between">
             <span className="text-[13px] text-[var(--muted,#5B6577)]">Current: {bgName}</span>
@@ -240,7 +240,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
             </ul>
           )}
           <button type="button" onClick={() => libFile.current?.click()} className={ghost}>Add from phone</button>
-          <input ref={libFile} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple aria-label="Choose pictures to add" className="hidden" data-testid="settings-library-input"
+          <input ref={libFile} type="file" tabIndex={-1} accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple aria-label="Choose pictures to add" className="hidden" data-testid="settings-library-input"
             onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) setAddFiles(f); }} />
         </section>
 

@@ -90,7 +90,7 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ onPick, onAddFiles, re
         <button type="button" onClick={() => file.current?.click()} className="w-full min-h-[44px] rounded-[10px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center justify-center gap-1.5">
           <Plus className="w-4 h-4" aria-hidden="true" />Add from phone
         </button>
-        <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple aria-label="Choose pictures to add" className="hidden" data-testid="library-input"
+        <input ref={file} type="file" tabIndex={-1} accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple aria-label="Choose pictures to add" className="hidden" data-testid="library-input"
           onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) onAddFiles(f); }} />
       </div>
     </div>

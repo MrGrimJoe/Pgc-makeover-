@@ -22,7 +22,15 @@ export interface UploadedMedia extends MediaItem {
 
 /** Reads the first bytes of a file (enough to identify its type). */
 export async function readHead(file: Blob, n = 32): Promise<Uint8Array> {
-  return new Uint8Array(await file.slice(0, n).arrayBuffer());
+  const part = file.slice(0, n);
+  if (typeof part.arrayBuffer === 'function') return new Uint8Array(await part.arrayBuffer());
+  // Older browsers and test environments without Blob.arrayBuffer
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the file'));
+    reader.readAsArrayBuffer(part);
+  });
 }
 
 export async function uploadBlob(
