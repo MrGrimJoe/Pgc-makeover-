@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 
 interface ReportModalProps {
-  targetType: 'post' | 'comment' | 'user';
+  targetType: 'post' | 'comment' | 'user' | 'message';
   targetId: string;
   onClose: () => void;
   onReportSubmitted: () => void;
