@@ -185,3 +185,54 @@ describe('makeSticker (mocked canvas)', () => {
     await expect(makeSticker(new Blob(['x']), fakeEnv({ width: 512, height: 512, bytesPerPixel: 9 }).env)).rejects.toThrow(/at most 0\.29 MB/);
   });
 });
+
+import { rotatedSize, rotateRect, cropForAspect, cropFramePercent, sendAsOptions } from '../src/lib/media.ts';
+
+describe('preview geometry', () => {
+  it('rotates sizes and rectangles clockwise, and four turns return to the start', () => {
+    expect(rotatedSize(400, 300, 1)).toEqual({ width: 300, height: 400 });
+    expect(rotatedSize(400, 300, 2)).toEqual({ width: 400, height: 300 });
+    expect(rotatedSize(400, 300, -1)).toEqual({ width: 300, height: 400 });
+    const r = { x: 10, y: 20, width: 100, height: 50 };
+    expect(rotateRect(r, 400, 300, 1)).toEqual({ x: 300 - 20 - 50, y: 10, width: 50, height: 100 });
+    expect(rotateRect(r, 400, 300, 2)).toEqual({ x: 400 - 10 - 100, y: 300 - 20 - 50, width: 100, height: 50 });
+    expect(rotateRect(r, 400, 300, 4)).toEqual(r);
+  });
+
+  it('crops to the wanted aspect, slides along the free axis, and stays inside the image', () => {
+    expect(cropForAspect(400, 300, 'original', 0)).toBeNull();
+    expect(cropForAspect(400, 300, '1:1', 0)).toEqual({ x: 50, y: 0, width: 300, height: 300 });
+    expect(cropForAspect(400, 300, '1:1', 0, 0, 0)).toEqual({ x: 0, y: 0, width: 300, height: 300 });
+    expect(cropForAspect(400, 300, '1:1', 0, 1, 1)).toEqual({ x: 100, y: 0, width: 300, height: 300 });
+    expect(cropForAspect(300, 400, '16:9', 0)).toEqual({ x: 0, y: Math.round((400 - 168) / 2), width: 300, height: 168 });
+    for (const a of ['1:1', '4:3', '3:4', '16:9'] as const) {
+      for (const turns of [0, 1, 2, 3]) {
+        const c = cropForAspect(1234, 777, a, turns, 1, 1)!;
+        expect(c.x + c.width).toBeLessThanOrEqual(1234);
+        expect(c.y + c.height).toBeLessThanOrEqual(777);
+      }
+    }
+  });
+
+  it('after a quarter turn the result has the wanted aspect, not the source one', () => {
+    const c = cropForAspect(400, 300, '16:9', 1)!;
+    const out = rotatedSize(c.width, c.height, 1);
+    expect(out.width / out.height).toBeCloseTo(16 / 9, 1);
+  });
+
+  it('places the crop frame on the stage (whole image when there is no crop)', () => {
+    expect(cropFramePercent(400, 300, null, 0)).toEqual({ left: 0, top: 12.5, width: 100, height: 75 });
+    expect(cropFramePercent(300, 400, null, 0)).toEqual({ left: 12.5, top: 0, width: 75, height: 100 });
+    const c = cropForAspect(400, 300, '1:1', 0)!;
+    expect(cropFramePercent(400, 300, c, 0)).toEqual({ left: 12.5, top: 12.5, width: 75, height: 75 });
+    // rotated: the stage shows the 300x400 result
+    expect(cropFramePercent(400, 300, null, 1)).toEqual({ left: 12.5, top: 0, width: 75, height: 100 });
+  });
+
+  it('offers sensible "send as" choices per source type', () => {
+    expect(sendAsOptions('image/jpeg')).toEqual(['photo', 'sticker']);
+    expect(sendAsOptions('image/gif')).toEqual(['gif', 'sticker']);
+    expect(sendAsOptions('video/mp4')).toEqual(['gif']);
+    expect(sendAsOptions(null)).toEqual([]);
+  });
+});

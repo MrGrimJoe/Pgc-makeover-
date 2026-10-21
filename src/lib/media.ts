@@ -231,3 +231,86 @@ export function browserMediaEnv(): MediaEnv {
     },
   };
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Preview helpers: rotate, crop to an aspect ratio, and where to draw the crop frame. All pure.
+// ---------------------------------------------------------------------------------------------------------------
+
+export type CropAspect = 'original' | '1:1' | '4:3' | '3:4' | '16:9';
+export const CROP_ASPECTS: ReadonlyArray<{ id: CropAspect; label: string; ratio: number | null }> = [
+  { id: 'original', label: 'Original', ratio: null },
+  { id: '1:1', label: 'Square', ratio: 1 },
+  { id: '4:3', label: '4:3', ratio: 4 / 3 },
+  { id: '3:4', label: '3:4', ratio: 3 / 4 },
+  { id: '16:9', label: '16:9', ratio: 16 / 9 },
+];
+
+/** Size after turning a quarter turn `turns` times (clockwise). */
+export function rotatedSize(width: number, height: number, turns: number): Size {
+  return (((turns % 4) + 4) % 4) % 2 ? { width: height, height: width } : { width, height };
+}
+
+/** Rotates a rectangle drawn on a width x height image by `turns` clockwise quarter turns. */
+export function rotateRect(rect: CropRect, width: number, height: number, turns: number): CropRect {
+  let r = rect;
+  let w = width;
+  let h = height;
+  for (let i = 0; i < ((turns % 4) + 4) % 4; i++) {
+    r = { x: h - r.y - r.height, y: r.x, width: r.height, height: r.width };
+    [w, h] = [h, w];
+  }
+  return r;
+}
+
+/**
+ * The biggest crop of a source image whose result (after `turns` quarter turns) has the wanted width/height ratio.
+ * `ox` and `oy` (0 to 1) slide the frame along the axis that has room. The rectangle is in source coordinates,
+ * which is what compressPhoto expects. Returns null for "original" (no crop).
+ */
+export function cropForAspect(srcW: number, srcH: number, aspect: CropAspect, turns: number, ox = 0.5, oy = 0.5): CropRect | null {
+  const ratio = CROP_ASPECTS.find((a) => a.id === aspect)?.ratio ?? null;
+  if (ratio === null) return null;
+  const odd = (((turns % 4) + 4) % 4) % 2 === 1;
+  const srcRatio = odd ? 1 / ratio : ratio; // the ratio the crop needs in source space
+  let w = srcW;
+  let h = srcW / srcRatio;
+  if (h > srcH) {
+    h = srcH;
+    w = srcH * srcRatio;
+  }
+  w = Math.max(1, Math.floor(w));
+  h = Math.max(1, Math.floor(h));
+  const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+  return { x: Math.round((srcW - w) * clamp01(ox)), y: Math.round((srcH - h) * clamp01(oy)), width: w, height: h };
+}
+
+/**
+ * Where to draw the crop frame on a square stage that shows the rotated image with object-fit: contain.
+ * Returns percentages of the stage.
+ */
+export function cropFramePercent(srcW: number, srcH: number, crop: CropRect | null, turns: number): { left: number; top: number; width: number; height: number } {
+  const rot = rotatedSize(srcW, srcH, turns);
+  const ar = rot.width / rot.height;
+  const contentW = ar >= 1 ? 100 : ar * 100;
+  const contentH = ar >= 1 ? 100 / ar : 100;
+  const offX = (100 - contentW) / 2;
+  const offY = (100 - contentH) / 2;
+  const r = crop ? rotateRect(crop, srcW, srcH, turns) : { x: 0, y: 0, width: rot.width, height: rot.height };
+  const round = (v: number) => Math.round(v * 100) / 100;
+  return {
+    left: round(offX + (r.x / rot.width) * contentW),
+    top: round(offY + (r.y / rot.height) * contentH),
+    width: round((r.width / rot.width) * contentW),
+    height: round((r.height / rot.height) * contentH),
+  };
+}
+
+export type SendAs = 'photo' | 'sticker' | 'gif';
+
+/** Which "Send as" choices make sense for a source file type (first entry is the default). */
+export function sendAsOptions(mime: SniffedType | null): SendAs[] {
+  if (mime === 'image/jpeg' || mime === 'image/png' || mime === 'image/webp') return ['photo', 'sticker'];
+  if (mime === 'image/gif') return ['gif', 'sticker'];
+  if (mime === 'video/mp4' || mime === 'video/webm') return ['gif'];
+  return [];
+}
