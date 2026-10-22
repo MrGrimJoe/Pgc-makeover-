@@ -1,13 +1,22 @@
 import React, { useRef, useState } from 'react';
 import type { MediaItem } from '../../shared/schema.ts';
-import { Image, X } from 'lucide-react';
+import { Image, Smile, X } from 'lucide-react';
+import { PickerPanel } from '../components/chat/PickerPanel.tsx';
+import { MediaPreview } from '../components/chat/MediaPreview.tsx';
+import { StickerView } from '../components/StickerView.tsx';
+import { useFocusTrap } from '../lib/focus-trap.ts';
+import { browserMediaEnv, compressPhoto } from '../lib/media.ts';
+import { prepareAndUpload, uploadBlob } from '../lib/media-upload.ts';
 
 interface PostComposerPageProps {
+  /** The signed-in person (recent stickers are remembered per person on this device). */
+  currentUserId: string;
   onPostCreated: () => void;
   onCancel?: () => void;
 }
 
 export const PostComposerPage: React.FC<PostComposerPageProps> = ({
+  currentUserId,
   onPostCreated,
   onCancel,
 }) => {
@@ -17,7 +26,14 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const photoPickerDisabled = mediaList.length >= 4 || uploading;
+  // A post carries photos OR one sticker/GIF (polls join them later), never a mix
+  const [stickerKey, setStickerKey] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [addFiles, setAddFiles] = useState<File[] | null>(null);
+  const [libraryKey, setLibraryKey] = useState(0);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(sheetRef, () => setPickerOpen(false), pickerOpen);
+  const photoPickerDisabled = mediaList.length >= 4 || uploading || !!stickerKey;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -32,28 +48,12 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
     setError(null);
 
     try {
+      const env = browserMediaEnv();
       for (let i = 0; i < files.length; i++) {
         const file = files[i]!;
-
-        // Validate size (5MB max)
-        if (file.size > 5 * 1024 * 1024) {
-          throw new Error(`"${file.name}" exceeds 5 MB limit.`);
-        }
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const res = await fetch('/api/media/uploads', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const errData = (await res.json()) as { error?: string };
-          throw new Error(errData.error || `Upload failed for "${file.name}"`);
-        }
-
-        const mediaItem = (await res.json()) as MediaItem;
+        // Scaled to 1600 px and re-encoded on the phone before upload: saves data, drops EXIF
+        const prepared = await compressPhoto(file, env);
+        const mediaItem = await uploadBlob(prepared.blob, 'photo', { width: prepared.width, height: prepared.height, thumb: prepared.thumb });
         setMediaList((prev) => [...prev, mediaItem]);
       }
     } catch (err) {
@@ -82,6 +82,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         body: JSON.stringify({
           body: body.trim(),
           media_ids: mediaList.map((m) => m.id),
+          ...(stickerKey ? { sticker_key: stickerKey } : {}),
         }),
       });
 
@@ -92,6 +93,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
 
       setBody('');
       setMediaList([]);
+      setStickerKey(null);
       onPostCreated();
     } catch (err) {
       setError((err as Error).message);
@@ -171,6 +173,13 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         </div>
       )}
 
+      {stickerKey && (
+        <div className="flex items-center gap-2 px-4 py-2">
+          <StickerView stickerKey={stickerKey} size={96} />
+          <button type="button" onClick={() => setStickerKey(null)} aria-label="Remove sticker" className="min-h-[44px] px-3 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[13px] text-[var(--text,#17233A)] cursor-pointer">Remove</button>
+        </div>
+      )}
+
       {/* Image attach icon button */}
       <div className="px-4 py-1 flex items-center gap-2">
         {/* A real button (aria-label is not allowed on <label>): focusable, Enter/Space work,
@@ -196,6 +205,16 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
           aria-hidden="true"
           className="hidden"
         />
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          disabled={mediaList.length > 0 || uploading}
+          title="Add sticker or GIF"
+          aria-label="Add sticker or GIF"
+          className="w-[44px] h-[44px] flex items-center justify-center text-[var(--blue,#244C8A)] hover:opacity-80 cursor-pointer transition-opacity bg-transparent border-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Smile className="w-6 h-6 stroke-[1.7]" aria-hidden="true" />
+        </button>
         {uploading && <span className="text-[13px] text-[var(--muted,#5B6577)]">Uploading...</span>}
       </div>
 
@@ -204,6 +223,33 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         <i className="inline-block w-2 h-2 rounded-full bg-[var(--yellow,#F2C94C)] mr-1.5 shrink-0" />
         <span>Disappears in 7 days, or 14 if 3 classmates engage.</span>
       </div>
+
+      {pickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setPickerOpen(false)}>
+          <div ref={sheetRef} role="dialog" aria-modal="true" aria-label="Choose a sticker or GIF" tabIndex={-1} onClick={(e) => e.stopPropagation()} className="w-full max-w-[430px] h-[60vh] bg-[var(--bg,#fff)] rounded-t-[16px] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
+            <div className="flex-1 min-h-0">
+              <PickerPanel userId={currentUserId} reloadKey={libraryKey} onPick={(key) => { setStickerKey(key); setPickerOpen(false); }} onAddFiles={(files) => setAddFiles(files)} />
+            </div>
+            <button type="button" onClick={() => setPickerOpen(false)} className="min-h-[44px] bg-transparent border-0 text-[14px] font-semibold text-[var(--muted,#5B6577)] cursor-pointer">Close</button>
+          </div>
+        </div>
+      )}
+      {addFiles && (
+        <MediaPreview
+          files={addFiles}
+          mode="library"
+          onCancel={() => setAddFiles(null)}
+          onConfirm={async (items) => {
+            for (const item of items) {
+              const uploaded = await prepareAndUpload(item);
+              const r = await fetch('/api/stickers/library', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: uploaded.id }) });
+              if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error || 'Could not add it.');
+            }
+            setAddFiles(null);
+            setLibraryKey((k) => k + 1);
+          }}
+        />
+      )}
     </div>
   );
 };

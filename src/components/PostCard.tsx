@@ -1,3 +1,4 @@
+import { StickerView } from './StickerView.tsx';
 import React, { useState } from 'react';
 import type { PostItem } from '../../shared/schema.ts';
 import { ExpiryChip } from './ExpiryChip.tsx';
@@ -71,7 +72,9 @@ export const PostCard: React.FC<PostCardProps> = ({
     }
   };
 
-  const hasImage = post.media && post.media.length > 0;
+  // Photos only: an uploaded sticker or GIF is shown through sticker_key, not as a full-bleed picture
+  const photos = (post.media ?? []).filter((m) => !m.kind || m.kind === 'photo');
+  const hasImage = photos.length > 0;
   const isAuthor = post.author_id === currentUserId;
 
   const renderBodyWithTags = (text: string) => {
@@ -177,7 +180,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           {/* Full-bleed image at 4:5 aspect ratio */}
           <div className="w-full aspect-[4/5] bg-[var(--bg2,#F8F9FC)] overflow-hidden">
             <img
-              src={`/api/media/${post.media[0]!.id}`}
+              src={`/api/media/${photos[0]!.id}`}
               alt={`Photo post by @${post.author_username}`}
               className="w-full h-full object-cover"
               loading="lazy"
@@ -238,6 +241,12 @@ export const PostCard: React.FC<PostCardProps> = ({
             {renderBodyWithTags(post.body)}
           </div>
 
+          {post.sticker_key && (
+            <div className="px-4 pt-2">
+              <StickerView stickerKey={post.sticker_key} size={160} media={post.media} />
+            </div>
+          )}
+
           {/* Comments link */}
           <div className="px-4 pt-1 pb-1 text-[13px] text-[var(--muted,#5B6577)]">
             <button
@@ -257,6 +266,12 @@ export const PostCard: React.FC<PostCardProps> = ({
           <div className="px-4 pt-0 pb-1 text-[17px] leading-normal break-words">
             {renderBodyWithTags(post.body)}
           </div>
+
+          {post.sticker_key && (
+            <div className="px-4 pt-2">
+              <StickerView stickerKey={post.sticker_key} size={160} media={post.media} />
+            </div>
+          )}
 
           {/* Action Row */}
           <div className="flex items-center gap-4 px-4 pt-2.5">

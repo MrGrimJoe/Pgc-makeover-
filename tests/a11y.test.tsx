@@ -39,7 +39,7 @@ function describeViolations(results: Awaited<ReturnType<typeof scan>>): string {
 
 describe('Accessibility (axe-core, wcag2a + wcag2aa + wcag21aa)', () => {
   it('Compose screen has no violations', async () => {
-    const results = await scan(renderToStaticMarkup(<PostComposerPage onPostCreated={() => {}} />));
+    const results = await scan(renderToStaticMarkup(<PostComposerPage currentUserId="usr_me" onPostCreated={() => {}} />));
     expect(results.passes.length, 'axe should have actually run rules').toBeGreaterThan(0);
     expect(results.violations, describeViolations(results)).toEqual([]);
   });

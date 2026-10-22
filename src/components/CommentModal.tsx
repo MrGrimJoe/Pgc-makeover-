@@ -1,4 +1,9 @@
 import { Composer } from './chat/Composer.tsx';
+import { PickerPanel } from './chat/PickerPanel.tsx';
+import { MediaPreview } from './chat/MediaPreview.tsx';
+import { ReportModal } from './ReportModal.tsx';
+import { StickerView } from './StickerView.tsx';
+import { prepareAndUpload } from '../lib/media-upload.ts';
 import React, { useState, useEffect } from 'react';
 import type { CommentItem, CommentsResponse } from '../../shared/schema.ts';
 import { X, Trash2 } from 'lucide-react';
@@ -20,6 +25,11 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [stickerKey, setStickerKey] = useState<string | null>(null);
+  const [reportingId, setReportingId] = useState<string | null>(null);
+  const [addFiles, setAddFiles] = useState<File[] | null>(null);
+  const [libraryKey, setLibraryKey] = useState(0);
 
   const fetchComments = async () => {
     setLoading(true);
@@ -41,7 +51,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   }, [postId]);
 
   const addComment = async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() && !stickerKey) return;
 
     setSubmitting(true);
     setError(null);
@@ -49,7 +59,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       const res = await fetch(`/api/posts/${postId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: text.trim() }),
+        body: JSON.stringify({ body: text.trim(), ...(stickerKey ? { sticker_key: stickerKey } : {}) }),
       });
 
       if (!res.ok) {
@@ -58,6 +68,8 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       }
 
       const newComment = (await res.json()) as CommentItem;
+      setStickerKey(null);
+      setPickerOpen(false);
       setComments((prev) => [...prev, newComment]);
       if (onCommentCountChange) onCommentCountChange(1);
     } catch (err) {
@@ -151,14 +163,61 @@ export const CommentModal: React.FC<CommentModalProps> = ({
                     </button>
                   )}
                 </div>
-                <p className="text-text text-[15px] whitespace-pre-wrap">{comment.body}</p>
+                {comment.body && <p className="text-text text-[15px] whitespace-pre-wrap">{comment.body}</p>}
+                {comment.sticker_key && <StickerView stickerKey={comment.sticker_key} size={120} />}
+                {comment.author_id !== currentUserId && (
+                  <button type="button" onClick={() => setReportingId(comment.id)} aria-label="Report this comment" className="min-h-[44px] px-1 bg-transparent border-0 text-[12px] text-text-muted hover:text-danger cursor-pointer">Report</button>
+                )}
               </div>
             ))}
         </div>
 
         {/* Input box */}
         <div className="pt-3 border-t border-border">
-          <Composer variant="compact" onSend={addComment} busy={submitting} placeholder="Add a comment..." label="Add a comment" maxLength={500} />
+          {stickerKey && (
+            <div className="flex items-center gap-2 pb-2">
+              <StickerView stickerKey={stickerKey} size={56} />
+              <button type="button" onClick={() => setStickerKey(null)} aria-label="Remove sticker" className="min-h-[44px] px-3 rounded-full border border-border bg-transparent text-[13px] text-text cursor-pointer">Remove</button>
+            </div>
+          )}
+          <Composer
+            variant="compact"
+            onSend={addComment}
+            busy={submitting}
+            placeholder="Add a comment..."
+            label="Add a comment"
+            maxLength={500}
+            canSendEmpty={!!stickerKey}
+            pickerOpen={pickerOpen}
+            onTogglePicker={() => setPickerOpen((o) => !o)}
+            picker={
+              <PickerPanel
+                userId={currentUserId}
+                reloadKey={libraryKey}
+                onPick={(key) => { setStickerKey(key); setPickerOpen(false); }}
+                onAddFiles={(files) => setAddFiles(files)}
+              />
+            }
+          />
+          {addFiles && (
+            <MediaPreview
+              files={addFiles}
+              mode="library"
+              onCancel={() => setAddFiles(null)}
+              onConfirm={async (items) => {
+                for (const item of items) {
+                  const uploaded = await prepareAndUpload(item);
+                  const r = await fetch('/api/stickers/library', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: uploaded.id }) });
+                  if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error || 'Could not add it.');
+                }
+                setAddFiles(null);
+                setLibraryKey((k) => k + 1);
+              }}
+            />
+          )}
+          {reportingId && (
+            <ReportModal targetType="comment" targetId={reportingId} onClose={() => setReportingId(null)} onReportSubmitted={() => setReportingId(null)} />
+          )}
         </div>
       </div>
     </div>

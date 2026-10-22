@@ -8,7 +8,7 @@ import { MessageBubble } from './MessageBubble.tsx';
 import { AttachSheet } from './AttachSheet.tsx';
 import { MediaPreview } from './MediaPreview.tsx';
 import { MediaViewer } from './MediaViewer.tsx';
-import { PickerPanel, type LibraryEntry } from './PickerPanel.tsx';
+import { PickerPanel } from './PickerPanel.tsx';
 import { ChatBackground } from './ChatBackground.tsx';
 import { loadChatBackground, type ChatBackgroundChoice } from '../../lib/chat-background.ts';
 import { prepareAndUpload, type PickedItem } from '../../lib/media-upload.ts';
@@ -63,11 +63,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
   }, [conversation.id]);
   useEffect(() => { void load(); }, [load]);
 
-  const post = async (body: string, mediaIds: string[]) => {
+  const post = async (body: string, mediaIds: string[], stickerKey?: string) => {
     const res = await fetch(`/api/conversations/${conversation.id}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body, media_ids: mediaIds }),
+      body: JSON.stringify({ body, media_ids: mediaIds, ...(stickerKey ? { sticker_key: stickerKey } : {}) }),
     });
     if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || 'Failed to send message');
     const data = (await res.json()) as { message: MessageItem };
@@ -108,11 +108,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
     setPreviewFiles(null);
   };
 
-  const pickFromLibrary = async (entry: LibraryEntry) => {
+  // Stickers and GIFs go by key only: app:<pack>/<number> or usr:<mediaId>
+  const pickSticker = async (key: string) => {
     setSending(true);
     setError(null);
     try {
-      await post('', [entry.media_id]);
+      await post('', [], key);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -191,7 +192,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
             key={pickerTab}
             initialTab={pickerTab}
             reloadKey={libraryKey}
-            onPick={(e) => void pickFromLibrary(e)}
+            userId={currentUserId}
+            onPick={(key) => void pickSticker(key)}
             onAddFiles={(files) => { setPreviewMode('library'); setPreviewFiles(files); }}
           />
         }

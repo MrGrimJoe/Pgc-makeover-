@@ -2,6 +2,7 @@ import React from 'react';
 import type { MessageItem, MediaItem } from '../../../shared/schema.ts';
 import { ExpiryChip } from '../ExpiryChip.tsx';
 import { AnimatedMedia } from './AnimatedMedia.tsx';
+import { StickerView } from '../StickerView.tsx';
 
 interface MessageBubbleProps {
   msg: MessageItem;
@@ -19,8 +20,15 @@ export function mediaLabel(m: MediaItem): string {
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isSelf, onOpenMedia, onReport }) => {
-  const media = msg.media ?? [];
-  const stickersOnly = media.length > 0 && !msg.body && media.every(isSticker);
+  const stickerKey = msg.sticker_key ?? null;
+  // An uploaded sticker named by the key is also attached; show it once, through the key
+  const media = (msg.media ?? []).filter((m) => !(stickerKey && stickerKey === `usr:${m.id}`));
+  const stickersOnly = !msg.body && (!!stickerKey || media.length > 0) && media.every(isSticker);
+  const keyedSticker = stickerKey ? (
+    <div className="flex flex-col items-start">
+      <StickerView stickerKey={stickerKey} size={160} media={msg.media} />
+    </div>
+  ) : null;
 
   const renderMedia = (m: MediaItem, i: number) => {
     const open = () => onOpenMedia(msg, i);
@@ -56,7 +64,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isSelf, onOpe
   return (
     <div className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}>
       {stickersOnly ? (
-        <div className="flex flex-wrap gap-1 justify-end">{mediaBlock}</div>
+        <div className="flex flex-wrap gap-1 justify-end">{keyedSticker}{mediaBlock}</div>
       ) : (
         <div
           className={`max-w-[80%] px-3.5 py-2 text-[15px] leading-relaxed break-words whitespace-pre-wrap ${
@@ -65,6 +73,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isSelf, onOpe
               : 'bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] rounded-[16px] rounded-bl-[4px]'
           }`}
         >
+          {keyedSticker}
           {mediaBlock}
           {msg.body}
         </div>

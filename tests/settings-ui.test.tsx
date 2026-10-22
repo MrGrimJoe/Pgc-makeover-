@@ -195,13 +195,13 @@ describe('Chat screen flow', () => {
     expect(m.container.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it('picking from the sticker panel sends that library item by id', async () => {
+  it('picking from the sticker panel sends that library item by key', async () => {
     const net = installFetch(routes()); restores.push(net.restore);
     m = await open(); await flush();
     await click(byLabel(m.container, 'Stickers and GIFs')); await flush(); await flush();
     expect(m.container.querySelector('[data-testid="picker-panel"]')).not.toBeNull();
-    await click(byLabel(m.container, 'Send sticker')); await flush();
-    expect(net.calls.find((c) => c.method === 'POST' && c.url.includes('messages'))?.body).toEqual({ body: '', media_ids: ['med_sticker'] });
+    await click(byLabel(m.container, 'Send Sticker')); await flush();
+    expect(net.calls.find((c) => c.method === 'POST' && c.url.includes('messages'))?.body).toEqual({ body: '', media_ids: [], sticker_key: 'usr:med_sticker' });
   });
 
   it('the menu offers Block and Report', async () => {

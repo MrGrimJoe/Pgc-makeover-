@@ -4,18 +4,26 @@ import type { MediaItem } from '../../../shared/schema.ts';
 import { usePrefersReducedMotion } from '../../lib/motion.ts';
 
 interface AnimatedMediaProps {
-  media: MediaItem;
+  /** An uploaded file (its URL and type come from the row). */
+  media?: MediaItem;
+  /** Or a plain source, for bundled GIFs. */
+  src?: string;
+  video?: boolean;
+  width?: number | null;
+  height?: number | null;
   className?: string;
   label?: string;
 }
 
 /** A GIF or short loop. Autoplays muted; with reduced motion it waits behind a play button. */
-export const AnimatedMedia: React.FC<AnimatedMediaProps> = ({ media, className = '', label = 'GIF' }) => {
+export const AnimatedMedia: React.FC<AnimatedMediaProps> = ({ media, src: srcProp, video, width, height, className = '', label = 'GIF' }) => {
   const reduced = usePrefersReducedMotion();
   const [playing, setPlaying] = useState(false);
-  const src = `/api/media/${encodeURIComponent(media.id)}`;
-  const isVideo = media.mime_type.startsWith('video/');
-  const style: React.CSSProperties = media.width && media.height ? { aspectRatio: `${media.width} / ${media.height}` } : {};
+  const src = srcProp ?? `/api/media/${encodeURIComponent(media?.id ?? '')}`;
+  const isVideo = video ?? media?.mime_type.startsWith('video/') ?? false;
+  const w = width ?? media?.width;
+  const h = height ?? media?.height;
+  const style: React.CSSProperties = w && h ? { aspectRatio: `${w} / ${h}` } : {};
 
   if (reduced && !playing) {
     return (

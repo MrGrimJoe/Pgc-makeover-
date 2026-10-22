@@ -156,6 +156,7 @@ export default function App() {
 
           {activeTab === 'post' && currentUser && (
             <PostComposerPage
+              currentUserId={currentUser?.user.id ?? ''}
               onPostCreated={() => setActiveTab('feed')}
               onCancel={() => setActiveTab('feed')}
             />
