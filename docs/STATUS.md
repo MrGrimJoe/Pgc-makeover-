@@ -21,9 +21,13 @@ Base commit: `ba1d936`. Patches are cumulative from that base.
   - Chat background presets and image import (on the phone), numeric contrast tests.
   - Fix: dark-mode `--danger` was 2.9:1.
 
+- **Phase 4: stickers and GIFs** (`phase-4-stickers.patch`, applies on top of the Phase 3 patch)
+  - Bundled catalog: `public/stickers/<pack>/`, `scripts/build-stickers.ts`, permanent append-only `numbering.json`, generated `shared/stickers.ts`, 8 MB budget warning, **placeholder pack** (README, "Stickers and GIFs": replace before launch).
+  - Keys `app:<pack>/<number>` and `usr:<mediaId>` validated on the server; migrations 008 and 009; `comment_media`; evidence snapshots for posts and comments.
+  - `StickerView`, picker (Stickers/GIFs, Recent on device only, Mine, packs, Manage), stickers in chats, posts and comments, Report on comments, post composer compresses photos and takes photos or one sticker.
+
 ## Not started
-- Phase 3 leftover: the compact composer is used for comments, but the New post page still has its own text box (it also holds photos and the future poll and sticker choice). It moves to the shared composer with the sticker work in Phase 4.
-- Phase 4: bundled stickers/GIFs (keys, manifest, numbering), sticker keys on posts and comments, picker packs.
+- Phase 3 leftover: the compact composer is used for comments, but the New post page still has its own text box (it also holds photos and the future poll and sticker choice). The post page does now take photos or one sticker/GIF, and compresses photos, but its text box is its own.
 - Phase 5: profile background from the person's own image; polls on posts.
 
 ## Not verified

@@ -11,6 +11,7 @@ import { createSqliteD1 } from '../worker/db/sqlite-d1.ts';
 import { createMemoryR2Bucket } from '../worker/db/r2-shim.ts';
 import { runMigrations, ALL_MIGRATIONS } from '../worker/db/migrate.ts';
 import { CAMPUSES } from '../shared/campuses.ts';
+import { STICKER_PACKS } from '../shared/stickers.ts';
 import { runPostLifecycleExpiry } from '../worker/jobs/expiry.ts';
 
 const db: any = createSqliteD1(':memory:'); const r2: any = createMemoryR2Bucket();
@@ -270,6 +271,31 @@ r = await call('GET', '/api/me', { cookie: ayesha }); ok('free-text campus repla
   r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { body: 'x', sender_id: 'usr_rcv' } }); ok('extra field (sender_id) rejected', r.s === 400, `status ${r.s}`);
   r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { media_ids: [fwdMedia] } }); ok('POSITIVE CONTROL: media-only message is accepted', r.s === 201, `status ${r.s}`);
   r = await call('GET', '/api/conversations', { cookie: RCV }); ok('conversation list previews the media kind of the last message', r.j?.conversations?.[0]?.last_message?.media_kind === 'sticker', JSON.stringify(r.j?.conversations?.[0]?.last_message).slice(0, 120));
+  // sticker keys: forged, malformed, someone else's file, wrong kind, mixed content
+  const SK = STICKER_PACKS[0]!; const skKey = `app:${SK.id}/${SK.items[0]!.number}`;
+  await clearRL();
+  for (const key of ['app:placeholder/999999', 'app:nope/1', "app:placeholder/1'; DROP TABLE posts;--", '../../etc/passwd', 'javascript:alert(1)', 'usr:med_does_not_exist', 'usr:../../x', 'app:placeholder/0', 'x'.repeat(300), 7, ['app:placeholder/1'], { k: 1 }]) {
+    r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { sticker_key: key } }); ok(`message sticker_key ${JSON.stringify(key).slice(0, 28)} -> 400`, r.s === 400, `status ${r.s}`);
+    await clearRL(); r = await call('POST', '/api/posts', { cookie: SND, json: { body: 'x', sticker_key: key } }); ok(`post sticker_key ${JSON.stringify(key).slice(0, 28)} -> 400`, r.s === 400, `status ${r.s}`);
+  }
+  await clearRL(); r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { sticker_key: skKey } }); ok('POSITIVE CONTROL: a bundled sticker key is accepted and nothing is written to media', r.s === 201 && (r.j?.message?.media ?? []).length === 0, `status ${r.s}`);
+  const otherSticker = await upKind(OUT, webp(77), 'image/webp', 'sticker').then((x: any) => idOf(x.j));
+  r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { sticker_key: `usr:${otherSticker}` } }); ok('using another person’s private sticker by key -> 400 (same as a missing one)', r.s === 400, `status ${r.s}`);
+  await clearRL(); r = await call('POST', '/api/posts', { cookie: SND, json: { body: 'x', sticker_key: `usr:${otherSticker}` } }); ok('post: another person’s private sticker -> 400', r.s === 400, `status ${r.s}`);
+  const photoForKey = await up(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9]), 'image/png', 'k.png', SND).then((x: any) => idOf(x.j));
+  r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { sticker_key: `usr:${photoForKey}` } }); ok('a photo cannot be used as a sticker key -> 400', r.s === 400, `status ${r.s}`);
+  await clearRL(); r = await call('POST', '/api/posts', { cookie: SND, json: { body: 'x', media_ids: [photoForKey], sticker_key: skKey } }); ok('post with photos AND a sticker -> 400', r.s === 400, `status ${r.s}`);
+  const stickerAsPhoto = await upKind(SND, webp(78), 'image/webp', 'sticker').then((x: any) => idOf(x.j));
+  await clearRL(); r = await call('POST', '/api/posts', { cookie: SND, json: { body: 'x', media_ids: [stickerAsPhoto] } }); ok('a sticker cannot be smuggled into a post as a photo -> 400', r.s === 400, `status ${r.s}`);
+  await clearRL(); const skPost = await call('POST', '/api/posts', { cookie: SND, json: { body: 'sticker post', sticker_key: skKey } }); ok('POSITIVE CONTROL: a post with a bundled sticker is accepted', skPost.s === 201, `status ${skPost.s}`);
+  await clearRL(); r = await call('POST', `/api/posts/${skPost.j?.id}/comments`, { cookie: RCV, json: {} }); ok('empty comment -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('POST', `/api/posts/${skPost.j?.id}/comments`, { cookie: RCV, json: { sticker_key: skKey, body: 'hi', admin: true } }); ok('comment with an extra field -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('POST', `/api/posts/${skPost.j?.id}/comments`, { cookie: RCV, json: { sticker_key: skKey } }); ok('POSITIVE CONTROL: a sticker-only comment is accepted', r.s === 201 && r.j?.sticker_key === skKey, `status ${r.s}`);
+  const commentSticker = await upKind(RCV, webp(79), 'image/webp', 'sticker').then((x: any) => idOf(x.j));
+  await clearRL(); r = await call('POST', `/api/posts/${skPost.j?.id}/comments`, { cookie: RCV, json: { sticker_key: `usr:${commentSticker}` } }); ok('comment with an uploaded sticker accepted', r.s === 201, `status ${r.s}`);
+  r = await call('GET', `/api/media/${commentSticker}`, { cookie: SND }); ok('the post author can read the comment sticker', r.s === 200, `status ${r.s}`);
+  r = await call('POST', '/api/blocks', { cookie: SND, json: { user_id: 'usr_rcv' } }); r = await call('GET', `/api/media/${commentSticker}`, { cookie: SND }); ok('after blocking the commenter, their comment sticker is unreadable -> 403', r.s === 403, `status ${r.s}`);
+  r = await call('POST', '/api/stickers/library', { cookie: OUT, json: { media_id: commentSticker } }); ok('cannot add a sticker you do not own to your library', r.s === 404 || r.s === 403, `status ${r.s}`);
 }
 
 // ---------- EXPIRY / LIFECYCLE ----------
