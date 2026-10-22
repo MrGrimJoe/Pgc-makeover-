@@ -250,3 +250,22 @@ Photos are scaled to at most 1600 px on the long edge and re-encoded as WebP at 
 
 ### Moderation honesty
 There is no automatic image or video scanner. Safety rests on reporting, blocking, short retention (messages 14 days, posts 7 to 14 days), read rules (media is readable only where it is attached, or by its owner) and the upload limits above. Reporting and blocking are available wherever new content appears: the chat menu, each message, the media viewer, posts, comments and profiles.
+
+---
+
+## 10. Stickers, GIFs and the R2 free tier
+
+### Adding or changing bundled stickers
+See "Stickers and GIFs" in the README. In short: put images under `public/stickers/<pack>/`, run `npm run build:stickers`, commit `shared/stickers.ts` and `public/stickers/numbering.json`. Bundled stickers cost **no R2 storage and no R2 operations**: they are static assets served by the Worker with `Cache-Control: public, max-age=31536000, immutable`. The URL carries a short content hash (`?v=...`), so a replaced file is fetched fresh while unchanged ones stay cached.
+
+### Keys
+`app:<pack>/<number>` (checked against the shipped manifest) or `usr:<mediaId>` (checked against the sender's read rights; an uploaded sticker or GIF is also attached through `message_media`, `post_media` or `comment_media`, so retention and read rules are the same as for any attachment). Posts and comments that use an uploaded sticker keep it for as long as they exist; messages for 14 days.
+
+### If you pass the R2 free tier
+The free tier covers 10 GB of storage and a monthly number of reads and writes. Where the numbers come from here: every uploaded photo, sticker, GIF, clip and thumbnail is one or two R2 writes and every view is a read (browsers cache for a day). Things to do, cheapest first:
+1. Check usage in the Cloudflare dashboard (R2, then the bucket, then Metrics).
+2. Lower the caps or the per-person quota in `shared/media-rules.ts` (`MEDIA_SIZE_CAPS`, `MEDIA_QUOTA_BYTES`) and deploy. They apply to new uploads only.
+3. Shorten retention if needed: message media goes when its last message expires (`worker/jobs/expiry.ts`), posts at 7 to 14 days.
+4. Prefer bundled stickers: moving popular uploaded stickers into a bundled pack removes their R2 cost entirely.
+5. Last resort: move to the paid R2 plan (pay per GB and per million operations). Nothing in the app needs to change.
+`SELECT owner_id, SUM(size_bytes + thumb_size_bytes) AS bytes FROM media GROUP BY owner_id ORDER BY bytes DESC LIMIT 20;` shows who uses the most.

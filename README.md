@@ -282,6 +282,7 @@ Before opening the platform to real students, verify all production hardening cr
 - [ ] **Verify `wrangler.toml` configuration**:
   - `database_id` is set to the real provisioned D1 UUID (not `placeholder-d1-id`).
   - `ENVIRONMENT = "production"` under `[vars]`.
+- [ ] **Replace the placeholder stickers and GIFs** with the real ones (see "Stickers and GIFs" above). `npm run build` warns until `public/stickers/placeholder/` is gone.
 - [ ] **Run Prelaunch Check**:
   Execute the prelaunch verification gate and verify it passes:
   ```bash
@@ -290,6 +291,31 @@ Before opening the platform to real students, verify all production hardening cr
   Must print `Prelaunch Check: PASS` before students are invited.
 - [ ] **Google OAuth Status**: Move Google OAuth Consent Screen publishing status from "Testing" to "In production" so any school student can sign in without needing manual inclusion on a whitelist.
 - [ ] **Establish Database Backups**: Verify backup commands work as documented in `docs/operations.md` (`npm run db:backup`).
+
+---
+
+## Stickers and GIFs
+
+> ### TODO BEFORE LAUNCH: replace the placeholder stickers
+> The app ships with **stand-in stickers and GIFs** so the whole feature works today: `public/stickers/placeholder/` (8 stickers numbered 1 to 8 and 4 GIFs, each drawn with the word PLACEHOLDER). The pack is called **"Placeholders (replace me)"** in the picker on purpose, so it cannot be forgotten. `npm run build` also prints a `WARNING: A PLACEHOLDER pack is still in the catalog` line until they are gone.
+>
+> **To replace them with the real art:**
+> 1. Make a folder per pack: `public/stickers/<pack-id>/` (lowercase letters, digits and dashes, for example `cats`). Put a `pack.json` in it: `{ "name": "Cats", "order": 1 }` (lower `order` shows first). Optional `"alts": { "happy-cat.webp": "A happy cat" }` gives screen-reader text; otherwise the file name is used.
+> 2. Drop the images in. **Stickers:** 512 x 512, transparent WebP (or PNG), at most 300 KB each. **GIFs:** animated GIF or animated WebP, at most 3 MB each (keep them far smaller; every student downloads them). Keep the **whole** `public/stickers` folder under about 8 MB (the build warns above that).
+> 3. Delete `public/stickers/placeholder/` (and its `pack.json`).
+> 4. Run `npm run build:stickers`, then commit `shared/stickers.ts` and `public/stickers/numbering.json` together with the images. `npm run build` does this for you, and a test fails if the committed files are out of date.
+>
+> The placeholder numbers are then retired. Any test message that used one shows an "Unavailable" tile instead of breaking. Nothing else needs to change.
+
+**How it works.** A sticker or GIF is referred to by a **key**, never a URL: `app:<pack>/<number>` for a bundled one, `usr:<mediaId>` for one a student uploaded. Messages, posts and comments store only the key and the screen looks it up. Using a bundled sticker writes **nothing to R2** (only the key is stored in D1); the images are static files cached for a year. Uploaded ones are stored in R2 like any media and counted in the person's quota. The server rejects any other key shape, unknown bundled numbers, retired numbers and uploads the sender cannot read.
+
+**Numbering is permanent and append-only** (`public/stickers/numbering.json`, maintained by `scripts/build-stickers.ts`):
+- A file keeps its number forever. New files get the next free number in their pack.
+- A removed file is marked *retired*. Its number is never reused, and old messages that used it show a placeholder.
+- A renamed file keeps its number only if its content is unchanged. **Replacing a file's content under the same file name keeps its number**, so you can improve a sticker later without breaking old messages.
+- Never edit `numbering.json` by hand and never delete it: it is the memory that keeps numbers from being reused.
+
+**Where they work:** chats, posts (one sticker/GIF instead of photos; text is still required) and comments (text and/or one sticker/GIF). The picker has Stickers and GIFs tabs with **Recent** (remembered on the device only), **Mine** (your uploads; "Manage" removes them, "Add from phone" turns a picture or a clip into one) and a chip per bundled pack. There is no third-party GIF search in this version; `src/lib/gif-providers.ts` only documents where one could be added.
 
 ---
 
@@ -345,7 +371,8 @@ Built on top of `2971c1d`. Each change is its own commit.
 - Color contrast of the UI is still not verified in a real browser (jsdom has no layout engine). The style presets are checked numerically.
 - The roll number is not editable after sign-up and is not verified; it only helps place students in their class. Treat it as a hint, not proof of enrollment.
 - Classes are still one global list (for example "Class of 2026"), not per campus.
-- Messages still show initials instead of profile pictures.
+- **Placeholder stickers and GIFs are still bundled** (see "Stickers and GIFs"): replace them before launch.
+- The sticker picker, the chat composer and the media preview have not been run on a real phone (see `docs/STATUS.md` for the full not-verified list).
 - Only Google sign-in exists. Other email providers need email verification and a mail service, and are left for later.
 - `npm run prelaunch-check` is expected to fail until the DEV-ONLY code is removed (including the "Sign up as test user" button in `SignInPage.tsx`) and `database_id` in `wrangler.toml` is replaced.
 - The block/unblock menu and blocked-users list in the UI have not been tested in a browser (the backend is covered by the attack suite).
