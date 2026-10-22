@@ -436,3 +436,26 @@ describe('forwarding', () => {
     expect((await call(env, 'POST', `/api/messages/${messageId}/forward`, { json: { conversation_id: 'x' } })).status).toBe(401);
   });
 });
+
+describe('account deletion with media that other people still reference', () => {
+  it('deletes the account when its photo was forwarded into someone else’s chat, and keeps that message (positive control: the account is gone)', async () => {
+    const env = await makeEnv();
+    const alice = await seedUser(env, 'usr_alice', 'alice');
+    const bob = await seedUser(env, 'usr_bob', 'bob');
+    await seedUser(env, 'usr_carol', 'carol');
+    const form = new FormData();
+    form.append('file', new Blob([PNG(5).slice()], { type: 'image/png' }), 'f');
+    const mediaId = (await call(env, 'POST', '/api/media/uploads', { cookie: alice, form })).json.id as string;
+    const ab = (await call(env, 'POST', '/api/conversations', { cookie: alice, json: { user_id: 'usr_bob' } })).json;
+    const sent = await call(env, 'POST', `/api/conversations/${ab.conversation?.id ?? ab.id}/messages`, { cookie: alice, json: { body: 'x', media_ids: [mediaId] } });
+    expect(sent.status).toBe(201);
+    const bc = (await call(env, 'POST', '/api/conversations', { cookie: bob, json: { user_id: 'usr_carol' } })).json;
+    const fwd = await call(env, 'POST', `/api/messages/${sent.json.message.id}/forward`, { cookie: bob, json: { conversation_id: bc.conversation?.id ?? bc.id } });
+    expect(fwd.status).toBe(201);
+
+    expect((await call(env, 'DELETE', '/api/me', { cookie: alice })).status).toBe(200);
+    expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM users WHERE id = ?').bind('usr_alice').first<{ n: number }>())!.n).toBe(0);
+    expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM messages WHERE id = ?').bind(fwd.json.message.id).first<{ n: number }>())!.n).toBe(1);
+    expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM media WHERE id = ?').bind(mediaId).first<{ n: number }>())!.n).toBe(0);
+  });
+});

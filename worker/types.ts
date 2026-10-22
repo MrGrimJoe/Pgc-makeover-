@@ -146,6 +146,7 @@ export interface MessageRow {
   conversation_id: string;
   sender_id: string;
   body: string;
+  sticker_key?: string | null;
   sent_at: string;
   expires_at: string;
 }

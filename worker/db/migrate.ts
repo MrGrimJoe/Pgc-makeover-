@@ -370,6 +370,26 @@ CREATE TABLE IF NOT EXISTS sticker_library (
 CREATE INDEX IF NOT EXISTS idx_sticker_library_media ON sticker_library(media_id);
 `;
 
+export const MIGRATION_008_STICKER_KEYS_SQL = `
+-- 008_sticker_keys.sql: sticker/GIF keys on posts and comments, and attachment rows for uploaded comment stickers.
+-- A key is either app:<pack>/<number> (bundled, nothing stored in R2) or usr:<mediaId> (an uploaded sticker or GIF).
+ALTER TABLE posts ADD COLUMN sticker_key TEXT;
+ALTER TABLE comments ADD COLUMN sticker_key TEXT;
+
+-- Uploaded stickers and GIFs are referenced through attachment tables so retention and read rules work the same everywhere.
+CREATE TABLE IF NOT EXISTS comment_media (
+  comment_id TEXT NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+  media_id TEXT NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+  PRIMARY KEY (comment_id, media_id)
+);
+CREATE INDEX IF NOT EXISTS idx_comment_media_media ON comment_media(media_id);
+`;
+
+export const MIGRATION_009_MESSAGE_STICKERS_SQL = `
+-- 009_message_stickers.sql: sticker/GIF key on messages (needs the messaging tables from 004).
+ALTER TABLE messages ADD COLUMN sticker_key TEXT;
+`;
+
 export interface MigrationRecord {
   name: string;
   sql: string;
@@ -402,6 +422,10 @@ export const MIGRATIONS: MigrationRecord[] = [
     name: '007_media_foundation.sql',
     sql: MIGRATION_007_MEDIA_FOUNDATION_SQL,
   },
+  {
+    name: '008_sticker_keys.sql',
+    sql: MIGRATION_008_STICKER_KEYS_SQL,
+  },
 ];
 
 export const ALL_MIGRATIONS: MigrationRecord[] = [
@@ -409,6 +433,11 @@ export const ALL_MIGRATIONS: MigrationRecord[] = [
   {
     name: '004_messaging.sql',
     sql: MIGRATION_004_MESSAGING_SQL,
+  },
+  {
+    // Needs the messaging tables, so it is part of the full set only
+    name: '009_message_stickers.sql',
+    sql: MIGRATION_009_MESSAGE_STICKERS_SQL,
   },
 ].sort((a, b) => a.name.localeCompare(b.name));
 

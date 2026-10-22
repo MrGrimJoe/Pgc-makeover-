@@ -45,7 +45,9 @@ import {
 } from '../shared/schema.ts';
 import { checkRateLimit } from './rate-limit.ts';
 import { isBlockedBetween, canSendDmTo } from './permissions.ts';
-import { handleUpload, serveMedia, deleteOwnMedia, listLibrary, addToLibrary, removeFromLibrary, forwardMessage } from './media.ts';
+import { validateStickerKey } from './stickers.ts';
+import { bundledKind } from '../shared/sticker-keys.ts';
+import { loadMediaItem, handleUpload, serveMedia, deleteOwnMedia, listLibrary, addToLibrary, removeFromLibrary, forwardMessage } from './media.ts';
 import { runPostLifecycleExpiry, deletePostAndMedia } from './jobs/expiry.ts';
 import { extractTopicsFromText } from './content/topics.ts';
 import { rankPosts, type CandidatePost, type UserRankingContext } from './ranking/engine.ts';
@@ -161,13 +163,13 @@ async function hydratePosts(
   // 1. Batched media query
   const mediaRows = await db
     .prepare(
-      `SELECT pm.post_id, m.id, m.object_key, m.mime_type, m.size_bytes
+      `SELECT pm.post_id, m.id, m.object_key, m.mime_type, m.size_bytes, m.kind, m.width, m.height
        FROM post_media pm
        JOIN media m ON m.id = pm.media_id
        WHERE pm.post_id IN (${placeholders})`
     )
     .bind(...postIds)
-    .all<{ post_id: string; id: string; object_key: string; mime_type: string; size_bytes: number }>();
+    .all<{ post_id: string; id: string; object_key: string; mime_type: string; size_bytes: number; kind: string; width: number | null; height: number | null }>();
 
   const mediaMap = new Map<string, MediaItem[]>();
   for (const m of mediaRows.results || []) {
@@ -177,9 +179,19 @@ async function hydratePosts(
       object_key: m.object_key,
       mime_type: m.mime_type,
       size_bytes: m.size_bytes,
+      kind: m.kind,
+      width: m.width,
+      height: m.height,
     });
     mediaMap.set(m.post_id, list);
   }
+
+  // Sticker/GIF keys (one batched query, so every feed, search and profile query stays unchanged)
+  const stickerRows = await db
+    .prepare(`SELECT id, sticker_key FROM posts WHERE id IN (${placeholders}) AND sticker_key IS NOT NULL`)
+    .bind(...postIds)
+    .all<{ id: string; sticker_key: string }>();
+  const stickerMap = new Map<string, string>((stickerRows.results || []).map((r) => [r.id, r.sticker_key]));
 
   const blockedIds = await getBlockedUserIds(db, currentUserId);
   const hasBlocked = blockedIds.length > 0;
@@ -278,6 +290,7 @@ async function hydratePosts(
     expires_at: p.expires_at,
     status: p.status,
     media: mediaMap.get(p.id) || [],
+    sticker_key: stickerMap.get(p.id) ?? null,
     topics: topicMap.get(p.id) || [],
     likes_count: likeCountMap.get(p.id) || 0,
     has_liked: likedSet.has(p.id),
@@ -1522,16 +1535,16 @@ export default {
         );
       }
 
-      const { body: postBody, media_ids = [] } = parseResult.data;
+      const { body: postBody, media_ids = [], sticker_key: postStickerKey } = parseResult.data;
 
       // Validate media_ids: max 4, owned by author, exist
       if (media_ids.length > 0) {
         for (const mId of media_ids) {
           const mediaRow = await env.DB.prepare(
-            'SELECT id, owner_id FROM media WHERE id = ?'
+            'SELECT id, owner_id, kind FROM media WHERE id = ?'
           )
             .bind(mId)
-            .first<{ id: string; owner_id: string }>();
+            .first<{ id: string; owner_id: string; kind: string }>();
 
           if (!mediaRow) {
             return jsonResponse({ error: `Media ${mId} not found` }, 400);
@@ -1539,7 +1552,19 @@ export default {
           if (mediaRow.owner_id !== auth.user.id) {
             return jsonResponse({ error: `You do not own media ${mId}` }, 403);
           }
+          // Photos only; a sticker or GIF goes in sticker_key
+          if (mediaRow.kind !== 'photo') {
+            return jsonResponse({ error: 'Only photos can be attached to a post. Use sticker_key for a sticker or GIF.' }, 400);
+          }
         }
+      }
+
+      // One sticker or GIF per post. Bundled keys store only the key; uploaded ones are attached too.
+      let postStickerMedia: string | null = null;
+      if (postStickerKey) {
+        const check = await validateStickerKey(env, postStickerKey, auth.user.id);
+        if (!check.ok) return jsonResponse({ error: check.error }, check.status);
+        postStickerMedia = check.mediaId;
       }
 
       const nowMs = Date.now();
@@ -1550,9 +1575,12 @@ export default {
 
       const statements: D1PreparedStatement[] = [
         env.DB.prepare(
-          'INSERT INTO posts (id, author_id, body, created_at, expires_at, status) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(postId, auth.user.id, postBody, createdAt, expiresAt, 'active'),
+          'INSERT INTO posts (id, author_id, body, sticker_key, created_at, expires_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(postId, auth.user.id, postBody, postStickerKey ?? null, createdAt, expiresAt, 'active'),
       ];
+      if (postStickerMedia) {
+        statements.push(env.DB.prepare('INSERT INTO post_media (post_id, media_id) VALUES (?, ?)').bind(postId, postStickerMedia));
+      }
 
       for (const mId of media_ids) {
         statements.push(
@@ -1596,6 +1624,7 @@ export default {
           expires_at: expiresAt,
           status: 'active',
           media_ids,
+          sticker_key: postStickerKey ?? null,
           topics: extractedTopics,
         },
         201
@@ -2075,7 +2104,7 @@ export default {
         : '';
 
       let query = `
-        SELECT c.id, c.post_id, c.author_id, c.body, c.created_at,
+        SELECT c.id, c.post_id, c.author_id, c.body, c.sticker_key, c.created_at,
                pr.username AS author_username, pr.display_name AS author_display_name
         FROM comments c
         JOIN profiles pr ON pr.user_id = c.author_id
@@ -2155,11 +2184,25 @@ export default {
       const commentId = `cmt_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
       const now = new Date().toISOString();
 
-      await env.DB.prepare(
-        'INSERT INTO comments (id, post_id, author_id, body, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
-      )
-        .bind(commentId, postId, auth.user.id, parseResult.data.body, now, post.expires_at)
-        .run();
+      // One sticker or GIF per comment. Bundled keys store only the key; uploaded ones are attached too.
+      let commentStickerKey: string | null = null;
+      let commentStickerMedia: string | null = null;
+      if (parseResult.data.sticker_key) {
+        const check = await validateStickerKey(env, parseResult.data.sticker_key, auth.user.id);
+        if (!check.ok) return jsonResponse({ error: check.error }, check.status);
+        commentStickerKey = check.key;
+        commentStickerMedia = check.mediaId;
+      }
+
+      const commentStatements: D1PreparedStatement[] = [
+        env.DB.prepare(
+          'INSERT INTO comments (id, post_id, author_id, body, sticker_key, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(commentId, postId, auth.user.id, parseResult.data.body, commentStickerKey, now, post.expires_at),
+      ];
+      if (commentStickerMedia) {
+        commentStatements.push(env.DB.prepare('INSERT INTO comment_media (comment_id, media_id) VALUES (?, ?)').bind(commentId, commentStickerMedia));
+      }
+      await env.DB.batch(commentStatements);
 
       // Interest profile: comment gives +3 signal to post's topics
       await updateUserTopicSignalsForPost(env.DB, auth.user.id, postId, 3.0);
@@ -2172,6 +2215,7 @@ export default {
           author_username: auth.profile.username,
           author_display_name: auth.profile.display_name,
           body: parseResult.data.body,
+          sticker_key: commentStickerKey,
           created_at: now,
         },
         201
@@ -2320,7 +2364,7 @@ export default {
 
       for (const conv of convList) {
         const lastMsg = await env.DB.prepare(
-          `SELECT id, sender_id, body, sent_at, expires_at,
+          `SELECT id, sender_id, body, sent_at, expires_at, sticker_key,
                   (SELECT m.kind FROM message_media mm JOIN media m ON m.id = mm.media_id WHERE mm.message_id = messages.id LIMIT 1) AS media_kind
            FROM messages
            WHERE conversation_id = ? AND expires_at > ?
@@ -2335,7 +2379,9 @@ export default {
             sent_at: string;
             expires_at: string;
             media_kind: string | null;
+            sticker_key: string | null;
           }>();
+        if (lastMsg && !lastMsg.media_kind && lastMsg.sticker_key) lastMsg.media_kind = bundledKind(lastMsg.sticker_key);
 
         conversations.push({
           id: conv.id,
@@ -2421,7 +2467,7 @@ export default {
       if (existing) {
         const nowIso = new Date().toISOString();
         const lastMsg = await env.DB.prepare(
-          `SELECT id, sender_id, body, sent_at, expires_at,
+          `SELECT id, sender_id, body, sent_at, expires_at, sticker_key,
                   (SELECT m.kind FROM message_media mm JOIN media m ON m.id = mm.media_id WHERE mm.message_id = messages.id LIMIT 1) AS media_kind
            FROM messages
            WHERE conversation_id = ? AND expires_at > ?
@@ -2429,7 +2475,8 @@ export default {
            LIMIT 1`
         )
           .bind(existing.id, nowIso)
-          .first<{ id: string; sender_id: string; body: string; sent_at: string; expires_at: string; media_kind: string | null }>();
+          .first<{ id: string; sender_id: string; body: string; sent_at: string; expires_at: string; media_kind: string | null; sticker_key: string | null }>();
+        if (lastMsg && !lastMsg.media_kind && lastMsg.sticker_key) lastMsg.media_kind = bundledKind(lastMsg.sticker_key);
 
         const item: ConversationItem = {
           id: existing.id,
@@ -2495,7 +2542,7 @@ export default {
       const nowIso = new Date().toISOString();
 
       let query = `
-        SELECT m.id, m.conversation_id, m.sender_id, m.body, m.sent_at, m.expires_at,
+        SELECT m.id, m.conversation_id, m.sender_id, m.body, m.sticker_key, m.sent_at, m.expires_at,
                p.username AS sender_username, p.display_name AS sender_display_name
         FROM messages m
         JOIN profiles p ON p.user_id = m.sender_id
@@ -2523,6 +2570,7 @@ export default {
         expires_at: string;
         sender_username: string;
         sender_display_name: string;
+        sticker_key: string | null;
       }>();
 
       const results = msgRows.results || [];
@@ -2575,6 +2623,7 @@ export default {
         sent_at: m.sent_at,
         expires_at: m.expires_at,
         media: mediaMap.get(m.id) || [],
+        sticker_key: m.sticker_key,
       }));
 
       return jsonResponse({
@@ -2633,7 +2682,7 @@ export default {
         );
       }
 
-      const { body: msgBody, media_ids = [] } = parseResult.data;
+      const { body: msgBody, media_ids = [], sticker_key: stickerKey } = parseResult.data;
 
       // Validate media ownership
       const mediaItems: MediaItem[] = [];
@@ -2661,6 +2710,16 @@ export default {
         }
       }
 
+      // A sticker or GIF key: bundled keys store only the key; uploaded ones are also attached so retention and read rules apply
+      if (stickerKey) {
+        const check = await validateStickerKey(env, stickerKey, auth.user.id);
+        if (!check.ok) return jsonResponse({ error: check.error }, check.status);
+        if (check.mediaId && !mediaItems.some((x) => x.id === check.mediaId)) {
+          const item = await loadMediaItem(env, check.mediaId);
+          if (item) mediaItems.push(item);
+        }
+      }
+
       const nowMs = Date.now();
       const msgId = `msg_${nowMs}_${generateRandomString(12).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
       const sentAt = new Date(nowMs).toISOString();
@@ -2668,8 +2727,8 @@ export default {
 
       const batchStatements: D1PreparedStatement[] = [
         env.DB.prepare(
-          'INSERT INTO messages (id, conversation_id, sender_id, body, sent_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(msgId, convId, auth.user.id, msgBody, sentAt, expiresAt),
+          'INSERT INTO messages (id, conversation_id, sender_id, body, sticker_key, sent_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(msgId, convId, auth.user.id, msgBody, stickerKey ?? null, sentAt, expiresAt),
       ];
 
       for (const m of mediaItems) {
@@ -2693,6 +2752,7 @@ export default {
         sent_at: sentAt,
         expires_at: expiresAt,
         media: mediaItems,
+        sticker_key: stickerKey ?? null,
       };
 
       return jsonResponse({ message: messageItem }, 201);
@@ -2891,6 +2951,7 @@ export default {
           sent_at: reportedMessage.sent_at,
           expires_at: reportedMessage.expires_at,
           attachment_keys: attachmentKeys,
+          sticker_key: reportedMessage.sticker_key ?? null,
           // Media ids, kinds and hashes so a moderator can identify the exact files even after storage cleanup
           attachments: (mediaRows.results || []).map((r) => ({ media_id: r.id, kind: r.kind, sha256: r.sha256 })),
         });
@@ -2903,6 +2964,42 @@ export default {
             'INSERT INTO report_evidence (id, report_id, snapshot, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'
           ).bind(evidenceId, reportId, snapshot, now, evidenceExpiresAt)
         );
+      }
+
+      // Posts and comments disappear when they expire, so keep what was reported (text, sticker key, media ids and hashes)
+      if (target_type === 'post' || target_type === 'comment') {
+        const isPost = target_type === 'post';
+        const row = isPost
+          ? await env.DB.prepare('SELECT id, author_id, body, sticker_key, created_at, expires_at FROM posts WHERE id = ?').bind(target_id).first<Record<string, string | null>>()
+          : await env.DB.prepare('SELECT id, post_id, author_id, body, sticker_key, created_at, expires_at FROM comments WHERE id = ?').bind(target_id).first<Record<string, string | null>>();
+        if (row) {
+          const attachTable = isPost ? 'post_media' : 'comment_media';
+          const idColumn = isPost ? 'post_id' : 'comment_id';
+          const media = await env.DB.prepare(
+            `SELECT m.id, m.kind, m.sha256 FROM media m JOIN ${attachTable} a ON a.media_id = m.id WHERE a.${idColumn} = ?`
+          )
+            .bind(target_id)
+            .all<{ id: string; kind: string; sha256: string | null }>();
+          const evidenceId = `evi_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+          batchStatements.push(
+            env.DB.prepare('INSERT INTO report_evidence (id, report_id, snapshot, created_at, expires_at) VALUES (?, ?, ?, ?, ?)').bind(
+              evidenceId,
+              reportId,
+              JSON.stringify({
+                [isPost ? 'post_id' : 'comment_id']: row.id,
+                ...(isPost ? {} : { post_id: row.post_id }),
+                author_id: row.author_id,
+                body: row.body,
+                sticker_key: row.sticker_key ?? null,
+                created_at: row.created_at,
+                expires_at: row.expires_at,
+                attachments: (media.results || []).map((r) => ({ media_id: r.id, kind: r.kind, sha256: r.sha256 })),
+              }),
+              now,
+              new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            )
+          );
+        }
       }
 
       await env.DB.batch(batchStatements);
@@ -3146,7 +3243,15 @@ export default {
     }
 
     if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
+      const assetResponse = await env.ASSETS.fetch(request);
+      // Bundled stickers never change under a URL (the hash is in the query), so they can be cached for a year
+      if (pathname.startsWith('/stickers/') && assetResponse.ok && /\.(webp|png|gif)$/i.test(pathname)) {
+        const headers = new Headers(assetResponse.headers);
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+        headers.set('X-Content-Type-Options', 'nosniff');
+        return new Response(assetResponse.body, { status: assetResponse.status, headers });
+      }
+      return assetResponse;
     }
 
       return new Response('Not Found', { status: 404 });

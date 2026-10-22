@@ -25,6 +25,13 @@ function randomId(len: number): string {
   return [...bytes].map((b) => (b % 36).toString(36)).join('');
 }
 
+/** A media row as the API returns it (id, key, type, size, kind, dimensions). */
+export async function loadMediaItem(env: Env, id: string): Promise<import('../shared/schema.ts').MediaItem | null> {
+  return env.DB.prepare('SELECT id, object_key, mime_type, size_bytes, kind, width, height, duration_ms FROM media WHERE id = ?')
+    .bind(id)
+    .first<import('../shared/schema.ts').MediaItem>();
+}
+
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes.slice());
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -170,6 +177,19 @@ export async function canReadMedia(env: Env, media: MediaReadRow, viewerId: stri
       .bind(viewerId, media.id)
       .first();
     if (member) return true;
+  }
+
+  if (tables.has('comment_media')) {
+    const comments = await env.DB.prepare(
+      `SELECT c.author_id, p.author_id AS post_author_id FROM comment_media cm
+       JOIN comments c ON c.id = cm.comment_id JOIN posts p ON p.id = c.post_id WHERE cm.media_id = ?`
+    )
+      .bind(media.id)
+      .all<{ author_id: string; post_author_id: string }>();
+    for (const c of comments.results || []) {
+      // Visible when the viewer is not blocked with the comment's author or the post's author
+      if (!(await isBlockedBetween(env.DB, viewerId, c.author_id)) && !(await isBlockedBetween(env.DB, viewerId, c.post_author_id))) return true;
+    }
   }
 
   const avatarOwner = await env.DB.prepare('SELECT user_id FROM profiles WHERE avatar_media_id = ?').bind(media.id).first<{ user_id: string }>();
@@ -402,9 +422,9 @@ export async function forwardMessage(
   targetConversationId: unknown
 ): Promise<Response> {
   if (typeof targetConversationId !== 'string' || !targetConversationId) return jsonResponse({ error: 'Validation failed: conversation_id' }, 400);
-  const original = await env.DB.prepare('SELECT id, conversation_id, body, expires_at FROM messages WHERE id = ?')
+  const original = await env.DB.prepare('SELECT id, conversation_id, body, sticker_key, expires_at FROM messages WHERE id = ?')
     .bind(messageId)
-    .first<{ id: string; conversation_id: string; body: string; expires_at: string }>();
+    .first<{ id: string; conversation_id: string; body: string; sticker_key: string | null; expires_at: string }>();
   if (!original || new Date(original.expires_at).getTime() <= Date.now()) return jsonResponse({ error: 'Message not found' }, 404);
 
   const member = (convId: string) =>
@@ -433,7 +453,7 @@ export async function forwardMessage(
   const sentAt = new Date(nowMs).toISOString();
   const expiresAt = new Date(nowMs + MESSAGE_TTL_MS).toISOString();
   const stmts: D1PreparedStatement[] = [
-    env.DB.prepare('INSERT INTO messages (id, conversation_id, sender_id, body, sent_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)').bind(newId, targetConversationId, auth.user.id, original.body, sentAt, expiresAt),
+    env.DB.prepare('INSERT INTO messages (id, conversation_id, sender_id, body, sticker_key, sent_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(newId, targetConversationId, auth.user.id, original.body, original.sticker_key, sentAt, expiresAt),
   ];
   for (const m of media) {
     stmts.push(env.DB.prepare('INSERT INTO message_media (message_id, media_id) VALUES (?, ?)').bind(newId, m.id));
@@ -449,6 +469,7 @@ export async function forwardMessage(
         sender_username: auth.profile.username,
         sender_display_name: auth.profile.display_name,
         body: original.body,
+        sticker_key: original.sticker_key,
         sent_at: sentAt,
         expires_at: expiresAt,
         media: media.map((m) => ({ id: m.id, object_key: m.object_key, mime_type: m.mime_type, size_bytes: m.size_bytes, kind: m.kind, width: m.width, height: m.height, duration_ms: m.duration_ms })),

@@ -1,3 +1,4 @@
+import { parseStickerKey, STICKER_KEY_MAX_LENGTH } from './sticker-keys.ts';
 import { z } from 'zod';
 import { WALLPAPER_IDS, THEME_IDS, TEXT_STYLE_IDS } from './presets.ts';
 
@@ -117,6 +118,12 @@ export interface SignupSessionResponse {
 /**
  * Create post schema for POST /api/posts
  */
+/** A sticker or GIF key: `app:<pack>/<number>` (bundled) or `usr:<mediaId>` (uploaded). Checked again on the server. */
+export const stickerKeySchema = z
+  .string()
+  .max(STICKER_KEY_MAX_LENGTH)
+  .refine((k) => parseStickerKey(k) !== null, { message: 'Invalid sticker key' });
+
 export const createPostSchema = z
   .object({
     body: z
@@ -129,8 +136,14 @@ export const createPostSchema = z
       .max(4, { message: 'Maximum 4 images allowed per post' })
       .optional()
       .default([]),
+    /** One sticker or GIF. A post carries photos or a sticker, never both. */
+    sticker_key: stickerKeySchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => !(v.media_ids.length > 0 && v.sticker_key), {
+    message: 'A post can have photos or one sticker/GIF, not both',
+    path: ['sticker_key'],
+  });
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 
@@ -139,13 +152,12 @@ export type CreatePostInput = z.infer<typeof createPostSchema>;
  */
 export const createCommentSchema = z
   .object({
-    body: z
-      .string()
-      .trim()
-      .min(1, { message: 'Comment cannot be empty' })
-      .max(500, { message: 'Comment cannot exceed 500 characters' }),
+    /** Text is optional when the comment is a sticker or GIF. */
+    body: z.string().trim().max(500, { message: 'Comment cannot exceed 500 characters' }).optional().default(''),
+    sticker_key: stickerKeySchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.body.length > 0 || !!v.sticker_key, { message: 'Comment cannot be empty', path: ['body'] });
 
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 
@@ -177,9 +189,10 @@ export const createMessageSchema = z
       .max(4, { message: 'Maximum 4 attachments per message' })
       .optional()
       .default([]),
+    sticker_key: stickerKeySchema.optional(),
   })
   .strict()
-  .refine((v) => v.body.length > 0 || v.media_ids.length > 0, {
+  .refine((v) => v.body.length > 0 || v.media_ids.length > 0 || !!v.sticker_key, {
     message: 'Message content cannot be empty',
     path: ['body'],
   });
@@ -336,6 +349,8 @@ export interface PostItem {
   expires_at: string;
   status: string;
   media: MediaItem[];
+  /** app:<pack>/<number> or usr:<mediaId>; null when the post has no sticker/GIF. */
+  sticker_key?: string | null;
   topics?: TopicItem[];
   likes_count: number;
   has_liked: boolean;
@@ -361,6 +376,7 @@ export interface CommentItem {
   author_username: string;
   author_display_name: string;
   body: string;
+  sticker_key?: string | null;
   created_at: string;
 }
 
@@ -434,6 +450,7 @@ export interface ConversationItem {
     expires_at: string;
     /** Kind of the first attachment (photo, sticker, gif, video), or null for a text-only message. */
     media_kind?: string | null;
+    sticker_key?: string | null;
   } | null;
 }
 
@@ -450,6 +467,7 @@ export interface MessageItem {
   sent_at: string;
   expires_at: string;
   media: MediaItem[];
+  sticker_key?: string | null;
 }
 
 /**
