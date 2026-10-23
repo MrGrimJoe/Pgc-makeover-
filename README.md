@@ -294,6 +294,14 @@ Before opening the platform to real students, verify all production hardening cr
 
 ---
 
+## Posting limits and the spam check
+
+- **Limit:** at most 3 posts per 15 minutes per person (replaces the old 10 per hour). It is a fixed 15-minute window, so a burst across a window edge can be up to 6. Only posts that passed every check use it: a rejected poll, a bad body or a spam-looking post does not. A separate loose guard (60 attempts per 15 minutes) keeps rejected requests from hammering the database.
+- **Spam check** (`worker/content/spam.ts`): a rule-based score, not a classifier. Signals: links (one is 1 point, several 2), pushy phrases like "free money" or "click here" (2), WhatsApp/Telegram/phone bait (1), 10+ repeated characters (1), long ALL CAPS (1), mostly repeated words (2), and the same post text as one of your own in the last 24 hours (3, text of 20+ characters). A post is refused at 3 points or more, so one link or one phrase alone passes. Poll options are checked with the post.
+- **3-day lock:** a refused post is recorded as a strike. Three strikes in a row (no normal post in between, all within 3 days) pause posting for 3 days from the newest strike (`403`, `code: spam_locked`, `locked_until`, `Retry-After`). A normal post clears the streak, and old strikes expire by themselves.
+- The check covers new posts only. Comments, messages and profile text are not checked yet, and there is no appeal screen: a wrongly refused post is fixed by editing the text, and a lock can be lifted by deleting the person's rows in `spam_strikes`.
+- Counts in polls leave out votes from anyone blocked with the poll's author (either direction, even if the block came after the vote); the vote rows stay, so unblocking brings them back.
+
 ## Polls and profile backgrounds
 
 **Polls.** A post can carry a poll (2 to 6 options, each 1 to 60 characters, cleaned like other short text, no `<` or `>`, no duplicates). A post has exactly one of photos, a poll or one sticker/GIF; the text is still required. One vote per account, changeable until the poll closes with its post (7 to 14 days). Results are hidden until you vote: the server returns vote counts only to people who have voted and to the author, so they cannot be read from the page. Nobody is shown who voted what. Deleting an account removes its votes (the counts drop).
@@ -401,6 +409,7 @@ Built on top of `2971c1d`. Each change is its own commit.
 - **`004_messaging.sql`**: Direct messaging, 1:1 `conversations`, `conversation_members`, ephemeral `messages`, `message_media`, and `blocks` table.
 - **`005_onboarding.sql`**: `campuses` and `campus_requests` (approved list plus student-requested pending entries), `profiles.campus_id / real_name / wallpaper_id / theme_id / text_style_id`, `user_private` (email and roll number, never returned by any API) and `signup_tickets` (15-minute single-use sign-up proof).
 - **`007_media_foundation.sql`**: media `kind`, size metadata, `sha256` (per-owner dedupe), thumbnails, and the `sticker_library` table.
+- **`011_spam_strikes.sql`**: `spam_strikes`, one row per post attempt that looked like spam (see "Posting limits and the spam check").
 - **`010_wallpaper_polls.sql`**: `profiles.wallpaper_media_id` (a profile background from the person's own image) and the poll tables `polls`, `poll_options`, `poll_votes` (primary key `(poll_id, user_id)`, so one vote per account).
 - **`006_bundled_campuses.sql`**: rebuilds `profiles` without the `campus_id` foreign key, adds `campus_other`, drops `campuses` and `campus_requests`.
 

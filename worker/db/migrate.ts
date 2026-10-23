@@ -418,6 +418,18 @@ CREATE TABLE IF NOT EXISTS poll_votes (
 CREATE INDEX IF NOT EXISTS idx_poll_votes_option ON poll_votes(option_id);
 `;
 
+export const MIGRATION_011_SPAM_STRIKES_SQL = `
+-- 011_spam_strikes.sql: one row per post attempt that looked like spam. Three in a row (no normal post between,
+-- all within 3 days) lock posting for 3 days from the newest one.
+CREATE TABLE IF NOT EXISTS spam_strikes (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  signals TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_spam_strikes_user ON spam_strikes(user_id, created_at);
+`;
+
 export interface MigrationRecord {
   name: string;
   sql: string;
@@ -457,6 +469,10 @@ export const MIGRATIONS: MigrationRecord[] = [
   {
     name: '010_wallpaper_polls.sql',
     sql: MIGRATION_010_WALLPAPER_POLLS_SQL,
+  },
+  {
+    name: '011_spam_strikes.sql',
+    sql: MIGRATION_011_SPAM_STRIKES_SQL,
   },
 ];
 

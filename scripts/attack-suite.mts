@@ -347,6 +347,13 @@ r = await call('GET', '/api/me', { cookie: ayesha }); ok('free-text campus repla
   r = await call('GET', `/api/media/${bgId}`); ok('signed-out visitors cannot read it', r.s === 401 || r.s === 403, `status ${r.s}`);
   r = await call('PATCH', '/api/me', { cookie: PA, json: { wallpaper_media_id: bgId, wallpaper_id: 'plain' } }); ok('image plus a preset in one request -> 400', r.s === 400, `status ${r.s}`);
   r = await call('PATCH', '/api/me', { cookie: PA, json: { wallpaper_id: 'plain' } }); ok('choosing a preset clears the image', r.s === 200 && r.j?.profile?.wallpaper_media_id === null, `status ${r.s}`);
+  // spam check and the post limit
+  const PS = await seed('usr_spammer', 'spammer'); const spamText = 'FREE MONEY!!! click here https://win.xyz and https://cash.top whatsapp +923001234567';
+  await clearRL(); r = await call('POST', '/api/posts', { cookie: PS, json: { body: 'A normal question about the homework due on Friday' } }); ok('POSITIVE CONTROL: a normal post is accepted', r.s === 201, `status ${r.s}`);
+  await clearRL(); r = await call('POST', '/api/posts', { cookie: PS, json: { body: spamText } }); ok('a spam-looking post is refused (422) and not published', r.s === 422, `status ${r.s}`);
+  await clearRL(); await call('POST', '/api/posts', { cookie: PS, json: { body: spamText } }); r = await call('POST', '/api/posts', { cookie: PS, json: { body: spamText } }); ok('third spam attempt in a row locks posting (403)', r.s === 403 && r.j?.code === 'spam_locked', `status ${r.s}`);
+  await clearRL(); r = await call('POST', '/api/posts', { cookie: PS, json: { body: 'A perfectly normal post after the lock started' } }); ok('a locked account cannot post even normal text (403)', r.s === 403, `status ${r.s}`);
+  let over = 0; const PL = await seed('usr_limiter', 'limiter'); await clearRL(); for (let i = 0; i < 6; i++) { const x = await call('POST', '/api/posts', { cookie: PL, json: { body: `Distinct everyday sentence number ${i} for the limit` } }); if (x.s === 429) over++; } ok('more than 3 posts in 15 minutes is refused (3 of 6 hit 429)', over === 3, `429s: ${over}/6`);
 }
 
 // ---------- EXPIRY / LIFECYCLE ----------

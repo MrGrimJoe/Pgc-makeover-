@@ -32,6 +32,8 @@ Base commit: `ba1d936`. Patches are cumulative from that base.
   - Polls: `poll` on `POST /api/posts`, `PUT /api/posts/:id/poll/vote`, batched hydration (3 queries per page), counts only for voters and the author, closes with the post, builder on New post, poll card with accessible buttons.
   - Tests: server, jsdom (axe) and client-compression tests for both; attack suite extended (281 checks).
 
+- **Phase 5 follow-up:** posting limit is now 3 per 15 minutes and rejected attempts no longer count; rule-based spam check on new posts with a 3-day lock after 3 spam attempts in a row (migration 011); votes from people blocked with the author no longer count in poll totals.
+
 ## Not started
 - Phase 3 leftover: the compact composer is used for comments, but the New post page still has its own text box (it also holds photos, the poll builder and the sticker choice). The post page does now take photos or one sticker/GIF, and compresses photos, but its text box is its own.
 - Nothing planned is left in Phases 1 to 5.
@@ -45,3 +47,6 @@ Phase 5 specifically: image compression for backgrounds (canvas WebP at 1080 px)
 - Votes do not count as engagement toward the 14-day extension (only likes and comments do). Counting them would be a small change in `worker/jobs/expiry.ts`.
 - Once a poll closes, counts stay hidden from people who never voted. Showing final results to everyone after close is a one-line change in `worker/polls.ts`.
 - Poll options are plain text (no emoji picker, no images), and a poll has no separate question field: the post text is the question.
+- Spam check: the word list and thresholds are first guesses and will need tuning against real posts. Comments and messages are not checked. Posting is limited by a fixed window, not a sliding one.
+- Polls: votes can be changed and anyone who votes sees the counts, so a person can vote just to peek at the results. This is the intended design; hiding counts until the poll closes would be the alternative.
+- Remote database: migrations 005 to 011 must all be run before deploying.

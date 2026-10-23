@@ -161,6 +161,22 @@ describe('Polls on posts', () => {
       expect((await env.DB.prepare('SELECT option_id FROM poll_votes WHERE poll_id = ?').bind(p.id).first<{ option_id: string }>())!.option_id).toBe(p.poll.options[0]!.id);
     });
 
+    it('votes from someone blocked with the author stop counting, even if the block came after the vote', async () => {
+      const p = await makePoll(['A', 'B']);
+      await vote(bob, p.id, p.poll.options[0]!.id);
+      await vote(carol, p.id, p.poll.options[0]!.id);
+      const total = async (cookie: string) => (await call(env, 'GET', `/api/posts/${p.id}`, { cookie })).json.poll.total_votes;
+      expect(await total(alice)).toBe(2); // positive control
+      await call(env, 'POST', '/api/blocks/usr_bob', { cookie: alice, json: { user_id: 'usr_bob' } });
+      expect(await total(alice)).toBe(1);
+      expect(await total(carol)).toBe(1);
+      const counts = (await call(env, 'GET', `/api/posts/${p.id}`, { cookie: carol })).json.poll.options.map((o: any) => o.votes);
+      expect(counts).toEqual([1, 0]);
+      // the row is kept, so unblocking brings the vote back
+      await call(env, 'DELETE', '/api/blocks/usr_bob', { cookie: alice });
+      expect(await total(alice)).toBe(2);
+    });
+
     it('rate limits votes (60 per hour) and tells the caller when to retry', async () => {
       const p = await makePoll(['A', 'B']);
       let last = 200;

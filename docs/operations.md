@@ -253,6 +253,10 @@ There is no automatic image or video scanner. Safety rests on reporting, blockin
 
 ---
 
+## 10b. Spam strikes
+
+`spam_strikes` is tiny (one row per refused attempt). To lift a lock for someone: `DELETE FROM spam_strikes WHERE user_id = '<id>'` on the remote database. Strikes are removed with the account. Rate-limit keys: `post:<id>` (3 per 15 minutes), `postattempt:<id>` (60 per 15 minutes), `pollvote:<id>` (60 per hour). Run migrations 005 to 011 on the remote database before deploying this version.
+
 ## 10a. Profile backgrounds and polls
 
 - **Backgrounds** are ordinary `media` rows of kind `background` (400 KB cap, 10 uploads per hour, counted in the 200 MB quota). `profiles.wallpaper_media_id` is a retention reference, like the avatar: the cleanup job (`unreferencedSql` in `worker/media.ts`) keeps the file while it is a profile background and deletes it 24 hours after it stops being one (replaced, removed, or a preset chosen). Reads follow the avatar rule: any signed-in person who is not blocked with the owner.

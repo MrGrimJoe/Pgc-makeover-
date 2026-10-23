@@ -439,18 +439,18 @@ describe('Milestone 2 Social Feed, Media, Interactions & Expiry Lifecycle', () =
   // 6. Rate Limiting
   describe('Rate Limiting', () => {
     it('returns 429 when post rate limit is exceeded', async () => {
-      // Limit is 10 posts per hour
-      for (let i = 0; i < 10; i++) {
+      // Limit is 3 posts per 15 minutes
+      for (let i = 0; i < 3; i++) {
         const req = new Request('http://localhost:3000/api/posts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Cookie: aliceSessionCookie },
-          body: JSON.stringify({ body: `Post #${i}` }),
+          body: JSON.stringify({ body: `A different thing to say, number ${i}` }),
         });
         const res = await worker.fetch(req, env);
         expect(res.status).toBe(201);
       }
 
-      // 11th post within the hour should be rate-limited
+      // The 4th post within 15 minutes should be rate-limited
       const overflowReq = new Request('http://localhost:3000/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: aliceSessionCookie },

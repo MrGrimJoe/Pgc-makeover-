@@ -44,7 +44,18 @@ export async function hydratePolls(db: D1Database, posts: PollPostRef[], viewerI
   if (countable.length > 0) {
     const countPh = countable.map(() => '?').join(',');
     const countRows = await db
-      .prepare(`SELECT option_id, COUNT(*) AS n FROM poll_votes WHERE poll_id IN (${countPh}) GROUP BY option_id`)
+      // Votes from anyone blocked with the poll's author (either direction, even if the block came after the vote) are not counted
+      .prepare(
+        `SELECT v.option_id, COUNT(*) AS n
+         FROM poll_votes v JOIN posts p ON p.id = v.poll_id
+         WHERE v.poll_id IN (${countPh})
+           AND NOT EXISTS (
+             SELECT 1 FROM blocks b
+             WHERE (b.blocker_id = p.author_id AND b.blocked_id = v.user_id)
+                OR (b.blocker_id = v.user_id AND b.blocked_id = p.author_id)
+           )
+         GROUP BY v.option_id`
+      )
       .bind(...countable)
       .all<{ option_id: string; n: number }>();
     for (const c of countRows.results || []) counts.set(c.option_id, Number(c.n));

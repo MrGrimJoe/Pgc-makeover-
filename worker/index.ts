@@ -51,6 +51,8 @@ import { bundledKind } from '../shared/sticker-keys.ts';
 import { loadMediaItem, handleUpload, serveMedia, deleteOwnMedia, listLibrary, addToLibrary, removeFromLibrary, forwardMessage } from './media.ts';
 import { runPostLifecycleExpiry, deletePostAndMedia } from './jobs/expiry.ts';
 import { hydratePolls } from './polls.ts';
+import { getSpamLockUntil } from './spam-lock.ts';
+import { assessSpam, DUPLICATE_MIN_LENGTH, normalizeForDuplicate, POST_LIMIT_MAX, POST_LIMIT_WINDOW_MS } from './content/spam.ts';
 import { checkPollOptions } from '../shared/poll.ts';
 import { extractTopicsFromText } from './content/topics.ts';
 import { rankPosts, type CandidatePost, type UserRankingContext } from './ranking/engine.ts';
@@ -1619,13 +1621,24 @@ export default {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
 
-      // FIX #3: D1-backed rate limit: max 10 posts per hour per user
-      const rate = await checkRateLimit(env.DB, `post:${auth.user.id}`, 10, 60 * 60 * 1000);
-      if (!rate.allowed) {
+      // A spam lock stops posting for 3 days after 3 spam-looking attempts in a row
+      const lockedUntil = await getSpamLockUntil(env.DB, auth.user.id);
+      if (lockedUntil) {
         return jsonResponse(
-          { error: 'Rate limit exceeded: maximum 10 posts per hour. Please try again later.' },
+          { error: `Posting is paused until ${lockedUntil.toISOString()} because your recent posts looked like spam.`, code: 'spam_locked', locked_until: lockedUntil.toISOString() },
+          403,
+          { 'Retry-After': String(Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000))) }
+        );
+      }
+
+      // A loose guard so rejected requests cannot be used to hammer the database. The real post limit
+      // (3 per 15 minutes) is applied further down, only to posts that passed every check.
+      const attempts = await checkRateLimit(env.DB, `postattempt:${auth.user.id}`, 60, POST_LIMIT_WINDOW_MS);
+      if (!attempts.allowed) {
+        return jsonResponse(
+          { error: 'Too many attempts. Please try again later.' },
           429,
-          { 'Retry-After': String(rate.retryAfterSeconds) }
+          { 'Retry-After': String(attempts.retryAfterSeconds) }
         );
       }
 
@@ -1679,6 +1692,42 @@ export default {
         const check = await validateStickerKey(env, postStickerKey, auth.user.id);
         if (!check.ok) return jsonResponse({ error: check.error }, check.status);
         postStickerMedia = check.mediaId;
+      }
+
+      // Spam check on the text people will read (post and poll options). A spam-looking attempt is refused and
+      // recorded as a strike; it does not use up the post limit.
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const recentBodies = await env.DB.prepare('SELECT body FROM posts WHERE author_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT 20')
+        .bind(auth.user.id, dayAgo)
+        .all<{ body: string }>();
+      const normalizedNew = normalizeForDuplicate(postBody);
+      const duplicateOfRecent = normalizedNew.length >= DUPLICATE_MIN_LENGTH && (recentBodies.results || []).some((r) => normalizeForDuplicate(r.body) === normalizedNew);
+      const verdict = assessSpam([postBody, ...(pollCheck && pollCheck.ok ? pollCheck.options : [])].join(' '), { duplicateOfRecent });
+      if (verdict.spam) {
+        await env.DB.prepare('INSERT INTO spam_strikes (id, user_id, signals, created_at) VALUES (?, ?, ?, ?)')
+          .bind(`stk_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`, auth.user.id, verdict.signals.join(','), new Date().toISOString())
+          .run();
+        const nowLocked = await getSpamLockUntil(env.DB, auth.user.id);
+        return jsonResponse(
+          {
+            error: nowLocked
+              ? `This looks like spam, and so did your last posts. Posting is paused until ${nowLocked.toISOString()}.`
+              : 'This post looks like spam, so it was not published. Change it and try again.',
+            code: nowLocked ? 'spam_locked' : 'spam',
+            ...(nowLocked ? { locked_until: nowLocked.toISOString() } : {}),
+          },
+          nowLocked ? 403 : 422
+        );
+      }
+
+      // The post limit counts only posts that got this far: 3 per 15 minutes
+      const rate = await checkRateLimit(env.DB, `post:${auth.user.id}`, POST_LIMIT_MAX, POST_LIMIT_WINDOW_MS);
+      if (!rate.allowed) {
+        return jsonResponse(
+          { error: 'Rate limit exceeded: maximum 3 posts per 15 minutes. Please try again later.' },
+          429,
+          { 'Retry-After': String(rate.retryAfterSeconds) }
+        );
       }
 
       const nowMs = Date.now();
