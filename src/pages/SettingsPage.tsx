@@ -158,7 +158,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
   const bgName = bg.kind === 'image' ? 'Your picture' : CHAT_BACKGROUNDS.find((p) => p.id === bg.id)?.name;
 
   return (
-    <div className="w-full max-w-[430px] mx-auto min-h-screen bg-[var(--bg2,#F8F9FC)] pb-24">
+    <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg2,#F8F9FC)] pb-24 tablet:pb-8">
       <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center px-2">
         <button type="button" onClick={onBack} aria-label="Back" title="Back" className="w-[44px] h-[44px] flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0"><ArrowLeft className="w-5 h-5 stroke-[1.7]" aria-hidden="true" /></button>
         <h1 className="m-0 text-[18px] font-semibold text-[var(--text,#17233A)]">Settings</h1>

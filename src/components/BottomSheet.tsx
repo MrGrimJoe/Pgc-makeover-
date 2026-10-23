@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusTrap } from '../lib/focus-trap.ts';
+import { useLayout, type Layout } from '../lib/layout.ts';
+
+/** How the panel appears: slides up from the bottom, fades in as a centered dialog, or slides in from the right. */
+export type SheetVariant = 'sheet' | 'dialog' | 'drawer';
+const DEFAULT_VARIANTS: Record<Layout, SheetVariant> = { phone: 'sheet', tablet: 'dialog', desktop: 'dialog' };
 
 /** Length of the slide-out animation; the sheet unmounts this long after a close request. */
 export const SHEET_CLOSE_MS = 250;
@@ -11,8 +16,12 @@ interface BottomSheetProps {
   onClose: () => void;
   /** Content, or a function that receives `requestClose` (for a Close button inside the sheet) */
   children: React.ReactNode | ((api: { requestClose: () => void }) => React.ReactNode);
-  /** Extra classes for the panel (height etc.) */
+  /** Extra classes for the panel (padding etc.) */
   className?: string;
+  /** Overrides the look per layout; the default is a sheet on phones and a centered dialog on tablets and desktops */
+  variants?: Partial<Record<Layout, SheetVariant>>;
+  /** Height classes used only for the 'sheet' look, e.g. a tall comments sheet */
+  sheetHeightClass?: string;
 }
 
 let sheetCounter = 0;
@@ -28,7 +37,11 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   onClose,
   children,
   className = '',
+  variants,
+  sheetHeightClass = '',
 }) => {
+  const layout = useLayout();
+  const variant: SheetVariant = { ...DEFAULT_VARIANTS, ...variants }[layout];
   const [closing, setClosing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(`sheet-${++sheetCounter}`);
@@ -108,7 +121,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
 
   return (
     <div
-      className="sheet-backdrop fixed inset-0 z-50 bg-[#17233A]/50 flex items-end justify-center"
+      className={`sheet-backdrop fixed inset-0 z-50 bg-[#17233A]/50 flex ${variant === 'sheet' ? 'items-end justify-center' : variant === 'dialog' ? 'items-center justify-center p-4' : 'items-stretch justify-end'}`}
       data-closing={closing}
       onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}
     >
@@ -119,10 +132,17 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
         aria-label={label}
         tabIndex={-1}
         data-closing={closing}
-        className={`sheet-panel w-full max-w-[430px] bg-surface border border-border border-b-0 rounded-t-[16px] flex flex-col shadow-sheet pb-[env(safe-area-inset-bottom)] ${className}`}
+        data-variant={variant}
+        className={`sheet-panel w-full bg-surface border border-border flex flex-col shadow-sheet ${
+          variant === 'sheet'
+            ? `max-w-content border-b-0 rounded-t-[16px] pb-[env(safe-area-inset-bottom)] ${sheetHeightClass}`
+            : variant === 'dialog'
+              ? 'max-w-[480px] max-h-[85vh] overflow-y-auto rounded-[16px]'
+              : 'max-w-[420px] h-full border-y-0 border-r-0 rounded-none'
+        } ${className}`}
       >
-        {/* Grab bar: the drag handle (touch-action none so the browser does not scroll instead) */}
-        <div
+        {/* Grab bar: the drag handle, only where the panel is a bottom sheet (touch-action none so the browser does not scroll instead) */}
+        {variant === 'sheet' ? <div
           data-sheet-handle
           className="pt-2 pb-1 flex justify-center cursor-grab touch-none"
           onPointerDown={onPointerDown}
@@ -131,7 +151,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
           onPointerCancel={endDrag}
         >
           <span aria-hidden="true" className="w-10 h-1 rounded-full bg-border" />
-        </div>
+        </div> : <div className="pt-3" aria-hidden="true" />}
         {typeof children === 'function' ? (children as (api: { requestClose: () => void }) => React.ReactNode)({ requestClose }) : children}
       </div>
     </div>

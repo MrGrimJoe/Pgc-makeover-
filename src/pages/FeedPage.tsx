@@ -66,7 +66,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   };
 
   return (
-    <div className="w-full max-w-[430px] mx-auto pb-16 bg-[var(--bg,#fff)]">
+    <div className="w-full max-w-content mx-auto pb-16 tablet:pb-0 bg-[var(--bg,#fff)]">
       {/* "For you / Following" tabs: 44px high, 14px/600; active tab has text color and 2px blue underline */}
       <div className="flex border-b border-[var(--line,#E8EBF0)]">
         <button

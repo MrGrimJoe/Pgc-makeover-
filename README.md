@@ -294,6 +294,16 @@ Before opening the platform to real students, verify all production hardening cr
 
 ---
 
+## Screen sizes (phone, tablet, desktop)
+
+- **Three designs, one rule** (`src/lib/layout.ts`): phone under 640 px, tablet 640 to 1023, desktop 1024 and up. The same two numbers are in `src/index.css` and `tests/layout.test.ts` fails if they differ. Nothing else may read the window width or hard-code a column width (the same test scans `src/` for that).
+- **Phone:** unchanged. Bottom tab bar, app bar, one 430 px column, slide-up sheets.
+- **Tablet:** slim icon rail on the left (`SideNav`), a 640 px centered column, no app bar, comments still a slide-up sheet, Report/Delete as centered dialogs.
+- **Desktop:** sidebar with labels (also Messages and Settings), 640 px column with side borders, comments as a drawer sliding in from the right, Report/Delete as centered dialogs.
+- **How a component picks its design:** structure that differs (which navigation, which overlay) comes from `useLayout()` so only one version is ever in the page; styling that differs uses the `tablet:` and `desktop:` Tailwind variants. `<html data-layout="...">` shows which design is active. The column width is `max-w-content` (the `--content-w` variable).
+- **Resizing or rotating** across a breakpoint switches the design live and keeps where you are, including an open sheet.
+- **Trying a design while building:** open the dev server with `?layout=tablet` or `?layout=desktop` (ignored in a production build).
+
 ## Motion and navigation
 
 - **Sheets:** comments, Report and Delete account open as a panel that slides up from the bottom (`src/components/BottomSheet.tsx`) and slides back down when you tap outside it, press Escape, tap Close, drag its top bar down, or use the phone/browser Back button. The sheet adds one history entry while it is open and removes it when it closes.

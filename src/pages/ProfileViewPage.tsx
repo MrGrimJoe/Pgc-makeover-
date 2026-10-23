@@ -159,7 +159,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
     Boolean(profile && currentUserId && (profile.user_id === currentUserId || profile.id === currentUserId));
 
   return (
-    <div className="w-full max-w-[430px] mx-auto min-h-screen bg-[var(--bg,#fff)] text-[var(--text,#17233A)]">
+    <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] text-[var(--text,#17233A)]">
       {/* Loading Skeleton */}
       {loading && (
         <div className="p-4 space-y-4">

@@ -26,7 +26,7 @@ interface ConversationListProps {
 }
 
 export const ConversationList: React.FC<ConversationListProps> = ({ conversations, loading, error, onSelect, onBack }) => (
-  <div className="w-full max-w-[430px] mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col pb-16">
+  <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col pb-16 tablet:pb-0">
     <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center px-4">
       <button type="button" onClick={onBack} title="Back" aria-label="Back" className="w-[44px] h-[44px] -ml-3 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0">
         <ArrowLeft className="w-5 h-5 stroke-[1.7]" />

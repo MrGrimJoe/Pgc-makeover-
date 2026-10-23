@@ -36,6 +36,8 @@ Base commit: `ba1d936`. Patches are cumulative from that base.
 
 - **Motion, navigation and Settings pass:** slide-up sheets for comments/report/delete (drag, backdrop, Escape and Back all close them), Back-button support for the whole app, page transitions, tab bar indicator, press feedback, entrance animations, regrouped Settings with a profile card. Tests in `tests/sheet-nav-ui.test.tsx`.
 
+- **Screen sizes, first part:** layout module with one rule for phone/tablet/desktop, side navigation (rail and sidebar), 640 px column on wider screens, sheet/dialog/drawer overlay variants, guard and matrix tests (`tests/layout.test.ts`, `tests/layout-ui.test.tsx`). The phone design is unchanged (all earlier tests still pass).
+
 ## Not started
 - Phase 3 leftover: the compact composer is used for comments, but the New post page still has its own text box (it also holds photos, the poll builder and the sticker choice). The post page does now take photos or one sticker/GIF, and compresses photos, but its text box is its own.
 - Nothing planned is left in Phases 1 to 5.
@@ -53,3 +55,6 @@ Phase 5 specifically: image compression for backgrounds (canvas WebP at 1080 px)
 - Polls: votes can be changed and anyone who votes sees the counts, so a person can vote just to peek at the results. This is the intended design; hiding counts until the poll closes would be the alternative.
 - Remote database: migrations 005 to 011 must all be run before deploying.
 - Motion and navigation: tested in jsdom only. The slide timing, the drag-to-close feel and the Back button on a real phone have not been tried. After saving Edit profile the app adds a history entry for the profile page, so Back goes to the edit form once. Scroll position is not restored when going Back.
+
+- Screen sizes: nobody has seen the tablet and desktop designs in a real browser. The tests prove which design is chosen and that the built CSS contains the right rules, not how it looks. There was no browser available in the build environment, so there are no screenshots. Open the app at 820 px and 1280 px wide (or use `?layout=tablet` / `?layout=desktop`) and check by eye.
+- Screen sizes, still to do: two-pane Messages and Settings on desktop, wider Profile header and grid, a centered card for sign-in and onboarding, and hover and keyboard polish. Until then those pages use the same 640 px column as the feed. Full-screen overlays (media viewer, preview, forward picker, sticker picker) are centered on the screen, not on the column.

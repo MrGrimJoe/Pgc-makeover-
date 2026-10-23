@@ -94,7 +94,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   };
 
   return (
-    <BottomSheet label="Comments" onClose={onClose} className="h-[78vh] max-h-[78vh] px-4 pb-4">
+    <BottomSheet label="Comments" onClose={onClose} variants={{ tablet: 'sheet', desktop: 'drawer' }} sheetHeightClass="h-[78vh] max-h-[78vh]" className="px-4 pb-4">
       {({ requestClose }) => (
       <>
         {/* Header */}

@@ -37,7 +37,7 @@ export const AttachSheet: React.FC<AttachSheetProps> = ({ onClose, onFiles, onSt
         aria-label="Attach"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[430px] bg-[var(--bg,#fff)] rounded-t-[16px] p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] space-y-3"
+        className="w-full max-w-content bg-[var(--bg,#fff)] rounded-t-[16px] p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] space-y-3"
       >
         <div className="grid grid-cols-4 gap-2">
           <button type="button" className={btn} onClick={() => camera.current?.click()}>

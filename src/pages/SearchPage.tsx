@@ -150,7 +150,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   };
 
   return (
-    <div className="w-full max-w-[430px] mx-auto pb-16 bg-[var(--bg,#fff)]">
+    <div className="w-full max-w-content mx-auto pb-16 tablet:pb-0 bg-[var(--bg,#fff)]">
       {/* 44px search field, 12px radius, 1px border, subtle background, search icon at left */}
       <form onSubmit={handleSearchSubmit} className="p-3 pb-2">
         <div className="flex items-center gap-2 bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3 h-[44px] text-[var(--muted,#5B6577)]">

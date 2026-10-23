@@ -22,7 +22,8 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ activeTab, setActive
   return (
     <nav
       aria-label="Navigation"
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] h-[56px] flex bg-[var(--bg,#fff)] border-t border-[var(--line,#E8EBF0)] pb-[env(safe-area-inset-bottom)] z-40"
+      data-nav="bottom"
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-content h-[56px] flex bg-[var(--bg,#fff)] border-t border-[var(--line,#E8EBF0)] pb-[env(safe-area-inset-bottom)] z-40"
     >
       {TABS.map(({ tab, label, Icon }) => {
         const active = activeTab === tab;

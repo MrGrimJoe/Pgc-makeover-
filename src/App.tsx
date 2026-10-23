@@ -8,6 +8,8 @@ import { isDeepPage, readEntry, sameNav, type NavState } from './lib/nav-history
 import type { MeResponse } from '../shared/schema.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { BottomTabBar, type AppTab } from './components/BottomTabBar.tsx';
+import { SideNav } from './components/SideNav.tsx';
+import { useLayout } from './lib/layout.ts';
 import { SignInPage } from './pages/SignInPage.tsx';
 import { OnboardingPage } from './pages/OnboardingPage.tsx';
 import { FeedPage } from './pages/FeedPage.tsx';
@@ -31,6 +33,8 @@ function readAuthRedirect(): { signup: boolean; notice: 'no_account' | 'error' |
 }
 
 export default function App() {
+  const layout = useLayout();
+  const wide = layout !== 'phone'; // tablet and desktop use the side navigation instead of the bottom bar
   const [authRedirect] = useState(readAuthRedirect);
   const [authNotice, setAuthNotice] = useState<'no_account' | 'error' | null>(authRedirect.notice);
   const [currentUser, setCurrentUser] = useState<MeResponse | null>(null);
@@ -154,7 +158,7 @@ export default function App() {
   if (loadingUser) {
     return (
       <div className="min-h-screen bg-[var(--bg2,#F8F9FC)] flex items-center justify-center p-4">
-        <div className="w-full max-w-[430px] min-h-screen bg-[var(--bg,#fff)] p-4 flex flex-col items-center justify-center space-y-3">
+        <div className="w-full max-w-content min-h-screen bg-[var(--bg,#fff)] p-4 flex flex-col items-center justify-center space-y-3">
           <div className="w-12 h-12 rounded-full skeleton-box mx-auto" />
           <div className="w-32 h-4 skeleton-box rounded mx-auto" />
           <div className="w-24 h-3 skeleton-box rounded mx-auto" />
@@ -163,11 +167,39 @@ export default function App() {
     );
   }
 
+  /** Shared by the bottom bar and the side navigation */
+  const selectTab = (tab: AppTab) => {
+    // Tapping the tab you are already on scrolls back to the top instead of adding a history entry
+    const ownProfile = tab !== 'profile' || (profileSubView === 'view' && (viewUsername || currentUser?.profile.username) === currentUser?.profile.username);
+    if (tab === activeTab && ownProfile) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (tab === 'profile') {
+      setViewUsername(currentUser?.profile.username || '');
+      setProfileSubView('view');
+    }
+    setActiveTab(tab);
+  };
+  const openMessages = () => {
+    setTargetMessageUser(null);
+    setActiveTab('messages');
+  };
+
   return (
     <div className="min-h-screen bg-[var(--bg2,#F8F9FC)] text-[var(--text,#17233A)] flex justify-center">
-      <div className="w-full max-w-[430px] min-h-screen bg-[var(--bg,#fff)] relative flex flex-col pb-16 font-sans">
-        {/* Settings has its own header with a Back button, so the app bar is hidden there */}
-        {activeTab !== 'settings' && <Navbar
+      {wide && currentUser && (
+        <SideNav
+          activeTab={activeTab}
+          setActiveTab={selectTab}
+          onOpenMessages={openMessages}
+          onTitleClick={() => setActiveTab('feed')}
+          expanded={layout === 'desktop'}
+        />
+      )}
+      <div className={`w-full max-w-content min-w-0 min-h-screen bg-[var(--bg,#fff)] relative flex flex-col font-sans ${wide ? 'border-x border-[var(--line,#E8EBF0)]' : 'pb-16'}`}>
+        {/* The app bar is only for phones (wider screens have the side navigation); Settings has its own header */}
+        {!wide && activeTab !== 'settings' && <Navbar
           onTitleClick={() => setActiveTab(currentUser ? 'feed' : 'signin')}
           onOpenMessages={() => {
             setTargetMessageUser(null);
@@ -269,24 +301,14 @@ export default function App() {
           </div>
         </main>
 
-        {/* Bottom tab bar: icon-only, 4 tabs */}
-        <BottomTabBar
-          activeTab={activeTab === 'settings' ? 'profile' : activeTab}
-          setActiveTab={(tab) => {
-            // Tapping the tab you are already on scrolls back to the top instead of adding a history entry
-            const ownProfile = tab !== 'profile' || (profileSubView === 'view' && (viewUsername || currentUser?.profile.username) === currentUser?.profile.username);
-            if (tab === activeTab && ownProfile) {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-              return;
-            }
-            if (tab === 'profile') {
-              setViewUsername(currentUser?.profile.username || '');
-              setProfileSubView('view');
-            }
-            setActiveTab(tab);
-          }}
-          isAuthenticated={!!currentUser}
-        />
+        {/* Bottom tab bar: phones only */}
+        {!wide && (
+          <BottomTabBar
+            activeTab={activeTab === 'settings' ? 'profile' : activeTab}
+            setActiveTab={selectTab}
+            isAuthenticated={!!currentUser}
+          />
+        )}
 
         {/* DEV-ONLY: remove before launch */}
         <DevBar currentUser={currentUser} onLogout={handleLogout} />

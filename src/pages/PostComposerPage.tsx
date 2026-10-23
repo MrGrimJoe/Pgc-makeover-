@@ -110,7 +110,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
   };
 
   return (
-    <div className="w-full max-w-[430px] mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col">
+    <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col">
       {/* Top bar 48px: Cancel (muted) left, "New post" centered, Post (blue) right */}
       <div className="h-[48px] px-4 flex items-center justify-between border-b border-[var(--line,#E8EBF0)] font-semibold">
         <button
@@ -295,7 +295,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
 
       {pickerOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setPickerOpen(false)}>
-          <div ref={sheetRef} role="dialog" aria-modal="true" aria-label="Choose a sticker or GIF" tabIndex={-1} onClick={(e) => e.stopPropagation()} className="w-full max-w-[430px] h-[60vh] bg-[var(--bg,#fff)] rounded-t-[16px] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
+          <div ref={sheetRef} role="dialog" aria-modal="true" aria-label="Choose a sticker or GIF" tabIndex={-1} onClick={(e) => e.stopPropagation()} className="w-full max-w-content h-[60vh] bg-[var(--bg,#fff)] rounded-t-[16px] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
             <div className="flex-1 min-h-0">
               <PickerPanel userId={currentUserId} reloadKey={libraryKey} onPick={(key) => { setStickerKey(key); setPickerOpen(false); }} onAddFiles={(files) => setAddFiles(files)} />
             </div>
