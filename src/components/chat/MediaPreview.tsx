@@ -88,7 +88,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
   };
 
   return (
-    <div ref={ref} role="dialog" aria-modal="true" aria-label={mode === 'library' ? 'Add to my stickers and GIFs' : 'Preview before sending'} tabIndex={-1} className="fixed inset-0 z-50 bg-[var(--bg,#fff)] flex flex-col max-w-content mx-auto">
+    <div ref={ref} role="dialog" aria-modal="true" aria-label={mode === 'library' ? 'Add to my stickers and GIFs' : 'Preview before sending'} tabIndex={-1} className="fixed inset-0 left-[var(--nav-w,0px)] z-50 bg-[var(--bg,#fff)] flex flex-col max-w-content mx-auto">
       <header className="h-[48px] flex items-center px-2 border-b border-[var(--line,#E8EBF0)] shrink-0">
         <button type="button" onClick={onCancel} disabled={busy} aria-label="Cancel" className="w-[44px] h-[44px] flex items-center justify-center bg-transparent border-0 text-[var(--text,#17233A)] cursor-pointer disabled:opacity-40">
           <X className="w-5 h-5" aria-hidden="true" />

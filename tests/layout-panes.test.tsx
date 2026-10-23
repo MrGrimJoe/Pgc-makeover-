@@ -180,3 +180,51 @@ describe('the wide column is defined and really reaches the built CSS', () => {
     expect(css).toMatch(/--container-wide:\s*var\(--wide-w\)/);
   });
 });
+
+describe('keyboard: arrow keys move between rows and sections', () => {
+  const press = async (el: Element, key: string) => { await act(async () => { el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); }); };
+
+  it('Messages list: Down and Up move focus between conversations, Home and End jump', async () => {
+    const two: ConversationItem = { ...conv, id: 'conv_2', other_user: { id: 'u8', username: 'amy', display_name: 'Amy', avatar_media_id: null } };
+    const net = installFetch({ ...baseRoutes(), 'GET /api/conversations': () => json({ conversations: [conv, two] }) }); cleanups.push(net.restore);
+    const vp = installViewport(1280); cleanups.push(vp.restore);
+    m = await mount(<LayoutProvider>{messages()}</LayoutProvider>);
+    await flush(); await flush();
+    const rows = [...document.querySelectorAll<HTMLElement>('li button')];
+    expect(rows.length).toBe(2);
+    rows[0]!.focus();
+    await press(rows[0]!, 'ArrowDown');
+    expect(document.activeElement).toBe(rows[1]);
+    await press(rows[1]!, 'ArrowDown');
+    expect(document.activeElement).toBe(rows[1]); // stays on the last row
+    await press(rows[1]!, 'ArrowUp');
+    expect(document.activeElement).toBe(rows[0]);
+    await press(rows[0]!, 'End');
+    expect(document.activeElement).toBe(rows[1]);
+    await press(rows[1]!, 'Home');
+    expect(document.activeElement).toBe(rows[0]);
+  });
+
+  it('Settings sections on desktop: Down moves focus to the next section button', async () => {
+    await open(1280, <SettingsPage currentUser={me} onProfileUpdated={() => undefined} onAccountDeleted={() => undefined} onLogout={() => undefined} onBack={() => undefined} />);
+    const buttons = [...document.querySelectorAll<HTMLElement>('[role="group"][aria-label="Settings sections"] button')];
+    buttons[0]!.focus();
+    await press(buttons[0]!, 'ArrowDown');
+    expect(document.activeElement).toBe(buttons[1]);
+  });
+});
+
+describe('overlays sit over the column, not over the whole screen', () => {
+  it('--nav-w is the navigation width per layout and SideNav and the overlays use it', async () => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/index.css', 'utf8');
+    expect(css).toMatch(/:root\[data-layout="tablet"\]\s*\{\s*--nav-w:\s*72px/);
+    expect(css).toMatch(/:root\[data-layout="desktop"\]\s*\{\s*--nav-w:\s*240px/);
+    expect(css).toMatch(/--nav-w:\s*0px/); // phones have no side navigation
+    expect(readFileSync('src/components/SideNav.tsx', 'utf8')).toContain('w-[var(--nav-w)]');
+    for (const f of ['chat/ForwardPicker', 'chat/AttachSheet', 'chat/MediaViewer', 'chat/MediaPreview', 'BottomSheet']) {
+      expect(readFileSync(`src/components/${f}.tsx`, 'utf8'), f).toContain('var(--nav-w,0px)');
+    }
+    expect(readFileSync('src/pages/PostComposerPage.tsx', 'utf8')).toContain('var(--nav-w,0px)');
+  });
+});

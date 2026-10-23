@@ -11,6 +11,7 @@ import { prepareAndUpload, type PickedItem } from '../lib/media-upload.ts';
 import { BottomSheet } from '../components/BottomSheet.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { useLayout } from '../lib/layout.ts';
+import { arrowKeyNav } from '../lib/arrow-keys.ts';
 
 interface SettingsPageProps {
   currentUser: MeResponse;
@@ -180,7 +181,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
 
       <div className={split ? 'flex items-start gap-6 p-6' : 'p-3 space-y-3'}>
         {split && (
-          <div role="group" aria-label="Settings sections" className="sticky top-[72px] shrink-0 w-[200px] space-y-1">
+          <div role="group" aria-label="Settings sections" onKeyDown={arrowKeyNav} className="sticky top-[72px] shrink-0 w-[200px] space-y-1">
             {SECTIONS.map(({ id, label }) => (
               <button
                 key={id}

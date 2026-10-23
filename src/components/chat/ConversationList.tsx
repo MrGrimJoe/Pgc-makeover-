@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import type { ConversationItem } from '../../../shared/schema.ts';
 import { Avatar } from '../Avatar.tsx';
 import { ExpiryChip } from '../ExpiryChip.tsx';
+import { arrowKeyNav } from '../../lib/arrow-keys.ts';
 
 /** Preview text for the last message: the text, or "Photo", "Sticker", "GIF", "Video" for media-only messages. */
 export function previewText(last: NonNullable<ConversationItem['last_message']> | null | undefined): string {
@@ -63,7 +64,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
     )}
 
     {!loading && conversations.length > 0 && (
-      <ul className="divide-y divide-[var(--line,#E8EBF0)] list-none m-0 p-0">
+      <ul onKeyDown={arrowKeyNav} className="divide-y divide-[var(--line,#E8EBF0)] list-none m-0 p-0">
         {conversations.map((conv) => {
           const other = conv.other_user;
           const last = conv.last_message;

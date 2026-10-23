@@ -46,7 +46,7 @@ export const SideNav: React.FC<SideNavProps> = ({ activeTab, setActiveTab, onOpe
     <nav
       aria-label="Navigation"
       data-nav={expanded ? 'sidebar' : 'rail'}
-      className={`sticky top-0 self-start h-screen shrink-0 flex flex-col py-3 gap-1 bg-[var(--bg,#fff)] border-r border-[var(--line,#E8EBF0)] ${expanded ? 'w-[240px] px-3' : 'w-[72px] px-2'}`}
+      className={`sticky top-0 self-start h-screen shrink-0 flex flex-col py-3 gap-1 bg-[var(--bg,#fff)] border-r border-[var(--line,#E8EBF0)] w-[var(--nav-w)] ${expanded ? 'px-3' : 'px-2'}`}
     >
       <button
         type="button"

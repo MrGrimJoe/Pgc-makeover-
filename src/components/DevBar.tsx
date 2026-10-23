@@ -1,6 +1,7 @@
 // DEV-ONLY: remove before launch
 import React from 'react';
 import type { MeResponse } from '../../shared/schema.ts';
+import { useLayout } from '../lib/layout.ts';
 
 interface DevBarProps {
   currentUser: MeResponse | null;
@@ -14,6 +15,7 @@ const SEEDED_DEV_USERS = [
 ];
 
 export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
+  const layout = useLayout();
   // DEV-ONLY: remove before launch
   // Completely omitted in production builds via Vite dead-code elimination
   if (!import.meta.env.DEV) {
@@ -34,7 +36,7 @@ export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
     <div
       role="region"
       aria-label="Development Toolbar"
-      className={`fixed ${currentUser ? 'bottom-12' : 'bottom-0'} left-0 right-0 z-50 bg-[#F2C94C] text-[#17233A] border-t border-[#17233A]/20 px-3 py-1 text-[12px] font-sans flex flex-wrap items-center justify-between gap-2`}
+      className={`fixed ${currentUser && layout === 'phone' ? 'bottom-12' : 'bottom-0'} left-0 right-0 z-50 bg-[#F2C94C] text-[#17233A] border-t border-[#17233A]/20 px-3 py-1 text-[12px] font-sans flex flex-wrap items-center justify-between gap-2`}
     >
       <div className="flex items-center space-x-2">
         <span className="font-semibold px-1.5 py-0.5 bg-[#17233A] text-[#F2C94C] rounded text-[11px] uppercase tracking-wider">

@@ -37,6 +37,8 @@
   --content-w: 430px;
   /* Two-pane pages (Messages, and Settings on desktop) use this wider column; it shrinks to the space that is left */
   --wide-w: 960px;
+  /* Width of the side navigation (none on phones). Overlays shift by it so they sit over the column, not over the whole screen. */
+  --nav-w: 0px;
   --bg: #FFFFFF;
   --bg2: #F8F9FC;
   --line: #E8EBF0;
@@ -159,6 +161,8 @@ button:not(:disabled):active { transform: scale(0.96); }
 
 /* Column width per layout (data-layout is set on <html> by LayoutProvider) */
 :root[data-layout="tablet"], :root[data-layout="desktop"] { --content-w: 640px; }
+:root[data-layout="tablet"] { --nav-w: 72px; }
+:root[data-layout="desktop"] { --nav-w: 240px; }
 
 /* Overlays on wider screens: a centered dialog fades and scales in; a drawer slides in from the right */
 @keyframes dialog-in { from { opacity: 0; transform: scale(0.96) translateY(8px); } }

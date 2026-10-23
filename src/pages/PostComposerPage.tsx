@@ -294,7 +294,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
       </div>
 
       {pickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setPickerOpen(false)}>
+        <div className="fixed inset-0 pl-[var(--nav-w,0px)] z-50 flex items-end justify-center bg-black/50" onClick={() => setPickerOpen(false)}>
           <div ref={sheetRef} role="dialog" aria-modal="true" aria-label="Choose a sticker or GIF" tabIndex={-1} onClick={(e) => e.stopPropagation()} className="w-full max-w-content h-[60vh] bg-[var(--bg,#fff)] rounded-t-[16px] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
             <div className="flex-1 min-h-0">
               <PickerPanel userId={currentUserId} reloadKey={libraryKey} onPick={(key) => { setStickerKey(key); setPickerOpen(false); }} onAddFiles={(files) => setAddFiles(files)} />

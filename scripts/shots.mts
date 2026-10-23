@@ -7,7 +7,7 @@
  *   2. npm install --no-save playwright && npx playwright install chromium   (once, not part of package.json)
  *   3. npm run shots                               (writes PNGs to shots/<width>/)
  *
- * Environment: BASE_URL (default http://localhost:3000), AS (seeded username, default alice).
+ * Environment: BASE_URL (default http://localhost:3000), AS (seeded username, default alice), CHROMIUM_PATH (optional, use this browser).
  */
 import { mkdirSync } from 'node:fs';
 
@@ -37,15 +37,23 @@ try {
   process.exit(1);
 }
 
-const browser = await pw.chromium.launch();
+// CHROMIUM_PATH: use an existing Chromium/Chrome instead of the one Playwright downloads (needed where downloads are blocked)
+const executablePath = process.env.CHROMIUM_PATH || undefined;
+const browser = await pw.chromium.launch(executablePath ? { executablePath, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'] } : {});
 try {
   for (const { width, height } of WIDTHS) {
     const dir = `shots/${width}`;
     mkdirSync(dir, { recursive: true });
     const context = await browser.newContext({ viewport: { width, height } });
     const page = await context.newPage();
+    // Signed out first: the sign-in screen
+    await page.goto(BASE);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `${dir}/signin.png` });
     await page.goto(`${BASE}/api/auth/google?mock=true&as=${encodeURIComponent(AS)}`);
     await page.waitForLoadState('networkidle');
+    await page.addStyleTag({ content: '[aria-label="Development Toolbar"] { display: none !important; }' }); // the dev bar would cover the bottom of the navigation
     const layout = await page.evaluate(() => document.documentElement.dataset.layout);
     console.log(`${width}px -> ${layout}`);
     for (const { name, nav } of PAGES) {
@@ -54,12 +62,13 @@ try {
       if (!(await target.count())) { console.warn(`  ${name}: no "${nav}" button at ${width}px, skipped`); continue; }
       await target.click();
       await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(600); // let the page transition finish
       await page.screenshot({ path: `${dir}/${name}.png`, fullPage: false });
     }
     if (width >= 1024) {
       // Settings is a two-pane page on desktop
       const settings = page.getByRole('button', { name: 'Settings', exact: true }).first();
-      if (await settings.count()) { await settings.click(); await page.waitForLoadState('networkidle'); await page.screenshot({ path: `${dir}/settings.png` }); }
+      if (await settings.count()) { await settings.click(); await page.waitForLoadState('networkidle'); await page.waitForTimeout(600); await page.screenshot({ path: `${dir}/settings.png` }); }
     }
     await context.close();
   }

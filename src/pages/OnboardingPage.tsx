@@ -183,7 +183,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
 
   if (session === 'loading') {
     return (
-      <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-20 px-4" aria-busy="true">
+      <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-20 tablet:py-10 px-4" aria-busy="true">
         <div className="w-40 h-5 skeleton-box rounded mx-auto" />
       </div>
     );
@@ -191,7 +191,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
 
   if (session === 'expired') {
     return (
-      <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-20 px-4 text-center space-y-4">
+      <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-20 tablet:py-10 px-4 text-center space-y-4">
         <h1 className="text-[18px] font-semibold text-[var(--text,#17233A)]">Your sign-up session ended</h1>
         <p className="text-[14px] text-[var(--muted,#5B6577)]">For your safety it only lasts 15 minutes. Start again to continue.</p>
         <button type="button" onClick={onRestart} className={primaryButton}>

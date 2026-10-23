@@ -45,7 +45,7 @@ export const ForwardPicker: React.FC<ForwardPickerProps> = ({ messageId, onClose
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 pl-[var(--nav-w,0px)] z-[60] flex items-end justify-center bg-black/50" onClick={onClose}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label="Forward to" tabIndex={-1} onClick={(e) => e.stopPropagation()} className="w-full max-w-content max-h-[70vh] overflow-y-auto bg-[var(--bg,#fff)] rounded-t-[16px] p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
         <div className="flex items-center justify-between mb-2">
           <h2 className="m-0 text-[16px] font-semibold text-[var(--text,#17233A)]">Forward to</h2>

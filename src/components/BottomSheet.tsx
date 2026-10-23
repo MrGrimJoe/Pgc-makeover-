@@ -121,7 +121,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
 
   return (
     <div
-      className={`sheet-backdrop fixed inset-0 z-50 bg-[#17233A]/50 flex ${variant === 'sheet' ? 'items-end justify-center' : variant === 'dialog' ? 'items-center justify-center p-4' : 'items-stretch justify-end'}`}
+      className={`sheet-backdrop fixed inset-0 z-50 bg-[#17233A]/50 flex ${variant === 'sheet' ? 'items-end justify-center pl-[var(--nav-w,0px)]' : variant === 'dialog' ? 'items-center justify-center p-4' : 'items-stretch justify-end'}`}
       data-closing={closing}
       onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}
     >

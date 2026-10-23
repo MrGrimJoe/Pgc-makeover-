@@ -195,7 +195,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               onClick={handleToggleLike}
               title={hasLiked ? 'Unlike' : 'Like'}
               aria-label={hasLiked ? 'Unlike' : 'Like'}
-              className={`w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center cursor-pointer bg-transparent border-0 ${
+              className={`w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center cursor-pointer bg-transparent hover:bg-[var(--bg2,#F8F9FC)] rounded-full border-0 ${
                 hasLiked ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'
               }`}
             >
@@ -211,7 +211,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               onClick={() => setShowComments(true)}
               title="Comment"
               aria-label="Comment"
-              className="w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0"
+              className="w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent hover:bg-[var(--bg2,#F8F9FC)] rounded-full border-0"
             >
               <MessageSquare className="w-6 h-6 stroke-[1.7]" />
             </button>
@@ -221,7 +221,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               onClick={() => setShowReport(true)}
               title="Report"
               aria-label="Report"
-              className="w-[44px] h-[44px] -my-2.5 -mr-2.5 ml-auto flex items-center justify-center text-[var(--text,#17233A)] hover:text-[var(--danger,#B23A40)] cursor-pointer bg-transparent border-0"
+              className="w-[44px] h-[44px] -my-2.5 -mr-2.5 ml-auto flex items-center justify-center text-[var(--text,#17233A)] hover:text-[var(--danger,#B23A40)] cursor-pointer bg-transparent hover:bg-[var(--bg2,#F8F9FC)] rounded-full border-0"
             >
               <Flag className="w-6 h-6 stroke-[1.7]" />
             </button>
@@ -283,7 +283,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               onClick={handleToggleLike}
               title={hasLiked ? 'Unlike' : 'Like'}
               aria-label={hasLiked ? 'Unlike' : 'Like'}
-              className={`w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center cursor-pointer bg-transparent border-0 ${
+              className={`w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center cursor-pointer bg-transparent hover:bg-[var(--bg2,#F8F9FC)] rounded-full border-0 ${
                 hasLiked ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'
               }`}
             >
@@ -299,7 +299,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               onClick={() => setShowComments(true)}
               title="Comment"
               aria-label="Comment"
-              className="w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0"
+              className="w-[44px] h-[44px] -my-2.5 -ml-2.5 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent hover:bg-[var(--bg2,#F8F9FC)] rounded-full border-0"
             >
               <MessageSquare className="w-6 h-6 stroke-[1.7]" />
             </button>
@@ -309,7 +309,7 @@ export const PostCard: React.FC<PostCardProps> = ({
               onClick={() => setShowReport(true)}
               title="Report"
               aria-label="Report"
-              className="w-[44px] h-[44px] -my-2.5 -mr-2.5 ml-auto flex items-center justify-center text-[var(--text,#17233A)] hover:text-[var(--danger,#B23A40)] cursor-pointer bg-transparent border-0"
+              className="w-[44px] h-[44px] -my-2.5 -mr-2.5 ml-auto flex items-center justify-center text-[var(--text,#17233A)] hover:text-[var(--danger,#B23A40)] cursor-pointer bg-transparent hover:bg-[var(--bg2,#F8F9FC)] rounded-full border-0"
             >
               <Flag className="w-6 h-6 stroke-[1.7]" />
             </button>
