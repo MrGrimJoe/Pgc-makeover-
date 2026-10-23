@@ -32,4 +32,4 @@ Where the code lives:
 
 Out of scope for now: drawing and text editing on media (the preview offers rotate, crop to a shape, and "Send as" only), third-party GIF search, per-chat backgrounds.
 
-Stickers and GIFs (bundled packs with permanent numbering, uploaded ones, keys in chats, posts and comments) are built; the bundled pack is a **placeholder** until the real art is added (README, "Stickers and GIFs"). Planned: the profile background from your own image, polls. See `docs/STATUS.md`.
+Stickers and GIFs (bundled packs with permanent numbering, uploaded ones, keys in chats, posts and comments) are built; the bundled pack is a **placeholder** until the real art is added (README, "Stickers and GIFs"). The profile background from your own image and polls (Phase 5) are built. See `docs/STATUS.md`.

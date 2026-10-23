@@ -253,6 +253,13 @@ There is no automatic image or video scanner. Safety rests on reporting, blockin
 
 ---
 
+## 10a. Profile backgrounds and polls
+
+- **Backgrounds** are ordinary `media` rows of kind `background` (400 KB cap, 10 uploads per hour, counted in the 200 MB quota). `profiles.wallpaper_media_id` is a retention reference, like the avatar: the cleanup job (`unreferencedSql` in `worker/media.ts`) keeps the file while it is a profile background and deletes it 24 hours after it stops being one (replaced, removed, or a preset chosen). Reads follow the avatar rule: any signed-in person who is not blocked with the owner.
+- **Moderation:** reporting a user stores the current background's media id and hash in `report_evidence` (30 days), so the file can be found even after the person changes it.
+- **Polls** need no storage beyond three small tables. Votes are one statement per vote (`ON CONFLICT` on `(poll_id, user_id)`), so parallel requests cannot create a second row. The limit is 60 votes per hour per person (`pollvote:<userId>` in `rate_limits`). A page of posts costs at most three extra poll queries (`worker/polls.ts`), whatever the number of polls.
+- **Retention:** a poll goes with its post (foreign key cascade); votes go with the voter's account. Counts are only ever read for viewers who may see them.
+
 ## 10. Stickers, GIFs and the R2 free tier
 
 ### Adding or changing bundled stickers

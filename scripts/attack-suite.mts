@@ -298,6 +298,57 @@ r = await call('GET', '/api/me', { cookie: ayesha }); ok('free-text campus repla
   r = await call('POST', '/api/stickers/library', { cookie: OUT, json: { media_id: commentSticker } }); ok('cannot add a sticker you do not own to your library', r.s === 404 || r.s === 403, `status ${r.s}`);
 }
 
+
+// ---------- POLLS + CUSTOM BACKGROUNDS ----------
+{
+  const enc = (t: string) => [...t].map((c) => c.charCodeAt(0));
+  const webp = (n: number) => new Uint8Array([...enc('RIFF'), 8, 0, 0, 0, ...enc('WEBP'), n, 0]);
+  const upKind = async (cookie: string, bytes: Uint8Array, type: string, kind: string) => { const f = new FormData(); f.append('file', new Blob([bytes], { type }), 'f'); f.append('kind', kind); return call('POST', '/api/media/uploads', { cookie, form: f }); };
+  const SK = STICKER_PACKS[0]!; const skKey = `app:${SK.id}/${SK.items[0]!.number}`;
+  const PA = await seed('usr_polla', 'polla'), PB = await seed('usr_pollb', 'pollb'), PC = await seed('usr_pollc', 'pollc'), PD = await seed('usr_polld', 'polld');
+  const mkPoll = async (cookie: string, options: unknown) => { await clearRL(); return call('POST', '/api/posts', { cookie, json: { body: 'poll q', poll: { options } } }); };
+  const hostile = ['<script>alert(1)</script>', '<img src=x onerror=alert(1)>', 'a'.repeat(10_000), null, 42, ['x'], { a: 1 }];
+  for (const bad of hostile) { r = await mkPoll(PA, ['ok', bad]); ok(`poll option ${JSON.stringify(bad)?.slice(0, 26)} rejected`, r.s === 400, `status ${r.s}`); }
+  for (const bad of [['one'], [], ['a', 'b', 'c', 'd', 'e', 'f', 'g'], 'a,b', null, { options: ['a', 'b'] }, ['Same', ' same ']]) { r = await mkPoll(PA, bad); ok(`poll options ${JSON.stringify(bad)?.slice(0, 30)} rejected`, r.s === 400, `status ${r.s}`); }
+  await clearRL(); r = await call('POST', '/api/posts', { cookie: PA, json: { body: 'x', poll: { options: ['a', 'b'], multiple: true } } }); ok('unknown key inside poll rejected', r.s === 400, `status ${r.s}`);
+  await clearRL(); r = await call('POST', '/api/posts', { cookie: PA, json: { body: 'x', poll: { options: ['a', 'b'] }, sticker_key: skKey } }); ok('poll + sticker rejected', r.s === 400, `status ${r.s}`);
+  r = await mkPoll(PA, ["Bob'); DROP TABLE polls;--", 'Alice']); const pid = idOf(r.j); ok('POSITIVE CONTROL: a poll with SQL-looking text is stored as plain text', r.s === 201 && !!pid, `status ${r.s}`);
+  const tableOk = (await db.prepare("SELECT COUNT(*) c FROM sqlite_master WHERE name = 'polls'").first()).c === 1; ok('polls table still exists after injection text', tableOk, '');
+  const optIds = (r.j?.poll?.options ?? []).map((o: any) => o.id); const other = idOf((await mkPoll(PA, ['x', 'y'])).j); const otherOpt = (await db.prepare('SELECT id FROM poll_options WHERE poll_id = ? LIMIT 1').bind(other).first()).id;
+  const vote = (cookie: string | undefined, post: string, option: unknown) => call('PUT', `/api/posts/${post}/poll/vote`, { cookie, json: { option_id: option } });
+  r = await vote(undefined, pid, optIds[0]); ok('vote without a session -> 401', r.s === 401, `status ${r.s}`);
+  for (const bad of ["x' OR '1'='1", '../x', 123, null, ['a'], '', 'a'.repeat(500)]) { r = await vote(PB, pid, bad); ok(`vote option_id ${JSON.stringify(bad)?.slice(0, 22)} rejected`, r.s === 400, `status ${r.s}`); }
+  r = await vote(PB, pid, otherOpt); ok('option from another poll -> 400 (no cross-poll votes)', r.s === 400, `status ${r.s}`);
+  const plainPost = idOf((await (async () => { await clearRL(); return call('POST', '/api/posts', { cookie: PA, json: { body: 'no poll' } }); })()).j); r = await vote(PB, plainPost, optIds[0]); ok('vote on a post without a poll -> 404', r.s === 404, `status ${r.s}`);
+  r = await vote(PB, 'pst_nope', optIds[0]); ok('vote on a missing post -> 404', r.s === 404, `status ${r.s}`);
+  r = await vote(PB, pid, optIds[0]); ok('POSITIVE CONTROL: a valid vote works', r.s === 200 && r.j?.poll?.my_vote === optIds[0], `status ${r.s}`);
+  await Promise.all([vote(PB, pid, optIds[0]), vote(PB, pid, optIds[1]), vote(PB, pid, optIds[0]), vote(PB, pid, optIds[1])]);
+  const rowsAfter = (await db.prepare('SELECT COUNT(*) c FROM poll_votes WHERE poll_id = ? AND user_id = ?').bind(pid, 'usr_pollb').first()).c; ok('parallel votes by one account leave exactly one row', rowsAfter === 1, `rows ${rowsAfter}`);
+  r = await call('GET', `/api/posts/${pid}`, { cookie: PC }); const rawNonVoter = JSON.stringify(r.j?.poll ?? {}); ok('a non-voter never receives counts', r.s === 200 && !/votes/.test(rawNonVoter), rawNonVoter.slice(0, 120));
+  r = await call('GET', '/api/feed?author=polla', { cookie: PC }); const feedRaw = JSON.stringify(r.j ?? {}); ok('feed JSON for a non-voter carries no vote counts', r.s === 200 && !/"votes"|total_votes/.test(feedRaw), '');
+  r = await call('GET', `/api/posts/${pid}`, { cookie: PB }); const voterRaw = JSON.stringify(r.j ?? {}); ok('the response never lists who voted (no voter ids besides the author)', !/usr_pollb|usr_pollc|voter/.test(voterRaw), '');
+  r = await call('GET', `/api/posts/${pid}`, { cookie: PA }); ok('the author sees the counts', typeof r.j?.poll?.total_votes === 'number', JSON.stringify(r.j?.poll).slice(0, 100));
+  await call('POST', '/api/blocks', { cookie: PA, json: { user_id: 'usr_pollc' } }); r = await vote(PC, pid, optIds[0]); ok('a blocked person cannot vote -> 404', r.s === 404, `status ${r.s}`);
+  await db.prepare('UPDATE posts SET expires_at = ? WHERE id = ?').bind(new Date(Date.now() - 1000).toISOString(), other).run(); r = await vote(PD, other, otherOpt); ok('voting on an expired poll -> 409', r.s === 409, `status ${r.s}`);
+  let lim = 0; for (let i = 0; i < 75; i++) { const x = await vote(PD, pid, optIds[i % 2]); if (x.s === 429) lim++; } ok('vote spam is rate limited (429 seen)', lim > 0, `429s: ${lim}/75`);
+
+  // custom backgrounds
+  const bg = (cookie: string, bytes: Uint8Array, mime = 'image/webp') => upKind(cookie, bytes, mime, 'background');
+  r = await bg(PA, new Uint8Array(enc('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>')), 'image/svg+xml'); ok('SVG background rejected', r.s === 400, `status ${r.s}`);
+  const bigBg = new Uint8Array(400 * 1024 + 1); bigBg.set(webp(1)); r = await bg(PA, bigBg); ok('background over 400 KB -> 413', r.s === 413, `status ${r.s}`);
+  r = await bg(PA, webp(21)); const bgId = idOf(r.j); ok('POSITIVE CONTROL: a valid background uploads', r.s === 201 && !!bgId, `status ${r.s}`);
+  r = await call('GET', `/api/media/${bgId}`, { cookie: PB }); ok('an unattached background is private -> 403', r.s === 403, `status ${r.s}`);
+  r = await call('PATCH', '/api/me', { cookie: PB, json: { wallpaper_media_id: bgId } }); ok("someone else's background cannot be set -> 400", r.s === 400, `status ${r.s}`);
+  for (const bad of ["x' OR '1'='1", '../../etc/passwd', 123, ['a'], '', 'a'.repeat(300)]) { r = await call('PATCH', '/api/me', { cookie: PA, json: { wallpaper_media_id: bad } }); ok(`wallpaper_media_id ${JSON.stringify(bad)?.slice(0, 22)} rejected`, r.s === 400, `status ${r.s}`); }
+  r = await call('PATCH', '/api/me', { cookie: PA, json: { wallpaper_id: 'custom' } }); ok("'custom' with no image -> 400", r.s === 400, `status ${r.s}`);
+  const photoId = await upKind(PA, webp(22), 'image/webp', 'photo').then((x: any) => idOf(x.j)); r = await call('PATCH', '/api/me', { cookie: PA, json: { wallpaper_media_id: photoId } }); ok('a photo cannot be used as a background -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('PATCH', '/api/me', { cookie: PA, json: { wallpaper_media_id: bgId } }); ok('POSITIVE CONTROL: the owner sets their own background', r.s === 200 && r.j?.profile?.wallpaper_id === 'custom', `status ${r.s}`);
+  r = await call('GET', `/api/media/${bgId}`, { cookie: PB }); ok('once it is the profile background, signed-in people can read it', r.s === 200, `status ${r.s}`);
+  r = await call('GET', `/api/media/${bgId}`); ok('signed-out visitors cannot read it', r.s === 401 || r.s === 403, `status ${r.s}`);
+  r = await call('PATCH', '/api/me', { cookie: PA, json: { wallpaper_media_id: bgId, wallpaper_id: 'plain' } }); ok('image plus a preset in one request -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('PATCH', '/api/me', { cookie: PA, json: { wallpaper_id: 'plain' } }); ok('choosing a preset clears the image', r.s === 200 && r.j?.profile?.wallpaper_media_id === null, `status ${r.s}`);
+}
+
 // ---------- EXPIRY / LIFECYCLE ----------
 const mk = async (id: string, author: string, ageDays: number, likers: string[], commenter: string[] = []) => {
   const created = new Date(Date.now() - ageDays * 864e5).toISOString();

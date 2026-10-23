@@ -26,9 +26,22 @@ Base commit: `ba1d936`. Patches are cumulative from that base.
   - Keys `app:<pack>/<number>` and `usr:<mediaId>` validated on the server; migrations 008 and 009; `comment_media`; evidence snapshots for posts and comments.
   - `StickerView`, picker (Stickers/GIFs, Recent on device only, Mine, packs, Manage), stickers in chats, posts and comments, Report on comments, post composer compresses photos and takes photos or one sticker.
 
+- **Phase 5: profile background from your own image, and polls** (`phase-5-backgrounds-polls.patch`, applies on top of the Phase 4 patch)
+  - Migration 010: `profiles.wallpaper_media_id`, `polls`, `poll_options`, `poll_votes`.
+  - Background: `wallpaper_id = 'custom'` plus an owned `background` upload; reads follow the avatar rule; retention is reference-based; always drawn under a 0.55 black layer with white text (worst-case contrast test, 4.7:1); user reports record the image; picker, Replace and Remove on Edit profile; compression to 1080 px WebP under 400 KB on the phone.
+  - Polls: `poll` on `POST /api/posts`, `PUT /api/posts/:id/poll/vote`, batched hydration (3 queries per page), counts only for voters and the author, closes with the post, builder on New post, poll card with accessible buttons.
+  - Tests: server, jsdom (axe) and client-compression tests for both; attack suite extended (281 checks).
+
 ## Not started
-- Phase 3 leftover: the compact composer is used for comments, but the New post page still has its own text box (it also holds photos and the future poll and sticker choice). The post page does now take photos or one sticker/GIF, and compresses photos, but its text box is its own.
-- Phase 5: profile background from the person's own image; polls on posts.
+- Phase 3 leftover: the compact composer is used for comments, but the New post page still has its own text box (it also holds photos, the poll builder and the sticker choice). The post page does now take photos or one sticker/GIF, and compresses photos, but its text box is its own.
+- Nothing planned is left in Phases 1 to 5.
 
 ## Not verified
 Nothing involving a real phone has been tested (keyboard, share sheet, WebCodecs). Nothing in Phases 1 to 3 has been run on a real phone or browser. Not verified: on-screen keyboard tracking and the picker replacing the keyboard (`visualViewport`, `interactive-widget`), camera and gallery pickers, the phone share sheet, GIF/video autoplay and reduced motion on devices, the canvas rotate/crop/compress output, and the look of the screens. The canvas code in `src/lib/media.ts` (`browserMediaEnv`) is tested only through a mock; it has never run in a real browser. EXIF stripping is verified on a hand-built JPEG, not on real camera files.
+
+Phase 5 specifically: image compression for backgrounds (canvas WebP at 1080 px) and the scrim over real photos have not been looked at on a real phone or browser; contrast is proved numerically for the worst case, not by eye. The poll builder and poll card have been tested in jsdom only.
+
+## Decisions for the owner
+- Votes do not count as engagement toward the 14-day extension (only likes and comments do). Counting them would be a small change in `worker/jobs/expiry.ts`.
+- Once a poll closes, counts stay hidden from people who never voted. Showing final results to everyone after close is a one-line change in `worker/polls.ts`.
+- Poll options are plain text (no emoji picker, no images), and a poll has no separate question field: the post text is the question.

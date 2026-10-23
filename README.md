@@ -294,6 +294,12 @@ Before opening the platform to real students, verify all production hardening cr
 
 ---
 
+## Polls and profile backgrounds
+
+**Polls.** A post can carry a poll (2 to 6 options, each 1 to 60 characters, cleaned like other short text, no `<` or `>`, no duplicates). A post has exactly one of photos, a poll or one sticker/GIF; the text is still required. One vote per account, changeable until the poll closes with its post (7 to 14 days). Results are hidden until you vote: the server returns vote counts only to people who have voted and to the author, so they cannot be read from the page. Nobody is shown who voted what. Deleting an account removes its votes (the counts drop).
+
+**Profile background.** On Edit profile, "Use your own image" compresses a picture on the phone (at most 1080 px, WebP, under 400 KB) and uploads it as kind `background`. It is shown behind the profile header under a dark layer with white text so the name and bio stay readable (`tests/custom-wallpaper.test.ts` computes the worst case, a pure white picture, at about 4.7:1). Everyone signed in can see it; blocked people cannot. It lives as long as it is your background, and is removed when you replace it, pick a preset, or delete the account. A user report records the image so a moderator can identify it.
+
 ## Stickers and GIFs
 
 > ### TODO BEFORE LAUNCH: replace the placeholder stickers
@@ -395,6 +401,7 @@ Built on top of `2971c1d`. Each change is its own commit.
 - **`004_messaging.sql`**: Direct messaging, 1:1 `conversations`, `conversation_members`, ephemeral `messages`, `message_media`, and `blocks` table.
 - **`005_onboarding.sql`**: `campuses` and `campus_requests` (approved list plus student-requested pending entries), `profiles.campus_id / real_name / wallpaper_id / theme_id / text_style_id`, `user_private` (email and roll number, never returned by any API) and `signup_tickets` (15-minute single-use sign-up proof).
 - **`007_media_foundation.sql`**: media `kind`, size metadata, `sha256` (per-owner dedupe), thumbnails, and the `sticker_library` table.
+- **`010_wallpaper_polls.sql`**: `profiles.wallpaper_media_id` (a profile background from the person's own image) and the poll tables `polls`, `poll_options`, `poll_votes` (primary key `(poll_id, user_id)`, so one vote per account).
 - **`006_bundled_campuses.sql`**: rebuilds `profiles` without the `campus_id` foreign key, adds `campus_other`, drops `campuses` and `campus_requests`.
 
 ---
@@ -416,9 +423,10 @@ Built on top of `2971c1d`. Each change is its own commit.
 | `GET` | `/api/classes` | Session or ticket | Returns list of available classes |
 | `GET` | `/api/people/suggested` | **Yes** | Classmates, then campus mates; excludes yourself, followed and blocked people |
 | `GET` | `/api/feed` | **Yes** | Chronological or ranked discovery feed with cursor pagination |
-| `POST` | `/api/posts` | **Yes** | Creates post with #hashtag and keyword topic extraction (rate-limited) |
+| `POST` | `/api/posts` | **Yes** | Creates post with #hashtag and keyword topic extraction (rate-limited). Optional `poll: { options: [2 to 6 strings, 1 to 60 characters each] }`, exclusive with photos and stickers |
 | `GET` | `/api/posts/:id` | **Yes** | Retrieves single post with media, likes, comments, topics |
 | `DELETE` | `/api/posts/:id` | **Yes** | Author-only deletion of post and R2 media |
+| `PUT` | `/api/posts/:id/poll/vote` | **Yes** | Casts or changes your vote (`{ option_id }`). One vote per account, 60 per hour, `404` for blocked pairs, `409` once the post has expired |
 | `POST` | `/api/posts/:id/likes` | **Yes** | Toggles like reaction on a post (+1 interest signal) |
 | `GET` | `/api/posts/:id/comments` | **Yes** | Retrieves comments for a post |
 | `POST` | `/api/posts/:id/comments` | **Yes** | Adds comment to a post (+3 interest signal, rate-limited) |
