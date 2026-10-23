@@ -26,6 +26,7 @@ import { DEFAULT_PRESET_IDS } from '../shared/presets.ts';
 import {
   updateProfileSchema,
   createPostSchema,
+  pollVoteSchema,
   createCommentSchema,
   createReportSchema,
   createFeedbackSchema,
@@ -49,6 +50,8 @@ import { validateStickerKey } from './stickers.ts';
 import { bundledKind } from '../shared/sticker-keys.ts';
 import { loadMediaItem, handleUpload, serveMedia, deleteOwnMedia, listLibrary, addToLibrary, removeFromLibrary, forwardMessage } from './media.ts';
 import { runPostLifecycleExpiry, deletePostAndMedia } from './jobs/expiry.ts';
+import { hydratePolls } from './polls.ts';
+import { checkPollOptions } from '../shared/poll.ts';
 import { extractTopicsFromText } from './content/topics.ts';
 import { rankPosts, type CandidatePost, type UserRankingContext } from './ranking/engine.ts';
 import { computeDecayedWeight } from './ranking/decay.ts';
@@ -193,6 +196,9 @@ async function hydratePosts(
     .all<{ id: string; sticker_key: string }>();
   const stickerMap = new Map<string, string>((stickerRows.results || []).map((r) => [r.id, r.sticker_key]));
 
+  // Polls: a fixed number of queries for the whole page (see worker/polls.ts)
+  const pollMap = await hydratePolls(db, rows, currentUserId);
+
   const blockedIds = await getBlockedUserIds(db, currentUserId);
   const hasBlocked = blockedIds.length > 0;
   const blockedPh = hasBlocked ? blockedIds.map(() => '?').join(',') : '';
@@ -291,6 +297,7 @@ async function hydratePosts(
     status: p.status,
     media: mediaMap.get(p.id) || [],
     sticker_key: stickerMap.get(p.id) ?? null,
+    poll: pollMap.get(p.id) ?? null,
     topics: topicMap.get(p.id) || [],
     likes_count: likeCountMap.get(p.id) || 0,
     has_liked: likedSet.has(p.id),
@@ -1535,6 +1542,76 @@ export default {
     // 4. SOCIAL POSTS, FEED & INTERACTIONS
     // ==========================================
 
+    // PUT /api/posts/:id/poll/vote - Cast or change the caller's vote (one vote per account, enforced by the primary key)
+    const pollVoteMatch = pathname.match(/^\/api\/posts\/([^/]+)\/poll\/vote$/);
+    if (pollVoteMatch && method === 'PUT') {
+      const auth = await authenticateRequest(request, env.DB);
+      if (!auth) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
+      }
+
+      const rate = await checkRateLimit(env.DB, `pollvote:${auth.user.id}`, 60, 60 * 60 * 1000);
+      if (!rate.allowed) {
+        return jsonResponse(
+          { error: 'Rate limit exceeded: maximum 60 votes per hour. Please try again later.' },
+          429,
+          { 'Retry-After': String(rate.retryAfterSeconds) }
+        );
+      }
+
+      let voteBody: unknown;
+      try {
+        voteBody = await request.json();
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400);
+      }
+      const voteParse = pollVoteSchema.safeParse(voteBody);
+      if (!voteParse.success) {
+        return jsonResponse({ error: 'Validation failed', issues: voteParse.error.issues }, 400);
+      }
+
+      let votePostId: string;
+      try {
+        votePostId = decodeURIComponent(pollVoteMatch[1]!);
+      } catch {
+        return jsonResponse({ error: 'Poll not found' }, 404);
+      }
+
+      const pollPost = await env.DB.prepare(
+        `SELECT p.id, p.author_id, p.expires_at, p.status
+         FROM posts p JOIN polls pl ON pl.post_id = p.id
+         WHERE p.id = ?`
+      )
+        .bind(votePostId)
+        .first<{ id: string; author_id: string; expires_at: string; status: string }>();
+      // A post the caller cannot see (inactive, or blocked in either direction) looks the same as a missing one
+      if (!pollPost || pollPost.status !== 'active' || (await isBlockedBetween(env.DB, auth.user.id, pollPost.author_id))) {
+        return jsonResponse({ error: 'Poll not found' }, 404);
+      }
+      if (Date.parse(pollPost.expires_at) <= Date.now()) {
+        return jsonResponse({ error: 'This poll is closed' }, 409);
+      }
+
+      const optionRow = await env.DB.prepare('SELECT 1 FROM poll_options WHERE id = ? AND poll_id = ?')
+        .bind(voteParse.data.option_id, pollPost.id)
+        .first();
+      if (!optionRow) {
+        return jsonResponse({ error: 'That option does not belong to this poll' }, 400);
+      }
+
+      // One statement, so parallel requests from the same account end as exactly one row
+      await env.DB.prepare(
+        `INSERT INTO poll_votes (poll_id, user_id, option_id, voted_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(poll_id, user_id) DO UPDATE SET option_id = excluded.option_id, voted_at = excluded.voted_at`
+      )
+        .bind(pollPost.id, auth.user.id, voteParse.data.option_id, new Date().toISOString())
+        .run();
+
+      // The caller has voted now, so the counts are returned
+      const updated = await hydratePolls(env.DB, [pollPost], auth.user.id);
+      return jsonResponse({ poll: updated.get(pollPost.id) ?? null }, 200);
+    }
+
     // POST /api/posts - Create new post (body max 1000 chars, up to 4 images, 7-day expiry)
     if (pathname === '/api/posts' && method === 'POST') {
       const auth = await authenticateRequest(request, env.DB);
@@ -1567,7 +1644,12 @@ export default {
         );
       }
 
-      const { body: postBody, media_ids = [], sticker_key: postStickerKey } = parseResult.data;
+      const { body: postBody, media_ids = [], sticker_key: postStickerKey, poll: pollInput } = parseResult.data;
+      // The schema already validated the options; this cleans them the same way (trimmed, whitespace collapsed).
+      const pollCheck = pollInput ? checkPollOptions(pollInput.options) : null;
+      if (pollCheck && !pollCheck.ok) {
+        return jsonResponse({ error: pollCheck.error }, 400);
+      }
 
       // Validate media_ids: max 4, owned by author, exist
       if (media_ids.length > 0) {
@@ -1613,6 +1695,13 @@ export default {
       if (postStickerMedia) {
         statements.push(env.DB.prepare('INSERT INTO post_media (post_id, media_id) VALUES (?, ?)').bind(postId, postStickerMedia));
       }
+      if (pollCheck && pollCheck.ok) {
+        statements.push(env.DB.prepare('INSERT INTO polls (post_id, created_at) VALUES (?, ?)').bind(postId, createdAt));
+        pollCheck.options.forEach((text, position) => {
+          const optionId = `opt_${generateRandomString(12).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+          statements.push(env.DB.prepare('INSERT INTO poll_options (id, poll_id, position, text) VALUES (?, ?, ?, ?)').bind(optionId, postId, position, text));
+        });
+      }
 
       for (const mId of media_ids) {
         statements.push(
@@ -1657,6 +1746,10 @@ export default {
           status: 'active',
           media_ids,
           sticker_key: postStickerKey ?? null,
+          // The author always sees the counts, so a new poll starts at zero
+          poll: pollCheck?.ok
+            ? (await hydratePolls(env.DB, [{ id: postId, author_id: auth.user.id, expires_at: expiresAt, status: 'active' }], auth.user.id)).get(postId) ?? null
+            : null,
           topics: extractedTopics,
         },
         201

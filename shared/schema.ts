@@ -1,5 +1,6 @@
 import { parseStickerKey, STICKER_KEY_MAX_LENGTH } from './sticker-keys.ts';
 import { z } from 'zod';
+import { checkPollOptions, POLL_MAX_OPTIONS } from './poll.ts';
 import { WALLPAPER_IDS, THEME_IDS, TEXT_STYLE_IDS } from './presets.ts';
 
 /**
@@ -141,14 +142,34 @@ export const createPostSchema = z
       .default([]),
     /** One sticker or GIF. A post carries photos or a sticker, never both. */
     sticker_key: stickerKeySchema.optional(),
+    /** 2 to 6 options. A poll replaces photos and stickers: a post carries exactly one of them. */
+    poll: z
+      .object({
+        options: z
+          .array(z.string().max(500))
+          .max(POLL_MAX_OPTIONS, { message: `A poll can have at most ${POLL_MAX_OPTIONS} options` }),
+      })
+      .strict()
+      .superRefine((v, ctx) => {
+        const check = checkPollOptions(v.options);
+        if (!check.ok) ctx.addIssue({ code: 'custom', message: check.error, path: ['options'] });
+      })
+      .optional(),
   })
   .strict()
   .refine((v) => !(v.media_ids.length > 0 && v.sticker_key), {
     message: 'A post can have photos or one sticker/GIF, not both',
     path: ['sticker_key'],
+  })
+  .refine((v) => !(v.poll && (v.media_ids.length > 0 || v.sticker_key)), {
+    message: 'A post can have photos, one sticker/GIF or a poll, not a mix',
+    path: ['poll'],
   });
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;
+
+/** PUT /api/posts/:id/poll/vote */
+export const pollVoteSchema = z.object({ option_id: z.string().min(1).max(100) }).strict();
 
 /**
  * Create comment schema for POST /api/posts/:id/comments
@@ -343,6 +364,24 @@ export interface TopicItem {
 /**
  * Post item interface
  */
+/** A poll as feeds, search, profile grids and single-post reads return it. */
+export interface PollOptionItem {
+  id: string;
+  text: string;
+  /** Present only when the viewer has voted or is the author. */
+  votes?: number;
+}
+
+export interface PollItem {
+  options: PollOptionItem[];
+  /** The option id the viewer picked, or null. */
+  my_vote: string | null;
+  /** Present only together with the counts (viewer has voted or is the author). */
+  total_votes?: number;
+  /** True once the post has expired; the poll closes with it. */
+  closed: boolean;
+}
+
 export interface PostItem {
   id: string;
   author_id: string;
@@ -357,6 +396,8 @@ export interface PostItem {
   media: MediaItem[];
   /** app:<pack>/<number> or usr:<mediaId>; null when the post has no sticker/GIF. */
   sticker_key?: string | null;
+  /** Null when the post has no poll. */
+  poll?: PollItem | null;
   topics?: TopicItem[];
   likes_count: number;
   has_liked: boolean;
