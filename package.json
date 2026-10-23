@@ -19,6 +19,7 @@
     "build:stickers": "tsx scripts/build-stickers.ts",
     "prebuild": "tsx scripts/generate-campuses.ts && tsx scripts/build-stickers.ts",
     "attack": "tsx scripts/attack-suite.mts",
+    "shots": "tsx scripts/shots.mts",
     "prelaunch-check": "tsx scripts/prelaunch-check.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"

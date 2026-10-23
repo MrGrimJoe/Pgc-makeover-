@@ -301,7 +301,10 @@ Before opening the platform to real students, verify all production hardening cr
 - **Tablet:** slim icon rail on the left (`SideNav`), a 640 px centered column, no app bar, comments still a slide-up sheet, Report/Delete as centered dialogs.
 - **Desktop:** sidebar with labels (also Messages and Settings), 640 px column with side borders, comments as a drawer sliding in from the right, Report/Delete as centered dialogs.
 - **How a component picks its design:** structure that differs (which navigation, which overlay) comes from `useLayout()` so only one version is ever in the page; styling that differs uses the `tablet:` and `desktop:` Tailwind variants. `<html data-layout="...">` shows which design is active. The column width is `max-w-content` (the `--content-w` variable).
-- **Resizing or rotating** across a breakpoint switches the design live and keeps where you are, including an open sheet.
+- **Messages** is two panes on tablet and desktop (conversation list on the left, chat on the right) and one pane at a time on phones. Settings is two panes on desktop only (section list on the left, one section at a time on the right); on phones and tablets it is one scrolling page. Both use the wider column (`max-w-wide`, the `--wide-w` variable, 960 px at most, less when the window is narrower).
+- **Profile** gets a larger avatar and more space in the header on tablet and desktop. **Sign-in and onboarding** are a centered card on a tinted page from tablet up; on phones they are unchanged.
+- **Resizing or rotating** across a breakpoint switches the design live and keeps where you are, including an open sheet and the open conversation (the chat is not rebuilt, so unsent text stays).
+- **Looking at the designs:** `npm run shots` takes screenshots of the main pages at 390, 820, 1280 and 1920 px wide (see the header of `scripts/shots.mts` for the three setup steps). It needs Playwright, which is not in `package.json`.
 - **Trying a design while building:** open the dev server with `?layout=tablet` or `?layout=desktop` (ignored in a production build).
 
 ## Motion and navigation

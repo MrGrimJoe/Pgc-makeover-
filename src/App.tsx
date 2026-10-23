@@ -186,6 +186,11 @@ export default function App() {
     setActiveTab('messages');
   };
 
+  // Two-pane pages need more room: Messages on tablet and desktop, Settings on desktop
+  const twoPane = (activeTab === 'messages' && wide) || (activeTab === 'settings' && layout === 'desktop');
+  // Signed-out screens on wider windows sit on a tinted page, the sign-in form is a card on it
+  const signedOutWide = wide && !currentUser;
+
   return (
     <div className="min-h-screen bg-[var(--bg2,#F8F9FC)] text-[var(--text,#17233A)] flex justify-center">
       {wide && currentUser && (
@@ -197,7 +202,7 @@ export default function App() {
           expanded={layout === 'desktop'}
         />
       )}
-      <div className={`w-full max-w-content min-w-0 min-h-screen bg-[var(--bg,#fff)] relative flex flex-col font-sans ${wide ? 'border-x border-[var(--line,#E8EBF0)]' : 'pb-16'}`}>
+      <div className={`w-full ${twoPane ? 'max-w-wide' : 'max-w-content'} min-w-0 min-h-screen ${signedOutWide ? 'bg-[var(--bg2,#F8F9FC)]' : 'bg-[var(--bg,#fff)]'} relative flex flex-col font-sans ${signedOutWide ? '' : wide ? 'border-x border-[var(--line,#E8EBF0)]' : 'pb-16'}`}>
         {/* The app bar is only for phones (wider screens have the side navigation); Settings has its own header */}
         {!wide && activeTab !== 'settings' && <Navbar
           onTitleClick={() => setActiveTab(currentUser ? 'feed' : 'signin')}

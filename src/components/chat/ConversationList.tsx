@@ -23,14 +23,20 @@ interface ConversationListProps {
   error: string | null;
   onSelect: (conv: ConversationItem) => void;
   onBack: () => void;
+  /** Two-pane layouts: the list sits beside the chat, so there is no Back button and no own column width. */
+  embedded?: boolean;
+  /** The conversation that is open next to the list (embedded only). */
+  selectedId?: string | null;
 }
 
-export const ConversationList: React.FC<ConversationListProps> = ({ conversations, loading, error, onSelect, onBack }) => (
-  <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col pb-16 tablet:pb-0">
-    <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center px-4">
-      <button type="button" onClick={onBack} title="Back" aria-label="Back" className="w-[44px] h-[44px] -ml-3 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0">
-        <ArrowLeft className="w-5 h-5 stroke-[1.7]" />
-      </button>
+export const ConversationList: React.FC<ConversationListProps> = ({ conversations, loading, error, onSelect, onBack, embedded = false, selectedId = null }) => (
+  <div className={embedded ? 'w-full bg-[var(--bg,#fff)] flex flex-col' : 'w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col pb-16 tablet:pb-0'}>
+    <header className={`sticky top-0 z-40 bg-[var(--bg,#fff)] border-b border-[var(--line,#E8EBF0)] flex items-center px-4 ${embedded ? 'h-[56px]' : 'h-[48px]'}`}>
+      {!embedded && (
+        <button type="button" onClick={onBack} title="Back" aria-label="Back" className="w-[44px] h-[44px] -ml-3 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0">
+          <ArrowLeft className="w-5 h-5 stroke-[1.7]" />
+        </button>
+      )}
       <h1 className="font-semibold text-[20px] text-[var(--text,#17233A)] tracking-[-0.3px] m-0">Messages</h1>
     </header>
 
@@ -66,7 +72,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
               <button
                 type="button"
                 onClick={() => onSelect(conv)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 min-h-[56px] bg-transparent border-0 text-left hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
+                aria-current={embedded && selectedId === conv.id ? 'true' : undefined}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 min-h-[56px] border-0 text-left hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer ${embedded && selectedId === conv.id ? 'bg-[var(--tint,#EEF3FB)]' : 'bg-transparent'}`}
               >
                 <Avatar mediaId={other.avatar_media_id} displayName={other.display_name} username={other.username} size={40} />
                 <span className="flex-1 min-w-0">

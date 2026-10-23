@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLayout } from '../lib/layout.ts';
 import type { PublicProfileResponse, PostItem } from '../../shared/schema.ts';
 import { MoreVertical, Settings } from 'lucide-react';
 import { ReportModal } from '../components/ReportModal.tsx';
@@ -30,6 +31,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
   onOpenSettings,
   onOpenDirectMessage,
 }) => {
+  const wide = useLayout() !== 'phone'; // tablet and desktop: roomier header, larger avatar, wider gaps between tiles
   const [profile, setProfile] = useState<PublicProfileResponse | null>(null);
   const [userPosts, setUserPosts] = useState<PostItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -199,12 +201,12 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
             }}
           >
           {/* Header row: 80px avatar and three stats */}
-          <div className="flex items-center gap-6 p-4">
+          <div className={`flex items-center ${wide ? 'gap-10 p-6' : 'gap-6 p-4'}`}>
             <Avatar
               mediaId={profile.avatar_media_id}
               displayName={profile.display_name}
               username={profile.username}
-              size={80}
+              size={wide ? 112 : 80}
               ringColor={style.accent}
             />
             <div className="flex flex-1 justify-around text-center text-[13px] text-[var(--muted,#5B6577)]">
@@ -230,7 +232,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
           </div>
 
           {/* Identity & Bio */}
-          <div className="px-4 text-[14px]">
+          <div className={`${wide ? 'px-6' : 'px-4'} text-[14px]`}>
             <b
               className="font-semibold text-[15px] block text-[var(--text,#17233A)]"
               style={text}
@@ -255,7 +257,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
           </div>
 
           {/* Action Row */}
-          <div className="flex gap-2 p-3 px-4">
+          <div className={`flex gap-2 p-3 ${wide ? 'px-6' : 'px-4'}`}>
             {isSelf ? (
               <>
                 <button
@@ -353,7 +355,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
           </div>
 
           {/* 3-column grid with 2px gaps and square tiles under 1px top line */}
-          <div className="grid grid-cols-3 gap-[2px] border-t border-[var(--line,#E8EBF0)] mt-1">
+          <div className={`grid grid-cols-3 ${wide ? 'gap-1' : 'gap-[2px]'} border-t border-[var(--line,#E8EBF0)] mt-1`}>
             {userPosts.map((post) => (
               <div
                 key={post.id}

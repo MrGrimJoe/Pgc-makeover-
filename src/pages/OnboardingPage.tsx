@@ -183,7 +183,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
 
   if (session === 'loading') {
     return (
-      <div className="w-full max-w-[360px] mx-auto py-20 px-4" aria-busy="true">
+      <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-20 px-4" aria-busy="true">
         <div className="w-40 h-5 skeleton-box rounded mx-auto" />
       </div>
     );
@@ -191,7 +191,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
 
   if (session === 'expired') {
     return (
-      <div className="w-full max-w-[360px] mx-auto py-20 px-4 text-center space-y-4">
+      <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-20 px-4 text-center space-y-4">
         <h1 className="text-[18px] font-semibold text-[var(--text,#17233A)]">Your sign-up session ended</h1>
         <p className="text-[14px] text-[var(--muted,#5B6577)]">For your safety it only lasts 15 minutes. Start again to continue.</p>
         <button type="button" onClick={onRestart} className={primaryButton}>
@@ -203,7 +203,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
 
   if (created) {
     return (
-      <div className="w-full max-w-[360px] mx-auto py-12 px-4 space-y-5 text-center">
+      <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-12 px-4 space-y-5 text-center">
         <h1 className="text-[18px] font-semibold text-[var(--text,#17233A)]">Add a profile photo</h1>
         <p className="text-[14px] text-[var(--muted,#5B6577)]">
           Other students see it next to your name. You can change it any time.
@@ -238,7 +238,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
   }
 
   return (
-    <div className="w-full max-w-[360px] mx-auto py-8 px-4">
+    <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-8 px-4">
       <h1 className="text-[20px] font-semibold text-[var(--text,#17233A)]">Create your account</h1>
       <p className="mt-1 mb-5 text-[14px] text-[var(--muted,#5B6577)]">
         {email ? `Signing up as ${email}.` : 'Tell us a little about you.'}

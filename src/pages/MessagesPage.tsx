@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type { ConversationItem } from '../../shared/schema.ts';
 import { ConversationList } from '../components/chat/ConversationList.tsx';
 import { ChatScreen } from '../components/chat/ChatScreen.tsx';
+import { useLayout } from '../lib/layout.ts';
 
 interface MessagesPageProps {
   currentUserId: string;
@@ -10,8 +11,14 @@ interface MessagesPageProps {
   onViewAuthorProfile: (username: string) => void;
 }
 
-/** Messages: the conversation list, and the chat for the open conversation. */
+/**
+ * Messages. Phone: the conversation list, then the chat for the open conversation (one at a time).
+ * Tablet and desktop: both side by side. The open conversation is the same state in both, and the chat
+ * stays at the same place in the tree, so resizing across a breakpoint keeps it (and its unsent text).
+ */
 export const MessagesPage: React.FC<MessagesPageProps> = ({ currentUserId, initialTargetUser, onBack, onViewAuthorProfile }) => {
+  const layout = useLayout();
+  const twoPane = layout !== 'phone';
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [active, setActive] = useState<ConversationItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,16 +51,34 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ currentUserId, initi
     })();
   }, [initialTargetUser]);
 
-  if (active) {
-    return (
-      <ChatScreen
-        conversation={active}
-        currentUserId={currentUserId}
-        onBack={() => { setActive(null); void fetchConversations(); }}
-        onViewProfile={onViewAuthorProfile}
-        onSent={() => void fetchConversations()}
-      />
-    );
-  }
-  return <ConversationList conversations={conversations} loading={loading} error={error} onSelect={setActive} onBack={onBack} />;
+  const showList = twoPane || !active;
+  const showChat = twoPane || !!active;
+  return (
+    <div className={twoPane ? 'flex items-start w-full' : undefined}>
+      {showList && (
+        <div className={twoPane ? 'sticky top-0 self-start h-screen overflow-y-auto shrink-0 border-r border-[var(--line,#E8EBF0)] w-[260px] desktop:w-[320px]' : undefined}>
+          <ConversationList conversations={conversations} loading={loading} error={error} onSelect={setActive} onBack={onBack} embedded={twoPane} selectedId={active?.id ?? null} />
+        </div>
+      )}
+      {showChat && (
+        <div className={twoPane ? 'flex-1 min-w-0' : undefined}>
+          {active ? (
+            <ChatScreen
+              key={active.id}
+              conversation={active}
+              currentUserId={currentUserId}
+              onBack={() => { setActive(null); void fetchConversations(); }}
+              onViewProfile={onViewAuthorProfile}
+              onSent={() => void fetchConversations()}
+              embedded={twoPane}
+            />
+          ) : (
+            <div className="sticky top-0 h-screen flex items-center justify-center px-6 text-center text-[14px] text-[var(--muted,#5B6577)]">
+              Choose a conversation to start chatting.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };

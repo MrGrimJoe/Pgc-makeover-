@@ -14,3 +14,4 @@ bun.lock
 bun.lockb
 backups/
 .wrangler/
+shots/

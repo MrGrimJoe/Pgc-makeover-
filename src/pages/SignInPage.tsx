@@ -23,7 +23,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ notice = null }) => {
   };
 
   return (
-    <div className="w-full max-w-[360px] mx-auto py-20 px-4">
+    <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-20 px-4">
       <div className="space-y-6 text-center">
         {/* Minimal branding */}
         <div className="space-y-1">

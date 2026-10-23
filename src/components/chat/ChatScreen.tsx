@@ -20,9 +20,11 @@ interface ChatScreenProps {
   onViewProfile: (username: string) => void;
   /** Called after something was sent so the conversation list can refresh its preview. */
   onSent: () => void;
+  /** Two-pane layouts: the chat sits beside the list, so there is no Back button and no own column width. */
+  embedded?: boolean;
 }
 
-export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUserId, onBack, onViewProfile, onSent }) => {
+export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUserId, onBack, onViewProfile, onSent, embedded = false }) => {
   const other = conversation.other_user;
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,11 +137,13 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
   };
 
   return (
-    <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col pb-16 tablet:pb-0">
-      <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] h-[56px] border-b border-[var(--line,#E8EBF0)] flex items-center gap-1 px-2">
-        <button type="button" onClick={onBack} aria-label="Back to conversations" title="Back to conversations" className="w-[44px] h-[44px] flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0">
-          <ArrowLeft className="w-5 h-5 stroke-[1.7]" />
-        </button>
+    <div className={embedded ? 'w-full min-h-screen bg-[var(--bg,#fff)] flex flex-col' : 'w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col pb-16 tablet:pb-0'}>
+      <header className={`sticky top-0 z-40 bg-[var(--bg,#fff)] h-[56px] border-b border-[var(--line,#E8EBF0)] flex items-center gap-1 ${embedded ? 'px-4' : 'px-2'}`}>
+        {!embedded && (
+          <button type="button" onClick={onBack} aria-label="Back to conversations" title="Back to conversations" className="w-[44px] h-[44px] flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0">
+            <ArrowLeft className="w-5 h-5 stroke-[1.7]" />
+          </button>
+        )}
         <button type="button" onClick={() => onViewProfile(other.username)} className="flex items-center gap-2.5 flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer min-h-[44px]">
           <Avatar mediaId={other.avatar_media_id} displayName={other.display_name} username={other.username} size={36} />
           <span className="flex-1 min-w-0">

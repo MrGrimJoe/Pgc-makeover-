@@ -13,6 +13,7 @@
 
 @theme inline {
   --container-content: var(--content-w);
+  --container-wide: var(--wide-w);
   --color-bg: var(--bg);
   --color-surface: var(--bg);
   --color-text: var(--text);
@@ -34,6 +35,8 @@
   box-sizing: border-box;
   /* Width of the main column; wider screens get a wider column (set per layout below) */
   --content-w: 430px;
+  /* Two-pane pages (Messages, and Settings on desktop) use this wider column; it shrinks to the space that is left */
+  --wide-w: 960px;
   --bg: #FFFFFF;
   --bg2: #F8F9FC;
   --line: #E8EBF0;

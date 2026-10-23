@@ -10,6 +10,7 @@ import { loadChatBackground, resetChatBackground, saveChatBackgroundImage, saveC
 import { prepareAndUpload, type PickedItem } from '../lib/media-upload.ts';
 import { BottomSheet } from '../components/BottomSheet.tsx';
 import { Avatar } from '../components/Avatar.tsx';
+import { useLayout } from '../lib/layout.ts';
 
 interface SettingsPageProps {
   currentUser: MeResponse;
@@ -25,6 +26,15 @@ const card = 'border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#f
 const h2 = 'm-0 text-[15px] font-semibold text-[var(--text,#17233A)]';
 const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer disabled:opacity-40';
 
+/** The four groups of Settings. On desktop they are a list on the left and one is shown at a time. */
+type SectionId = 'privacy' | 'look' | 'content' | 'account';
+const SECTIONS: Array<{ id: SectionId; label: string }> = [
+  { id: 'privacy', label: 'Privacy and safety' },
+  { id: 'look', label: 'Appearance' },
+  { id: 'content', label: 'Your content' },
+  { id: 'account', label: 'Account' },
+];
+
 /** Sample bubbles for the live preview. Fixed text, not real messages. */
 const PreviewBubbles: React.FC = () => (
   <div className="p-3 space-y-2" aria-hidden="true">
@@ -36,6 +46,10 @@ const PreviewBubbles: React.FC = () => (
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfileUpdated, onAccountDeleted, onLogout, onBack, onEditProfile }) => {
   const userId = currentUser.user.id;
+  const layout = useLayout();
+  const split = layout === 'desktop'; // two panes: section list and the chosen section
+  const [section, setSection] = useState<SectionId>('privacy');
+  const show = (id: SectionId) => !split || section === id;
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // "Saved." style notices fade away by themselves; errors stay until the next action
@@ -158,13 +172,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
   const bgName = bg.kind === 'image' ? 'Your picture' : CHAT_BACKGROUNDS.find((p) => p.id === bg.id)?.name;
 
   return (
-    <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg2,#F8F9FC)] pb-24 tablet:pb-8">
+    <div className="w-full max-w-content desktop:max-w-wide mx-auto min-h-screen bg-[var(--bg2,#F8F9FC)] pb-24 tablet:pb-8">
       <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center px-2">
         <button type="button" onClick={onBack} aria-label="Back" title="Back" className="w-[44px] h-[44px] flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0"><ArrowLeft className="w-5 h-5 stroke-[1.7]" aria-hidden="true" /></button>
         <h1 className="m-0 text-[18px] font-semibold text-[var(--text,#17233A)]">Settings</h1>
       </header>
 
-      <div className="p-3 space-y-3">
+      <div className={split ? 'flex items-start gap-6 p-6' : 'p-3 space-y-3'}>
+        {split && (
+          <div role="group" aria-label="Settings sections" className="sticky top-[72px] shrink-0 w-[200px] space-y-1">
+            {SECTIONS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSection(id)}
+                aria-current={section === id ? 'true' : undefined}
+                className={`w-full min-h-[44px] px-3 rounded-[8px] border-0 text-left text-[14px] cursor-pointer ${section === id ? 'bg-[var(--tint,#EEF3FB)] text-[var(--text,#17233A)] font-semibold' : 'bg-transparent text-[var(--muted,#5B6577)] hover:bg-[var(--bg,#fff)] hover:text-[var(--text,#17233A)]'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className={split ? 'flex-1 min-w-0 max-w-[640px] space-y-3' : 'space-y-3'}>
         {message && <div role={message.type === 'error' ? 'alert' : 'status'} className={`rise-in p-2.5 rounded-[8px] border text-[13px] ${message.type === 'error' ? 'border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)]' : 'border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)]'} bg-[var(--bg,#fff)]`}>{message.text}</div>}
 
         <div className="rise-in border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 flex items-center gap-3" style={{ '--i': 0 } as React.CSSProperties}>
@@ -175,7 +205,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
           </div>
           {onEditProfile && <button type="button" onClick={onEditProfile} className={ghost}>Edit profile</button>}
         </div>
-        <div role="group" aria-labelledby="grp-privacy" className="rise-in space-y-3" style={{ '--i': 1 } as React.CSSProperties}>
+        {show('privacy') && <div role="group" aria-labelledby="grp-privacy" className="rise-in space-y-3" style={{ '--i': 1 } as React.CSSProperties}>
           <p id="grp-privacy" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Privacy and safety</p>
         <section aria-labelledby="set-dm" className={card}>
           <h2 id="set-dm" className={h2}>Who can message you</h2>
@@ -199,8 +229,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
             </ul>
           )}
         </section>
-        </div>
-        <div role="group" aria-labelledby="grp-look" className="rise-in space-y-3" style={{ '--i': 2 } as React.CSSProperties}>
+        </div>}
+        {show('look') && <div role="group" aria-labelledby="grp-look" className="rise-in space-y-3" style={{ '--i': 2 } as React.CSSProperties}>
           <p id="grp-look" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Appearance</p>
         <section aria-labelledby="set-bg" className={card}>
           <h2 id="set-bg" className={h2}>Chat background</h2>
@@ -226,8 +256,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
             <button type="button" onClick={() => void resetBg()} className={ghost}>Reset</button>
           </div>
         </section>
-        </div>
-        <div role="group" aria-labelledby="grp-content" className="rise-in space-y-3" style={{ '--i': 3 } as React.CSSProperties}>
+        </div>}
+        {show('content') && <div role="group" aria-labelledby="grp-content" className="rise-in space-y-3" style={{ '--i': 3 } as React.CSSProperties}>
           <p id="grp-content" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Your content</p>
         <section aria-labelledby="set-interests" className={card}>
           <div className="flex items-center justify-between">
@@ -263,14 +293,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
           <input ref={libFile} type="file" tabIndex={-1} accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple aria-label="Choose pictures to add" className="hidden" data-testid="settings-library-input"
             onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) setAddFiles(f); }} />
         </section>
-        </div>
-        <div role="group" aria-labelledby="grp-account" className="rise-in space-y-3" style={{ '--i': 4 } as React.CSSProperties}>
+        </div>}
+        {show('account') && <div role="group" aria-labelledby="grp-account" className="rise-in space-y-3" style={{ '--i': 4 } as React.CSSProperties}>
           <p id="grp-account" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Account</p>
         <section aria-labelledby="set-account" className={card}>
           <h2 id="set-account" className={h2}>Account</h2>
           <button type="button" onClick={() => void onLogout()} className={`${ghost} w-full`}>Sign out</button>
           <button type="button" onClick={() => setShowDelete(true)} className="w-full min-h-[44px] bg-transparent border-0 text-[14px] font-semibold text-[var(--danger,#B23A40)] cursor-pointer">Delete account</button>
         </section>
+        </div>}
         </div>
       </div>
 
