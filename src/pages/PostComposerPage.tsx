@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import type { MediaItem } from '../../shared/schema.ts';
-import { Image, Smile, X } from 'lucide-react';
+import { BarChart2, Image, Smile, X } from 'lucide-react';
+import { checkPollOptions, POLL_MAX_OPTIONS, POLL_MIN_OPTIONS, POLL_OPTION_MAX } from '../../shared/poll.ts';
 import { PickerPanel } from '../components/chat/PickerPanel.tsx';
 import { MediaPreview } from '../components/chat/MediaPreview.tsx';
 import { StickerView } from '../components/StickerView.tsx';
@@ -33,7 +34,11 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
   const [libraryKey, setLibraryKey] = useState(0);
   const sheetRef = useRef<HTMLDivElement>(null);
   useFocusTrap(sheetRef, () => setPickerOpen(false), pickerOpen);
-  const photoPickerDisabled = mediaList.length >= 4 || uploading || !!stickerKey;
+  // null = no poll; otherwise the option texts being typed
+  const [pollOptions, setPollOptions] = useState<string[] | null>(null);
+  const photoPickerDisabled = mediaList.length >= 4 || uploading || !!stickerKey || pollOptions !== null;
+  const pollCheck = pollOptions ? checkPollOptions(pollOptions) : null;
+  const pollReady = !pollOptions || (pollCheck?.ok ?? false);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -70,7 +75,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!body.trim() || submitting) return;
+    if (!body.trim() || submitting || !pollReady) return;
 
     setSubmitting(true);
     setError(null);
@@ -83,6 +88,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
           body: body.trim(),
           media_ids: mediaList.map((m) => m.id),
           ...(stickerKey ? { sticker_key: stickerKey } : {}),
+          ...(pollOptions && pollCheck?.ok ? { poll: { options: pollCheck.options } } : {}),
         }),
       });
 
@@ -94,6 +100,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
       setBody('');
       setMediaList([]);
       setStickerKey(null);
+      setPollOptions(null);
       onPostCreated();
     } catch (err) {
       setError((err as Error).message);
@@ -121,7 +128,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={submitting || !body.trim() || uploading}
+          disabled={submitting || !body.trim() || uploading || !pollReady}
           className="text-[15px] font-semibold text-[var(--blue,#244C8A)] disabled:opacity-40 cursor-pointer min-h-[44px] flex items-center bg-transparent border-0 p-0"
         >
           {submitting ? 'Posting...' : 'Post'}
@@ -208,15 +215,77 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          disabled={mediaList.length > 0 || uploading}
+          disabled={mediaList.length > 0 || uploading || pollOptions !== null}
           title="Add sticker or GIF"
           aria-label="Add sticker or GIF"
           className="w-[44px] h-[44px] flex items-center justify-center text-[var(--blue,#244C8A)] hover:opacity-80 cursor-pointer transition-opacity bg-transparent border-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Smile className="w-6 h-6 stroke-[1.7]" aria-hidden="true" />
         </button>
+        <button
+          type="button"
+          onClick={() => setPollOptions(['', ''])}
+          disabled={mediaList.length > 0 || uploading || !!stickerKey || pollOptions !== null}
+          title="Add poll"
+          aria-label="Add poll"
+          className="w-[44px] h-[44px] flex items-center justify-center text-[var(--blue,#244C8A)] hover:opacity-80 cursor-pointer transition-opacity bg-transparent border-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <BarChart2 className="w-6 h-6 stroke-[1.7]" aria-hidden="true" />
+        </button>
         {uploading && <span className="text-[13px] text-[var(--muted,#5B6577)]">Uploading...</span>}
       </div>
+
+      {pollOptions && (
+        <fieldset className="mx-4 mb-2 p-3 rounded-[12px] border border-[var(--line,#E8EBF0)]">
+          <legend className="px-1 text-[13px] font-medium text-[var(--muted,#5B6577)]">Poll options</legend>
+          <div className="flex flex-col gap-2">
+            {pollOptions.map((text, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={text}
+                  maxLength={POLL_OPTION_MAX}
+                  onChange={(e) => setPollOptions((prev) => (prev ? prev.map((t, j) => (j === i ? e.target.value : t)) : prev))}
+                  aria-label={`Poll option ${i + 1}`}
+                  placeholder={`Option ${i + 1}`}
+                  className="flex-1 min-h-[44px] px-3 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-transparent text-[15px] text-[var(--text,#17233A)]"
+                />
+                {pollOptions.length > POLL_MIN_OPTIONS && (
+                  <button
+                    type="button"
+                    onClick={() => setPollOptions((prev) => (prev ? prev.filter((_, j) => j !== i) : prev))}
+                    aria-label={`Remove poll option ${i + 1}`}
+                    className="w-[44px] h-[44px] flex items-center justify-center bg-transparent border-0 text-[var(--muted,#5B6577)] cursor-pointer"
+                  >
+                    <X className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setPollOptions((prev) => (prev ? [...prev, ''] : prev))}
+              disabled={pollOptions.length >= POLL_MAX_OPTIONS}
+              className="min-h-[44px] px-3 bg-transparent border-0 text-[14px] font-semibold text-[var(--blue,#244C8A)] disabled:opacity-40 cursor-pointer"
+            >
+              Add option
+            </button>
+            <button
+              type="button"
+              onClick={() => setPollOptions(null)}
+              className="min-h-[44px] px-3 bg-transparent border-0 text-[14px] text-[var(--danger,#B23A40)] cursor-pointer"
+            >
+              Remove poll
+            </button>
+          </div>
+          {pollCheck && !pollCheck.ok && pollOptions.some((t) => t.trim()) && (
+            <p role="status" className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">{pollCheck.error}</p>
+          )}
+          <p className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">The poll closes when the post disappears. Results show after someone votes.</p>
+        </fieldset>
+      )}
 
       {/* Subtle-background note with 12px radius, 13px muted text and an 8px yellow dot */}
       <div className="m-4 p-3 rounded-[12px] bg-[var(--bg2,#F8F9FC)] text-[13px] text-[var(--muted,#5B6577)] flex items-center">

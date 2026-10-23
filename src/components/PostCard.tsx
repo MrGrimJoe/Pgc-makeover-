@@ -1,4 +1,5 @@
 import { StickerView } from './StickerView.tsx';
+import { PollView } from './PollView.tsx';
 import React, { useState } from 'react';
 import type { PostItem } from '../../shared/schema.ts';
 import { ExpiryChip } from './ExpiryChip.tsx';
@@ -272,6 +273,8 @@ export const PostCard: React.FC<PostCardProps> = ({
               <StickerView stickerKey={post.sticker_key} size={160} media={post.media} />
             </div>
           )}
+
+          {post.poll && <PollView postId={post.id} poll={post.poll} />}
 
           {/* Action Row */}
           <div className="flex items-center gap-4 px-4 pt-2.5">
