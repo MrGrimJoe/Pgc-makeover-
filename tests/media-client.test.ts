@@ -4,6 +4,7 @@ import {
   PHOTO_MAX_EDGE, THUMB_MAX_EDGE, STICKER_SIZE, type MediaEnv,
 } from '../src/lib/media.ts';
 import { MEDIA_SIZE_CAPS } from '../shared/media-rules.ts';
+import { prepareProfileBackground, PROFILE_BACKGROUND_MAX_EDGE } from '../src/lib/media-upload.ts';
 
 const enc = (s: string) => [...s].map((c) => c.charCodeAt(0));
 const head = {
@@ -234,5 +235,47 @@ describe('preview geometry', () => {
     expect(sendAsOptions('image/gif')).toEqual(['gif', 'sticker']);
     expect(sendAsOptions('video/mp4')).toEqual(['gif']);
     expect(sendAsOptions(null)).toEqual([]);
+  });
+});
+
+describe('profile background preparation', () => {
+  const okFetch = (seen: { form?: FormData }) =>
+    (async (_u: unknown, init?: RequestInit) => {
+      seen.form = init?.body as FormData;
+      return new Response(JSON.stringify({ id: 'med_bg', kind: 'background', object_key: 'k', mime_type: 'image/webp', size_bytes: 1 }), { status: 201 });
+    }) as unknown as typeof fetch;
+
+  it('shrinks to at most 1080 px, encodes WebP under 400 KB, uploads kind background without a thumbnail', async () => {
+    expect(PROFILE_BACKGROUND_MAX_EDGE).toBe(1080);
+    const { env, calls } = fakeEnv({ width: 4000, height: 3000 });
+    const seen: { form?: FormData } = {};
+    const png = new File([head.png], 'a.png', { type: 'image/png' });
+    const out = await prepareProfileBackground(png, env, okFetch(seen));
+    expect(out.id).toBe('med_bg');
+    expect(calls[0]!.size).toEqual({ width: 1080, height: 810 });
+    expect(calls[0]!.mime).toBe('image/webp');
+    const file = seen.form!.get('file') as Blob;
+    expect(file.size).toBeLessThanOrEqual(MEDIA_SIZE_CAPS.background);
+    expect(seen.form!.get('kind')).toBe('background');
+    expect(seen.form!.get('thumb')).toBeNull();
+    expect(seen.form!.get('width')).toBe('1080');
+  });
+
+  it('refuses GIF, video and unknown files before anything is uploaded (positive control: a PNG passes above)', async () => {
+    const { env } = fakeEnv({ width: 100, height: 100 });
+    let uploads = 0;
+    const counting = (async () => { uploads++; return new Response('{}', { status: 201 }); }) as unknown as typeof fetch;
+    for (const [bytes, type] of [[head.gif, 'image/gif'], [head.mp4, 'video/mp4'], [head.svg, 'image/svg+xml']] as const) {
+      await expect(prepareProfileBackground(new File([bytes], 'x', { type }), env, counting)).rejects.toThrow(/JPEG, PNG or WebP/);
+    }
+    expect(uploads).toBe(0);
+  });
+
+  it('a picture that stays over 400 KB after shrinking is rejected with a readable message', async () => {
+    const { env } = fakeEnv({ width: 4000, height: 3000, bytesPerPixel: 40 });
+    let uploads = 0;
+    const counting = (async () => { uploads++; return new Response('{}', { status: 201 }); }) as unknown as typeof fetch;
+    await expect(prepareProfileBackground(new File([head.png], 'a.png', { type: 'image/png' }), env, counting)).rejects.toThrow();
+    expect(uploads).toBe(0);
   });
 });

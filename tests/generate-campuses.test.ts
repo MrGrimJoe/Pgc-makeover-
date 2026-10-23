@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseCsv, parseCampusCsv, campusId, buildCampusModule } from '../scripts/generate-campuses.ts';
-import { MIGRATION_005_ONBOARDING_SQL, MIGRATION_006_BUNDLED_CAMPUSES_SQL, MIGRATION_007_MEDIA_FOUNDATION_SQL, MIGRATION_008_STICKER_KEYS_SQL, MIGRATION_009_MESSAGE_STICKERS_SQL } from '../worker/db/migrate.ts';
+import { MIGRATION_005_ONBOARDING_SQL, MIGRATION_006_BUNDLED_CAMPUSES_SQL, MIGRATION_007_MEDIA_FOUNDATION_SQL, MIGRATION_008_STICKER_KEYS_SQL, MIGRATION_009_MESSAGE_STICKERS_SQL, MIGRATION_010_WALLPAPER_POLLS_SQL } from '../worker/db/migrate.ts';
 
 describe('generate-campuses', () => {
   it('parses quoted fields, escaped quotes, CRLF and a BOM', () => {
@@ -46,6 +46,10 @@ describe('migration files', () => {
   it('migrations/008 and 009 match the copies used by the test runner', () => {
     expect(readFileSync('migrations/008_sticker_keys.sql', 'utf8').trim()).toBe(MIGRATION_008_STICKER_KEYS_SQL.trim());
     expect(readFileSync('migrations/009_message_stickers.sql', 'utf8').trim()).toBe(MIGRATION_009_MESSAGE_STICKERS_SQL.trim());
+  });
+
+  it('migrations/010_wallpaper_polls.sql matches the copy used by the test runner', () => {
+    expect(readFileSync('migrations/010_wallpaper_polls.sql', 'utf8').trim()).toBe(MIGRATION_010_WALLPAPER_POLLS_SQL.trim());
   });
 
   it('migrations/007_media_foundation.sql matches the copy used by the test runner', () => {

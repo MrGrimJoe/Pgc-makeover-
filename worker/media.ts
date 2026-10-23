@@ -94,7 +94,7 @@ async function existingTables(db: D1Database): Promise<Set<string>> {
 function unreferencedSql(tables: Set<string>): string {
   const parts = [
     'NOT EXISTS (SELECT 1 FROM post_media x WHERE x.media_id = m.id)',
-    'NOT EXISTS (SELECT 1 FROM profiles x WHERE x.avatar_media_id = m.id)',
+    'NOT EXISTS (SELECT 1 FROM profiles x WHERE x.avatar_media_id = m.id OR x.wallpaper_media_id = m.id)',
   ];
   if (tables.has('message_media')) parts.push('NOT EXISTS (SELECT 1 FROM message_media x WHERE x.media_id = m.id)');
   if (tables.has('sticker_library')) parts.push('NOT EXISTS (SELECT 1 FROM sticker_library x WHERE x.media_id = m.id)');
@@ -192,7 +192,10 @@ export async function canReadMedia(env: Env, media: MediaReadRow, viewerId: stri
     }
   }
 
-  const avatarOwner = await env.DB.prepare('SELECT user_id FROM profiles WHERE avatar_media_id = ?').bind(media.id).first<{ user_id: string }>();
+  // Profile pictures and profile backgrounds: any signed-in person who is not blocked with the owner
+  const avatarOwner = await env.DB.prepare('SELECT user_id FROM profiles WHERE avatar_media_id = ? OR wallpaper_media_id = ?')
+    .bind(media.id, media.id)
+    .first<{ user_id: string }>();
   if (avatarOwner && !(await isBlockedBetween(env.DB, viewerId, avatarOwner.user_id))) return true;
   return false;
 }

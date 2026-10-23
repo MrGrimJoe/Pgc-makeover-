@@ -82,6 +82,38 @@ export const TEXT_STYLE_IDS = TEXT_STYLES.map((t) => t.id) as [string, ...string
 export const APP_SURFACES = { light: '#FFFFFF', dark: '#0F1522' } as const;
 
 /** Preset ids that mean "use the default"; stored as NULL. */
+/** Wallpaper id used when the person chose their own image (profiles.wallpaper_media_id). */
+export const CUSTOM_WALLPAPER_ID = 'custom';
+/**
+ * A custom image is always drawn under this dark layer with light text. Worst case is a pure white image:
+ * white at 45% through the layer is #737373, and white text on that is about 4.7:1 (tests/custom-wallpaper.test.ts).
+ */
+export const CUSTOM_WALLPAPER_SCRIM_ALPHA = 0.55;
+export const CUSTOM_WALLPAPER_SCRIM = `rgba(0,0,0,${CUSTOM_WALLPAPER_SCRIM_ALPHA})`;
+export const CUSTOM_WALLPAPER_TEXT = '#ffffff';
+/** Muted text stays white too: any lighter-than-white value would not exist, and a grey would lose contrast on white images. */
+export const CUSTOM_WALLPAPER_MUTED = '#ffffff';
+/** Opaque fill for buttons and chips on a custom image, so they never depend on the picture behind them. */
+export const CUSTOM_WALLPAPER_SURFACE = '#1c1c1e';
+
+export const CUSTOM_WALLPAPER: WallpaperPreset = {
+  id: CUSTOM_WALLPAPER_ID,
+  label: 'Your image',
+  tone: 'dark',
+  stops: [],
+  text: CUSTOM_WALLPAPER_TEXT,
+  muted: CUSTOM_WALLPAPER_MUTED,
+  surface: CUSTOM_WALLPAPER_SURFACE,
+  line: 'rgba(255,255,255,0.45)',
+};
+
+/** Worst-case background under the scrim for a white image: the color white text has to be readable on. */
+export function scrimmedWorstCase(): string {
+  const v = Math.round(255 * (1 - CUSTOM_WALLPAPER_SCRIM_ALPHA));
+  const h = v.toString(16).padStart(2, '0');
+  return `#${h}${h}${h}`;
+}
+
 export const DEFAULT_PRESET_IDS = { wallpaper: 'plain', theme: 'default', textStyle: 'clean' } as const;
 
 function channel(v: number): number {
@@ -123,15 +155,31 @@ export interface ResolvedProfileStyle {
 /** Resolves stored ids to CSS. Unknown or missing ids fall back to the defaults. */
 export function resolveProfileStyle(ids: {
   wallpaper_id?: string | null;
+  /** Needed for the 'custom' wallpaper; without it the default is used. */
+  wallpaper_media_id?: string | null;
   theme_id?: string | null;
   text_style_id?: string | null;
 }): ResolvedProfileStyle {
-  const wallpaper = WALLPAPERS.find((w) => w.id === ids.wallpaper_id) ?? WALLPAPERS[0]!;
+  const isCustom = ids.wallpaper_id === CUSTOM_WALLPAPER_ID && !!ids.wallpaper_media_id;
+  const wallpaper = isCustom ? CUSTOM_WALLPAPER : (WALLPAPERS.find((w) => w.id === ids.wallpaper_id) ?? WALLPAPERS[0]!);
   const theme = THEMES.find((t) => t.id === ids.theme_id) ?? THEMES[0]!;
   const textStyle = TEXT_STYLES.find((t) => t.id === ids.text_style_id) ?? TEXT_STYLES[0]!;
 
-  const headerStyle: Record<string, string> =
-    wallpaper.stops.length === 2
+  const headerStyle: Record<string, string> = isCustom
+    ? {
+        // The scrim is the top layer of the same background, so it is on even while the image loads or fails.
+        backgroundImage: `linear-gradient(${CUSTOM_WALLPAPER_SCRIM}, ${CUSTOM_WALLPAPER_SCRIM}), url(/api/media/${encodeURIComponent(ids.wallpaper_media_id!)})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundColor: '#3a3a3c',
+        color: wallpaper.text,
+        '--text': wallpaper.text,
+        '--muted': wallpaper.muted,
+        '--bg': wallpaper.surface,
+        '--bg2': wallpaper.surface,
+        '--line': wallpaper.line,
+      }
+    : wallpaper.stops.length === 2
       ? {
           background: `linear-gradient(160deg, ${wallpaper.stops[0]}, ${wallpaper.stops[1]})`,
           color: wallpaper.text,
@@ -148,5 +196,6 @@ export function resolveProfileStyle(ids: {
   if (textStyle.fontWeight) textStyleCss.fontWeight = textStyle.fontWeight;
   if (textStyle.letterSpacing) textStyleCss.letterSpacing = textStyle.letterSpacing;
 
-  return { wallpaper, theme, textStyle, headerStyle, textStyleCss, accent: theme.accent || null };
+  // Accent colors are only checked against the preset wallpapers, so a custom image keeps the plain light ring.
+  return { wallpaper, theme, textStyle, headerStyle, textStyleCss, accent: isCustom ? null : theme.accent || null };
 }

@@ -51,6 +51,23 @@ export async function uploadBlob(
   return data;
 }
 
+/** Profile backgrounds are scaled to at most 1080 px and must end up under 400 KB (the server cap for kind 'background'). */
+export const PROFILE_BACKGROUND_MAX_EDGE = 1080;
+
+/**
+ * Compresses a picked image to a profile background (WebP, at most 1080 px, under 400 KB) and uploads it.
+ * GIF and video are refused: a background is a still image. Nothing leaves the device before this runs.
+ */
+export async function prepareProfileBackground(file: File, env: MediaEnv = browserMediaEnv(), fetchImpl: typeof fetch = fetch): Promise<UploadedMedia> {
+  const mime = sniffMime(await readHead(file));
+  if (mime !== 'image/jpeg' && mime !== 'image/png' && mime !== 'image/webp') {
+    throw new Error('Use a JPEG, PNG or WebP picture for your background.');
+  }
+  const prepared = await compressPhoto(file, env, { kind: 'background', maxEdge: PROFILE_BACKGROUND_MAX_EDGE });
+  // No thumbnail: nothing shows one for a background, so it would only use storage.
+  return uploadBlob(prepared.blob, 'background', { width: prepared.width, height: prepared.height }, fetchImpl);
+}
+
 /**
  * Prepares one picked item (nothing is uploaded before this runs) and uploads it with the right kind.
  * Photos and stickers are re-encoded on the device; GIFs and clips go as they are within their cap.

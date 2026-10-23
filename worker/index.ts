@@ -780,7 +780,7 @@ export default {
 
       const row = await env.DB.prepare(
         `SELECT p.user_id, p.username, p.display_name, p.bio, p.avatar_media_id, p.class_id,
-                p.campus_id, p.campus_other, p.real_name, p.wallpaper_id, p.theme_id, p.text_style_id,
+                p.campus_id, p.campus_other, p.real_name, p.wallpaper_id, p.wallpaper_media_id, p.theme_id, p.text_style_id,
                 c.name AS class_name, u.created_at
          FROM profiles p
          JOIN users u ON u.id = p.user_id
@@ -798,6 +798,7 @@ export default {
           campus_id: string | null;
           real_name: string | null;
           wallpaper_id: string | null;
+          wallpaper_media_id: string | null;
           theme_id: string | null;
           text_style_id: string | null;
           class_name: string | null;
@@ -861,6 +862,7 @@ export default {
         // The real name is shown on the profile page only, never in feeds, search or messages.
         real_name: row.real_name,
         wallpaper_id: row.wallpaper_id,
+        wallpaper_media_id: row.wallpaper_id === 'custom' ? row.wallpaper_media_id : null,
         theme_id: row.theme_id,
         text_style_id: row.text_style_id,
         created_at: row.created_at,
@@ -955,6 +957,25 @@ export default {
         }
       }
 
+      // A custom background must be an upload of kind 'background' that belongs to this person.
+      if (data.wallpaper_media_id) {
+        const bg = await env.DB.prepare("SELECT 1 FROM media WHERE id = ? AND owner_id = ? AND kind = 'background'")
+          .bind(data.wallpaper_media_id, auth.user.id)
+          .first();
+        if (!bg) {
+          return jsonResponse({ error: 'Background image not found' }, 400);
+        }
+        if (data.wallpaper_id !== undefined && data.wallpaper_id !== 'custom') {
+          return jsonResponse({ error: 'A background image and a preset wallpaper cannot both be chosen' }, 400);
+        }
+      }
+      if (
+        data.wallpaper_id === 'custom' &&
+        (data.wallpaper_media_id === null || (data.wallpaper_media_id === undefined && !auth.profile.wallpaper_media_id))
+      ) {
+        return jsonResponse({ error: 'Choose a background image first' }, 400);
+      }
+
       // A campus must be on the bundled list; free text goes in campus_other and the two never coexist.
       if (data.campus_id !== undefined && data.campus_id !== null && !findCampus(data.campus_id)) {
         return jsonResponse({ error: 'Campus not found' }, 400);
@@ -988,6 +1009,7 @@ export default {
         data.campus_other !== undefined ||
         data.real_name !== undefined ||
         data.wallpaper_id !== undefined ||
+        data.wallpaper_media_id !== undefined ||
         data.theme_id !== undefined ||
         data.text_style_id !== undefined
       ) {
@@ -1011,7 +1033,16 @@ export default {
         // The default preset is stored as NULL so the column only ever holds a real choice
         const presetOrNull = (value: string | null | undefined, defaultId: string, current: string | null) =>
           value === undefined ? current || null : value === null || value === defaultId ? null : value;
-        const newWallpaper = presetOrNull(data.wallpaper_id, DEFAULT_PRESET_IDS.wallpaper, currentProfile.wallpaper_id);
+        let newWallpaper = presetOrNull(data.wallpaper_id, DEFAULT_PRESET_IDS.wallpaper, currentProfile.wallpaper_id);
+        let newWallpaperMedia = currentProfile.wallpaper_media_id ?? null;
+        if (data.wallpaper_media_id !== undefined) {
+          // Choosing an image makes the wallpaper 'custom'; removing it falls back to the default unless a preset came with it.
+          newWallpaperMedia = data.wallpaper_media_id;
+          if (newWallpaperMedia) newWallpaper = 'custom';
+          else if (data.wallpaper_id === undefined && currentProfile.wallpaper_id === 'custom') newWallpaper = null;
+        } else if (data.wallpaper_id !== undefined && data.wallpaper_id !== 'custom') {
+          newWallpaperMedia = null;
+        }
         const newTheme = presetOrNull(data.theme_id, DEFAULT_PRESET_IDS.theme, currentProfile.theme_id);
         const newTextStyle = presetOrNull(data.text_style_id, DEFAULT_PRESET_IDS.textStyle, currentProfile.text_style_id);
 
@@ -1019,7 +1050,7 @@ export default {
           env.DB.prepare(
             `UPDATE profiles
              SET username = ?, username_normalized = ?, display_name = ?, bio = ?, avatar_media_id = ?, class_id = ?,
-                 campus_id = ?, campus_other = ?, real_name = ?, wallpaper_id = ?, theme_id = ?, text_style_id = ?
+                 campus_id = ?, campus_other = ?, real_name = ?, wallpaper_id = ?, wallpaper_media_id = ?, theme_id = ?, text_style_id = ?
              WHERE user_id = ?`
           ).bind(
             newUsername,
@@ -1032,6 +1063,7 @@ export default {
             newCampusOther,
             newRealName,
             newWallpaper,
+            newWallpaperMedia,
             newTheme,
             newTextStyle,
             auth.user.id
@@ -2995,6 +3027,27 @@ export default {
                 expires_at: row.expires_at,
                 attachments: (media.results || []).map((r) => ({ media_id: r.id, kind: r.kind, sha256: r.sha256 })),
               }),
+              now,
+              new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            )
+          );
+        }
+      }
+
+      // A user report records which background image was showing, so a moderator can identify the file later.
+      if (target_type === 'user') {
+        const bg = await env.DB.prepare(
+          `SELECT m.id, m.kind, m.sha256 FROM profiles p JOIN media m ON m.id = p.wallpaper_media_id WHERE p.user_id = ?`
+        )
+          .bind(target_id)
+          .first<{ id: string; kind: string; sha256: string | null }>();
+        if (bg) {
+          const evidenceId = `evi_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+          batchStatements.push(
+            env.DB.prepare('INSERT INTO report_evidence (id, report_id, snapshot, created_at, expires_at) VALUES (?, ?, ?, ?, ?)').bind(
+              evidenceId,
+              reportId,
+              JSON.stringify({ user_id: target_id, attachments: [{ media_id: bg.id, kind: bg.kind, sha256: bg.sha256 }] }),
               now,
               new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
             )

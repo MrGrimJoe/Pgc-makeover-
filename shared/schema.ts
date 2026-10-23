@@ -58,7 +58,10 @@ export const updateProfileSchema = z
     /** Free-text campus for people whose campus is not on the bundled list. Exclusive with campus_id. */
     campus_other: z.string().max(80).nullable().optional(),
     real_name: realNameSchema.optional(),
-    wallpaper_id: z.enum(WALLPAPER_IDS).nullable().optional(),
+    /** A preset id, or 'custom' for the person's own background image (see wallpaper_media_id). */
+    wallpaper_id: z.enum([...WALLPAPER_IDS, 'custom']).nullable().optional(),
+    /** An owned upload of kind 'background'. Setting it makes wallpaper_id 'custom'; null removes it. */
+    wallpaper_media_id: z.string().min(1).max(100).nullable().optional(),
     theme_id: z.enum(THEME_IDS).nullable().optional(),
     text_style_id: z.enum(TEXT_STYLE_IDS).nullable().optional(),
     dm_policy: z.enum(['everyone', 'followed_only', 'nobody', 'following', 'none']).optional(),
@@ -269,6 +272,8 @@ export interface PublicProfileResponse {
   /** Shown on the profile page only. */
   real_name?: string | null;
   wallpaper_id?: string | null;
+  /** Set when wallpaper_id is 'custom'; read the image from /api/media/:id. */
+  wallpaper_media_id?: string | null;
   theme_id?: string | null;
   text_style_id?: string | null;
   created_at: string;
@@ -300,6 +305,7 @@ export interface MeResponse {
     campus_other?: string | null;
     real_name?: string | null;
     wallpaper_id?: string | null;
+    wallpaper_media_id?: string | null;
     theme_id?: string | null;
     text_style_id?: string | null;
   };

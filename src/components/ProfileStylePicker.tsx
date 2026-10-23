@@ -1,9 +1,11 @@
 import React from 'react';
-import { WALLPAPERS, THEMES, TEXT_STYLES, resolveProfileStyle } from '../../shared/presets.ts';
+import { WALLPAPERS, THEMES, TEXT_STYLES, resolveProfileStyle, CUSTOM_WALLPAPER_SCRIM } from '../../shared/presets.ts';
 import { Avatar } from './Avatar.tsx';
 
 export interface ProfileStyleValue {
   wallpaper_id: string | null;
+  /** The person's own background image; set when wallpaper_id is 'custom'. */
+  wallpaper_media_id?: string | null;
   theme_id: string | null;
   text_style_id: string | null;
 }
@@ -16,6 +18,9 @@ interface ProfileStylePickerProps {
   username: string;
   bio: string;
   avatarMediaId: string | null;
+  /** Called with the chosen file; the page compresses and uploads it. Omit to hide the own-image controls. */
+  onPickImage?: (file: File) => void;
+  uploadingImage?: boolean;
 }
 
 const optionBase =
@@ -31,10 +36,12 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
   username,
   bio,
   avatarMediaId,
+  onPickImage,
+  uploadingImage = false,
 }) => {
   const style = resolveProfileStyle(value);
   const current = {
-    wallpaper: value.wallpaper_id ?? 'plain',
+    wallpaper: value.wallpaper_id === 'custom' && value.wallpaper_media_id ? 'custom' : (value.wallpaper_id ?? 'plain'),
     theme: value.theme_id ?? 'default',
     textStyle: value.text_style_id ?? 'clean',
   };
@@ -78,7 +85,7 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
                 name="profile-wallpaper"
                 value={w.id}
                 checked={current.wallpaper === w.id}
-                onChange={() => onChange({ ...value, wallpaper_id: w.id === 'plain' ? null : w.id })}
+                onChange={() => onChange({ ...value, wallpaper_id: w.id === 'plain' ? null : w.id, wallpaper_media_id: null })}
                 className="sr-only peer"
               />
               <span className={`${optionBase} overflow-hidden`}>
@@ -91,7 +98,63 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
               </span>
             </label>
           ))}
+          {value.wallpaper_media_id && (
+            <label className="relative">
+              <input
+                type="radio"
+                name="profile-wallpaper"
+                value="custom"
+                checked={current.wallpaper === 'custom'}
+                onChange={() => onChange({ ...value, wallpaper_id: 'custom' })}
+                className="sr-only peer"
+              />
+              <span className={`${optionBase} overflow-hidden`}>
+                <span
+                  aria-hidden="true"
+                  className="block h-10"
+                  style={{
+                    backgroundImage: `linear-gradient(${CUSTOM_WALLPAPER_SCRIM}, ${CUSTOM_WALLPAPER_SCRIM}), url(/api/media/${encodeURIComponent(value.wallpaper_media_id)})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundColor: '#3a3a3c',
+                  }}
+                />
+                <span className="block py-1.5">Your image</span>
+              </span>
+            </label>
+          )}
         </div>
+        {onPickImage && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] text-[14px] text-[var(--text,#17233A)] cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-[var(--blue,#244C8A)]">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                disabled={uploadingImage}
+                aria-label={value.wallpaper_media_id ? 'Replace your background image' : 'Choose your own background image'}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) onPickImage(file);
+                }}
+              />
+              {uploadingImage ? 'Preparing image...' : value.wallpaper_media_id ? 'Replace image' : 'Use your own image'}
+            </label>
+            {value.wallpaper_media_id && (
+              <button
+                type="button"
+                onClick={() => onChange({ ...value, wallpaper_id: null, wallpaper_media_id: null })}
+                className="min-h-[44px] px-4 rounded-[8px] text-[14px] text-[var(--danger,#B3261E)] cursor-pointer"
+              >
+                Remove image
+              </button>
+            )}
+          </div>
+        )}
+        <p className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">
+          Your image is darkened so the text on top stays readable. Everyone signed in can see it.
+        </p>
       </fieldset>
 
       <fieldset>

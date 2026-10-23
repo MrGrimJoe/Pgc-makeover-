@@ -50,6 +50,7 @@ export interface ProfileRow {
   campus_other: string | null;
   real_name: string | null;
   wallpaper_id: string | null;
+  wallpaper_media_id: string | null;
   theme_id: string | null;
   text_style_id: string | null;
 }

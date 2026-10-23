@@ -6,6 +6,7 @@ import { Avatar } from '../components/Avatar.tsx';
 import { ProfileStylePicker, type ProfileStyleValue } from '../components/ProfileStylePicker.tsx';
 import { normalizeUsername, isValidUsername } from '../../shared/username.ts';
 import { updateProfileSchema } from '../../shared/schema.ts';
+import { prepareProfileBackground } from '../lib/media-upload.ts';
 
 interface ProfileEditPageProps {
   currentUser: MeResponse;
@@ -33,8 +34,10 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
   );
   const [avatarMediaId, setAvatarMediaId] = useState<string | null>(currentUser.profile.avatar_media_id ?? null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingBackground, setUploadingBackground] = useState(false);
   const [style, setStyle] = useState<ProfileStyleValue>({
     wallpaper_id: currentUser.profile.wallpaper_id ?? null,
+    wallpaper_media_id: currentUser.profile.wallpaper_media_id ?? null,
     theme_id: currentUser.profile.theme_id ?? null,
     text_style_id: currentUser.profile.text_style_id ?? null,
   });
@@ -78,7 +81,15 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
       campus_id: campusIdChanged && !campus?.other ? (campus?.campus?.id ?? null) : undefined,
       campus_other: campusOtherChanged && !campus?.campus ? (campus?.other ?? null) : undefined,
       avatar_media_id: avatarMediaId !== (current.avatar_media_id ?? null) ? avatarMediaId : undefined,
-      wallpaper_id: style.wallpaper_id !== (current.wallpaper_id ?? null) ? style.wallpaper_id : undefined,
+      // A new image is sent alone (the server makes the wallpaper 'custom'); anything else is a preset change or a removal.
+      wallpaper_media_id:
+        style.wallpaper_media_id && style.wallpaper_media_id !== (current.wallpaper_media_id ?? null) ? style.wallpaper_media_id : undefined,
+      wallpaper_id:
+        style.wallpaper_media_id && style.wallpaper_media_id !== (current.wallpaper_media_id ?? null)
+          ? undefined
+          : style.wallpaper_id !== (current.wallpaper_id ?? null)
+            ? style.wallpaper_id
+            : undefined,
       theme_id: style.theme_id !== (current.theme_id ?? null) ? style.theme_id : undefined,
       text_style_id: style.text_style_id !== (current.text_style_id ?? null) ? style.text_style_id : undefined,
     };
@@ -112,6 +123,19 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
       setMessage({ type: 'error', text: (err as Error).message });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBackgroundChosen = async (file: File) => {
+    setUploadingBackground(true);
+    setMessage(null);
+    try {
+      const uploaded = await prepareProfileBackground(file);
+      setStyle((s) => ({ ...s, wallpaper_id: 'custom', wallpaper_media_id: uploaded.id }));
+    } catch (err) {
+      setMessage({ type: 'error', text: (err as Error).message });
+    } finally {
+      setUploadingBackground(false);
     }
   };
 
@@ -149,7 +173,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={saving || uploadingPhoto || !isUsernameValid || !displayName.trim()}
+          disabled={saving || uploadingPhoto || uploadingBackground || !isUsernameValid || !displayName.trim()}
           className="text-[15px] font-semibold text-primary hover:text-primary-hover disabled:opacity-40 cursor-pointer min-h-[44px] flex items-center transition-colors"
         >
           {saving ? 'Saving...' : 'Done'}
@@ -317,6 +341,8 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
           username={normalizedPreview || currentUser.profile.username}
           bio={bio}
           avatarMediaId={avatarMediaId}
+          onPickImage={handleBackgroundChosen}
+          uploadingImage={uploadingBackground}
         />
       </div>
     </div>

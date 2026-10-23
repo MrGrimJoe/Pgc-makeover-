@@ -11,7 +11,7 @@ export async function loadMeProfile(db: D1Database, userId: string): Promise<MeR
   const row = await db
     .prepare(
       `SELECT p.username, p.username_normalized, p.display_name, p.bio, p.avatar_media_id,
-              p.class_id, p.campus_id, p.campus_other, p.real_name, p.wallpaper_id, p.theme_id, p.text_style_id,
+              p.class_id, p.campus_id, p.campus_other, p.real_name, p.wallpaper_id, p.wallpaper_media_id, p.theme_id, p.text_style_id,
               c.name AS class_name
        FROM profiles p
        LEFT JOIN classes c ON c.id = p.class_id
@@ -29,6 +29,7 @@ export async function loadMeProfile(db: D1Database, userId: string): Promise<MeR
       campus_other: string | null;
       real_name: string | null;
       wallpaper_id: string | null;
+      wallpaper_media_id: string | null;
       theme_id: string | null;
       text_style_id: string | null;
       class_name: string | null;
@@ -49,6 +50,7 @@ export async function loadMeProfile(db: D1Database, userId: string): Promise<MeR
     campus_other: row.campus_other || null,
     real_name: row.real_name || null,
     wallpaper_id: row.wallpaper_id || null,
+    wallpaper_media_id: row.wallpaper_id === 'custom' ? row.wallpaper_media_id || null : null,
     theme_id: row.theme_id || null,
     text_style_id: row.text_style_id || null,
   };
