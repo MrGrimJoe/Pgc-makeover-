@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { BottomSheet } from './BottomSheet.tsx';
 
 interface ReportModalProps {
   targetType: 'post' | 'comment' | 'user' | 'message';
@@ -18,6 +19,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const closeRef = React.useRef<() => void>(onClose);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) return;
@@ -42,7 +44,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
       }
 
       onReportSubmitted();
-      onClose();
+      closeRef.current();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -51,13 +53,16 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#17233A]/40 flex items-center justify-center p-4">
-      <div className="bg-surface border border-border rounded-sm p-4 max-w-[420px] w-full space-y-4 shadow-sheet">
+    <BottomSheet label={`Report ${targetType}`} onClose={onClose} className="px-4 pb-4">
+      {({ requestClose }) => {
+        closeRef.current = requestClose;
+        return (
+      <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <span className="text-[15px] font-semibold text-text">Report {targetType}</span>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close"
             className="min-h-[44px] min-w-[44px] flex items-center justify-center text-text-muted hover:text-text cursor-pointer"
           >
@@ -91,7 +96,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
           <div className="flex justify-end space-x-2 pt-1">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="min-h-[44px] px-3 text-[14px] font-medium text-text-muted hover:text-text cursor-pointer"
             >
               Cancel
@@ -106,6 +111,8 @@ export const ReportModal: React.FC<ReportModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+        );
+      }}
+    </BottomSheet>
   );
 };

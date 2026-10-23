@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { isDeepPage, readEntry, sameNav, type NavState } from './lib/nav-history.ts';
 import type { MeResponse } from '../shared/schema.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { BottomTabBar, type AppTab } from './components/BottomTabBar.tsx';
@@ -42,6 +43,57 @@ export default function App() {
     display_name: string;
     avatar_media_id: string | null;
   } | null>(null);
+
+  // ---- Back button support: every screen change is one history entry ----
+  const nav: NavState = { tab: activeTab, sub: profileSubView, user: viewUsername };
+  const navRef = useRef(nav);
+  navRef.current = nav;
+  const idxRef = useRef(0);
+  const cameFromBack = useRef(false); // set while rendering the screen reached with Back, so it slides the other way
+  useEffect(() => { cameFromBack.current = false; });
+
+  useEffect(() => {
+    if (loadingUser) return;
+    const entry = readEntry(window.history.state);
+    if (!entry) {
+      window.history.replaceState({ ...(window.history.state ?? {}), nav, idx: 0 }, '');
+      idxRef.current = 0;
+      return;
+    }
+    if (sameNav(entry.nav, nav)) return; // reached by Back/Forward, or nothing changed
+    if (nav.tab === 'signin' || nav.tab === 'signup') {
+      window.history.replaceState({ nav, idx: entry.idx }, ''); // sign-in screens never pile up in history
+      idxRef.current = entry.idx;
+    } else {
+      window.history.pushState({ nav, idx: entry.idx + 1 }, '');
+      idxRef.current = entry.idx + 1;
+    }
+  }, [activeTab, profileSubView, viewUsername, loadingUser]);
+
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const entry = readEntry(e.state);
+      if (!entry) return;
+      const wasIdx = idxRef.current;
+      idxRef.current = entry.idx;
+      if (sameNav(entry.nav, navRef.current)) return; // e.g. a sheet closing: same screen
+      cameFromBack.current = entry.idx < wasIdx;
+      setActiveTab(entry.nav.tab);
+      setProfileSubView(entry.nav.sub);
+      setViewUsername(entry.nav.user);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  /** In-app Back: one step back when there is history, otherwise the given fallback screen. */
+  const goBack = (fallback: () => void) => {
+    if (idxRef.current > 0) window.history.back();
+    else fallback();
+  };
+
+  const pageClass = cameFromBack.current ? 'page-back' : isDeepPage(nav) ? 'page-forward' : 'page-fade';
+  const pageKey = `${nav.tab}:${nav.sub}:${nav.tab === 'profile' ? nav.user : ''}`;
 
   const checkAuth = async () => {
     try {
@@ -114,15 +166,17 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[var(--bg2,#F8F9FC)] text-[var(--text,#17233A)] flex justify-center">
       <div className="w-full max-w-[430px] min-h-screen bg-[var(--bg,#fff)] relative flex flex-col pb-16 font-sans">
-        <Navbar
+        {/* Settings has its own header with a Back button, so the app bar is hidden there */}
+        {activeTab !== 'settings' && <Navbar
           onTitleClick={() => setActiveTab(currentUser ? 'feed' : 'signin')}
           onOpenMessages={() => {
             setTargetMessageUser(null);
             setActiveTab('messages');
           }}
-        />
+        />}
 
-        <main className="flex-1 w-full">
+        <main className="flex-1 w-full overflow-x-hidden">
+          <div key={pageKey} className={pageClass}>
           {activeTab === 'signin' && (
             <SignInPage onSuccessRedirect={() => checkAuth()} notice={authNotice} />
           )}
@@ -166,7 +220,7 @@ export default function App() {
             <MessagesPage
               currentUserId={currentUser.user.id}
               initialTargetUser={targetMessageUser}
-              onBack={() => setActiveTab('feed')}
+              onBack={() => goBack(() => setActiveTab('feed'))}
               onViewAuthorProfile={handleViewAuthorProfile}
             />
           )}
@@ -177,7 +231,8 @@ export default function App() {
               onProfileUpdated={handleProfileUpdated}
               onAccountDeleted={handleAccountDeleted}
               onLogout={handleLogout}
-              onBack={() => { setProfileSubView('view'); setActiveTab('profile'); }}
+              onBack={() => goBack(() => { setProfileSubView('view'); setActiveTab('profile'); })}
+              onEditProfile={() => { setViewUsername(currentUser.profile.username); setProfileSubView('edit'); setActiveTab('profile'); }}
             />
           )}
 
@@ -189,7 +244,7 @@ export default function App() {
                 setViewUsername(u);
                 setProfileSubView('view');
               }}
-              onCancel={() => setProfileSubView('view')}
+              onCancel={() => goBack(() => setProfileSubView('view'))}
             />
           )}
 
@@ -211,12 +266,19 @@ export default function App() {
           {(!currentUser && activeTab !== 'signin' && activeTab !== 'signup') && (
             <SignInPage onSuccessRedirect={() => checkAuth()} />
           )}
+          </div>
         </main>
 
         {/* Bottom tab bar: icon-only, 4 tabs */}
         <BottomTabBar
           activeTab={activeTab === 'settings' ? 'profile' : activeTab}
           setActiveTab={(tab) => {
+            // Tapping the tab you are already on scrolls back to the top instead of adding a history entry
+            const ownProfile = tab !== 'profile' || (profileSubView === 'view' && (viewUsername || currentUser?.profile.username) === currentUser?.profile.username);
+            if (tab === activeTab && ownProfile) {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              return;
+            }
             if (tab === 'profile') {
               setViewUsername(currentUser?.profile.username || '');
               setProfileSubView('view');

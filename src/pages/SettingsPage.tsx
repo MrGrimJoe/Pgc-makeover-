@@ -8,7 +8,8 @@ import { LibraryImage } from '../components/chat/LibraryImage.tsx';
 import type { LibraryEntry } from '../components/chat/PickerPanel.tsx';
 import { loadChatBackground, resetChatBackground, saveChatBackgroundImage, saveChatBackgroundPreset, type ChatBackgroundChoice } from '../lib/chat-background.ts';
 import { prepareAndUpload, type PickedItem } from '../lib/media-upload.ts';
-import { useFocusTrap } from '../lib/focus-trap.ts';
+import { BottomSheet } from '../components/BottomSheet.tsx';
+import { Avatar } from '../components/Avatar.tsx';
 
 interface SettingsPageProps {
   currentUser: MeResponse;
@@ -16,6 +17,8 @@ interface SettingsPageProps {
   onAccountDeleted: () => void;
   onLogout: () => Promise<void> | void;
   onBack: () => void;
+  /** Opens Edit profile; when omitted the profile card has no Edit button */
+  onEditProfile?: () => void;
 }
 
 const card = 'border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 space-y-3';
@@ -31,9 +34,16 @@ const PreviewBubbles: React.FC = () => (
   </div>
 );
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfileUpdated, onAccountDeleted, onLogout, onBack }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfileUpdated, onAccountDeleted, onLogout, onBack, onEditProfile }) => {
   const userId = currentUser.user.id;
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // "Saved." style notices fade away by themselves; errors stay until the next action
+  useEffect(() => {
+    if (message?.type !== 'success') return;
+    const t = window.setTimeout(() => setMessage(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [message]);
 
   // Chat background (this phone only)
   const [bg, setBg] = useState<ChatBackgroundChoice>({ kind: 'preset', id: 'plain' });
@@ -130,8 +140,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const deleteRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(deleteRef, () => setShowDelete(false), showDelete);
   const username = currentUser.profile.username;
   const deleteAccount = async () => {
     if (confirmText !== username) { setDeleteError(`Type "${username}" to confirm`); return; }
@@ -157,8 +165,43 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
       </header>
 
       <div className="p-3 space-y-3">
-        {message && <div role={message.type === 'error' ? 'alert' : 'status'} className={`p-2.5 rounded-[8px] border text-[13px] ${message.type === 'error' ? 'border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)]' : 'border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)]'} bg-[var(--bg,#fff)]`}>{message.text}</div>}
+        {message && <div role={message.type === 'error' ? 'alert' : 'status'} className={`rise-in p-2.5 rounded-[8px] border text-[13px] ${message.type === 'error' ? 'border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)]' : 'border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)]'} bg-[var(--bg,#fff)]`}>{message.text}</div>}
 
+        <div className="rise-in border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 flex items-center gap-3" style={{ '--i': 0 } as React.CSSProperties}>
+          <Avatar mediaId={currentUser.profile.avatar_media_id} displayName={currentUser.profile.display_name} username={username} size={56} />
+          <div className="min-w-0 flex-1">
+            <b className="block truncate text-[16px] text-[var(--text,#17233A)]">{currentUser.profile.display_name || username}</b>
+            <span className="block truncate text-[13px] text-[var(--muted,#5B6577)]">@{username}</span>
+          </div>
+          {onEditProfile && <button type="button" onClick={onEditProfile} className={ghost}>Edit profile</button>}
+        </div>
+        <div role="group" aria-labelledby="grp-privacy" className="rise-in space-y-3" style={{ '--i': 1 } as React.CSSProperties}>
+          <p id="grp-privacy" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Privacy and safety</p>
+        <section aria-labelledby="set-dm" className={card}>
+          <h2 id="set-dm" className={h2}>Who can message you</h2>
+          <label htmlFor="dm-policy-select" className="sr-only">Who can message you</label>
+          <select id="dm-policy-select" value={dmPolicy} onChange={(e) => void saveDm(e.target.value)} className="w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[15px] text-[var(--text,#17233A)] cursor-pointer">
+            <option value="everyone">Everyone</option>
+            <option value="following">People I follow</option>
+            <option value="none">No one</option>
+          </select>
+        </section>
+        <section aria-labelledby="set-blocked" className={card}>
+          <h2 id="set-blocked" className={h2}>Blocked people</h2>
+          {blocked.length === 0 ? <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">No blocked people</p> : (
+            <ul className="list-none m-0 p-0 divide-y divide-[var(--line,#E8EBF0)]">
+              {blocked.map((b) => (
+                <li key={b.user_id} className="flex items-center justify-between py-2">
+                  <span><b className="block text-[14px] text-[var(--text,#17233A)]">{b.display_name}</b><span className="block text-[12px] text-[var(--muted,#5B6577)]">@{b.username}</span></span>
+                  <button type="button" onClick={() => void unblock(b.user_id)} aria-label={`Unblock @${b.username}`} className={ghost}>Unblock</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        </div>
+        <div role="group" aria-labelledby="grp-look" className="rise-in space-y-3" style={{ '--i': 2 } as React.CSSProperties}>
+          <p id="grp-look" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Appearance</p>
         <section aria-labelledby="set-bg" className={card}>
           <h2 id="set-bg" className={h2}>Chat background</h2>
           <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">Used in all your chats. It stays on this phone and is never uploaded.</p>
@@ -183,31 +226,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
             <button type="button" onClick={() => void resetBg()} className={ghost}>Reset</button>
           </div>
         </section>
-
-        <section aria-labelledby="set-dm" className={card}>
-          <h2 id="set-dm" className={h2}>Who can message you</h2>
-          <label htmlFor="dm-policy-select" className="sr-only">Who can message you</label>
-          <select id="dm-policy-select" value={dmPolicy} onChange={(e) => void saveDm(e.target.value)} className="w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[15px] text-[var(--text,#17233A)] cursor-pointer">
-            <option value="everyone">Everyone</option>
-            <option value="following">People I follow</option>
-            <option value="none">No one</option>
-          </select>
-        </section>
-
-        <section aria-labelledby="set-blocked" className={card}>
-          <h2 id="set-blocked" className={h2}>Blocked people</h2>
-          {blocked.length === 0 ? <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">No blocked people</p> : (
-            <ul className="list-none m-0 p-0 divide-y divide-[var(--line,#E8EBF0)]">
-              {blocked.map((b) => (
-                <li key={b.user_id} className="flex items-center justify-between py-2">
-                  <span><b className="block text-[14px] text-[var(--text,#17233A)]">{b.display_name}</b><span className="block text-[12px] text-[var(--muted,#5B6577)]">@{b.username}</span></span>
-                  <button type="button" onClick={() => void unblock(b.user_id)} aria-label={`Unblock @${b.username}`} className={ghost}>Unblock</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
+        </div>
+        <div role="group" aria-labelledby="grp-content" className="rise-in space-y-3" style={{ '--i': 3 } as React.CSSProperties}>
+          <p id="grp-content" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Your content</p>
         <section aria-labelledby="set-interests" className={card}>
           <div className="flex items-center justify-between">
             <h2 id="set-interests" className={h2}>Interests</h2>
@@ -224,7 +245,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
             </ul>
           )}
         </section>
-
         <section aria-labelledby="set-stickers" className={card}>
           <h2 id="set-stickers" className={h2}>My stickers &amp; GIFs</h2>
           {library === null ? <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]" aria-busy="true">Loading...</p> : library.length === 0 ? (
@@ -243,30 +263,40 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
           <input ref={libFile} type="file" tabIndex={-1} accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple aria-label="Choose pictures to add" className="hidden" data-testid="settings-library-input"
             onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ''; if (f.length) setAddFiles(f); }} />
         </section>
-
+        </div>
+        <div role="group" aria-labelledby="grp-account" className="rise-in space-y-3" style={{ '--i': 4 } as React.CSSProperties}>
+          <p id="grp-account" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Account</p>
         <section aria-labelledby="set-account" className={card}>
           <h2 id="set-account" className={h2}>Account</h2>
           <button type="button" onClick={() => void onLogout()} className={`${ghost} w-full`}>Sign out</button>
           <button type="button" onClick={() => setShowDelete(true)} className="w-full min-h-[44px] bg-transparent border-0 text-[14px] font-semibold text-[var(--danger,#B23A40)] cursor-pointer">Delete account</button>
         </section>
+        </div>
       </div>
 
       {addFiles && <MediaPreview files={addFiles} mode="library" onCancel={() => setAddFiles(null)} onConfirm={addToLibrary} />}
 
       {showDelete && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
-          <div ref={deleteRef} role="dialog" aria-modal="true" aria-label="Delete account" tabIndex={-1} className="w-full max-w-[430px] bg-[var(--bg,#fff)] rounded-t-[16px] p-5 space-y-3 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
-            <h2 className="m-0 text-[16px] font-semibold text-[var(--danger,#B23A40)]">Delete account</h2>
-            <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">This permanently deletes your account, posts, comments and media. To confirm, type your username <strong>@{username}</strong>.</p>
-            {deleteError && <div role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">{deleteError}</div>}
-            <input type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} aria-label="Confirm username to delete account" autoComplete="off" className="w-full min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[15px] text-[var(--text,#17233A)]" />
-            <div className="flex gap-2">
-              <button type="button" onClick={() => { setShowDelete(false); setConfirmText(''); setDeleteError(null); }} disabled={deleting} className={`${ghost} flex-1`}>Cancel</button>
-              <button type="button" onClick={() => void deleteAccount()} disabled={deleting || confirmText !== username} className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--danger,#B23A40)] text-[var(--bg,#fff)] text-[13px] font-semibold cursor-pointer border-0 disabled:opacity-40">{deleting ? 'Deleting...' : 'Delete permanently'}</button>
+        <BottomSheet
+          label="Delete account"
+          onClose={() => { setShowDelete(false); setConfirmText(''); setDeleteError(null); }}
+          className="px-5 pb-5"
+        >
+          {({ requestClose }) => (
+            <div className="space-y-3 pt-1">
+              <h2 className="m-0 text-[16px] font-semibold text-[var(--danger,#B23A40)]">Delete account</h2>
+              <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">This permanently deletes your account, posts, comments and media. To confirm, type your username <strong>@{username}</strong>.</p>
+              {deleteError && <div role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">{deleteError}</div>}
+              <input type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} aria-label="Confirm username to delete account" autoComplete="off" className="w-full min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[15px] text-[var(--text,#17233A)]" />
+              <div className="flex gap-2">
+                <button type="button" onClick={requestClose} disabled={deleting} className={`${ghost} flex-1`}>Cancel</button>
+                <button type="button" onClick={() => void deleteAccount()} disabled={deleting || confirmText !== username} className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--danger,#B23A40)] text-[var(--bg,#fff)] text-[13px] font-semibold cursor-pointer border-0 disabled:opacity-40">{deleting ? 'Deleting...' : 'Delete permanently'}</button>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
+        </BottomSheet>
       )}
+
     </div>
   );
 };

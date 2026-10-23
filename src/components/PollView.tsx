@@ -55,7 +55,7 @@ export const PollView: React.FC<PollViewProps> = ({ postId, poll: initial }) => 
                 }`}
               >
                 {showCounts && (
-                  <span aria-hidden="true" className="absolute inset-y-0 left-0 bg-[var(--bg2,#F8F9FC)]" style={{ width: `${pct}%` }} />
+                  <span aria-hidden="true" className="absolute inset-y-0 left-0 bg-[var(--bg2,#F8F9FC)] transition-[width] duration-500 ease-out" style={{ width: `${pct}%` }} />
                 )}
                 <span className="relative flex items-center justify-between gap-2">
                   <span className="break-words">{o.text}{mine ? ' (your vote)' : ''}</span>

@@ -101,7 +101,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   };
 
   return (
-    <article className="border-b border-[var(--line,#E8EBF0)] pt-3 pb-2 text-[var(--text,#17233A)]">
+    <article className="rise-in border-b border-[var(--line,#E8EBF0)] pt-3 pb-2 text-[var(--text,#17233A)]">
       {/* Header Row: 32px avatar, name + class below, time-left on right */}
       <div className="flex items-center gap-2.5 px-4 pb-2.5">
         <button

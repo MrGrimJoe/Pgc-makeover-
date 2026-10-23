@@ -34,6 +34,8 @@ Base commit: `ba1d936`. Patches are cumulative from that base.
 
 - **Phase 5 follow-up:** posting limit is now 3 per 15 minutes and rejected attempts no longer count; rule-based spam check on new posts with a 3-day lock after 3 spam attempts in a row (migration 011); votes from people blocked with the author no longer count in poll totals.
 
+- **Motion, navigation and Settings pass:** slide-up sheets for comments/report/delete (drag, backdrop, Escape and Back all close them), Back-button support for the whole app, page transitions, tab bar indicator, press feedback, entrance animations, regrouped Settings with a profile card. Tests in `tests/sheet-nav-ui.test.tsx`.
+
 ## Not started
 - Phase 3 leftover: the compact composer is used for comments, but the New post page still has its own text box (it also holds photos, the poll builder and the sticker choice). The post page does now take photos or one sticker/GIF, and compresses photos, but its text box is its own.
 - Nothing planned is left in Phases 1 to 5.
@@ -50,3 +52,4 @@ Phase 5 specifically: image compression for backgrounds (canvas WebP at 1080 px)
 - Spam check: the word list and thresholds are first guesses and will need tuning against real posts. Comments and messages are not checked. Posting is limited by a fixed window, not a sliding one.
 - Polls: votes can be changed and anyone who votes sees the counts, so a person can vote just to peek at the results. This is the intended design; hiding counts until the poll closes would be the alternative.
 - Remote database: migrations 005 to 011 must all be run before deploying.
+- Motion and navigation: tested in jsdom only. The slide timing, the drag-to-close feel and the Back button on a real phone have not been tried. After saving Edit profile the app adds a history entry for the profile page, so Back goes to the edit form once. Scroll position is not restored when going Back.

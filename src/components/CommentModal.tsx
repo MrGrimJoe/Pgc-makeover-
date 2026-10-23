@@ -7,6 +7,7 @@ import { prepareAndUpload } from '../lib/media-upload.ts';
 import React, { useState, useEffect } from 'react';
 import type { CommentItem, CommentsResponse } from '../../shared/schema.ts';
 import { X, Trash2 } from 'lucide-react';
+import { BottomSheet } from './BottomSheet.tsx';
 
 interface CommentModalProps {
   postId: string;
@@ -93,14 +94,15 @@ export const CommentModal: React.FC<CommentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#17233A]/40 flex items-center justify-center p-4">
-      <div className="bg-surface border border-border rounded-sm p-4 max-w-[480px] w-full max-h-[80vh] flex flex-col shadow-sheet">
+    <BottomSheet label="Comments" onClose={onClose} className="h-[78vh] max-h-[78vh] px-4 pb-4">
+      {({ requestClose }) => (
+      <>
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-border">
           <span className="text-[15px] font-semibold text-text">Comments</span>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close"
             className="min-h-[44px] min-w-[44px] flex items-center justify-center text-text-muted hover:text-text cursor-pointer"
           >
@@ -115,7 +117,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         )}
 
         {/* Comment list */}
-        <div className="flex-1 overflow-y-auto py-3 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-3 space-y-3">
           {loading && (
             <div className="space-y-3 py-2">
               {[1, 2].map((i) => (
@@ -137,7 +139,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
             comments.map((comment) => (
               <div
                 key={comment.id}
-                className="py-2 border-b border-border/60 space-y-1 text-[15px]"
+                className="rise-in py-2 border-b border-border/60 space-y-1 text-[15px]"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-1.5 truncate">
@@ -219,7 +221,8 @@ export const CommentModal: React.FC<CommentModalProps> = ({
             <ReportModal targetType="comment" targetId={reportingId} onClose={() => setReportingId(null)} onReportSubmitted={() => setReportingId(null)} />
           )}
         </div>
-      </div>
-    </div>
+      </>
+      )}
+    </BottomSheet>
   );
 };

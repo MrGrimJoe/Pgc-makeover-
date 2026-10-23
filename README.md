@@ -294,6 +294,14 @@ Before opening the platform to real students, verify all production hardening cr
 
 ---
 
+## Motion and navigation
+
+- **Sheets:** comments, Report and Delete account open as a panel that slides up from the bottom (`src/components/BottomSheet.tsx`) and slides back down when you tap outside it, press Escape, tap Close, drag its top bar down, or use the phone/browser Back button. The sheet adds one history entry while it is open and removes it when it closes.
+- **Back button:** every screen change in the app is a history entry (`src/lib/nav-history.ts`, wired in `src/App.tsx`), so Back returns to the previous screen instead of leaving the site. Settings, Edit profile and Messages use the same history for their own Back buttons. Tapping the tab you are already on scrolls to the top.
+- **Transitions:** tab changes fade up, deeper pages (Settings, Edit profile, Messages) slide in from the right and slide the other way on Back. Tab icons pop and show an indicator, buttons give press feedback, and posts, comments and Settings groups rise in. Poll bars animate to their share.
+- All motion is in `src/index.css` and is switched off by the system's "reduce motion" setting.
+- **Settings** now opens with your profile and an Edit profile button, with the cards grouped under Privacy and safety, Appearance, Your content and Account. "Saved." notices disappear by themselves, and the app bar is hidden on Settings so there is only one header.
+
 ## Posting limits and the spam check
 
 - **Limit:** at most 3 posts per 15 minutes per person (replaces the old 10 per hour). It is a fixed 15-minute window, so a burst across a window edge can be up to 6. Only posts that passed every check use it: a rejected poll, a bad body or a spam-looking post does not. A separate loose guard (60 attempts per 15 minutes) keeps rejected requests from hammering the database.
