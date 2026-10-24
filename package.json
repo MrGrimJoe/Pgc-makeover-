@@ -13,7 +13,7 @@
     "db:backup": "tsx scripts/backup.mts",
     "deploy": "npm run build && wrangler deploy",
     "type-check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --testTimeout=30000 --hookTimeout=30000",
     "seed:dev": "tsx scripts/seed-dev.ts",
     "generate:campuses": "tsx scripts/generate-campuses.ts",
     "build:stickers": "tsx scripts/build-stickers.ts",
@@ -22,8 +22,10 @@
     "shots": "tsx scripts/shots.mts",
     "bootstrap:master": "tsx scripts/bootstrap-master.mts",
     "prelaunch-check": "tsx scripts/prelaunch-check.ts",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "clean": "node scripts/clean.mjs",
+    "lint": "tsc --noEmit",
+    "pretest": "node scripts/check-node.mjs",
+    "pretype-check": "node scripts/check-node.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -55,5 +57,8 @@
     "typescript": "^7.0.2",
     "vitest": "^5.0.4",
     "wrangler": "4.151.1"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

@@ -26,28 +26,22 @@ export async function checkRateLimit(
     .bind(key, windowStart)
     .run();
 
-  // Query existing count for this window
-  const record = await db
-    .prepare('SELECT count FROM rate_limits WHERE key = ? AND window_start = ?')
-    .bind(key, windowStart)
-    .first<{ count: number }>();
+  if (maxRequests < 1) return { allowed: false, retryAfterSeconds };
 
-  const currentCount = record?.count ?? 0;
-
-  if (currentCount >= maxRequests) {
-    return { allowed: false, retryAfterSeconds };
-  }
-
-  // Atomically insert or increment count
-  await db
+  // One statement decides: it counts the request only while the window is under the limit, and RETURNING
+  // yields a row only when it did. Two simultaneous requests can no longer both read "9 of 10" and both pass.
+  const counted = await db
     .prepare(
       `INSERT INTO rate_limits (key, window_start, count)
        VALUES (?, ?, 1)
        ON CONFLICT(key, window_start)
-       DO UPDATE SET count = count + 1`
+       DO UPDATE SET count = count + 1 WHERE count < ?
+       RETURNING count`
     )
-    .bind(key, windowStart)
-    .run();
+    .bind(key, windowStart, maxRequests)
+    .first<{ count: number }>();
+
+  if (!counted) return { allowed: false, retryAfterSeconds };
 
   return { allowed: true, retryAfterSeconds: 0 };
 }
