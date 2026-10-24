@@ -8,7 +8,8 @@ const VALID = {
   username: 'ayesha_k',
   campus_id: CAMPUS_X,
   class_id: 'cls_2026',
-  roll_last3: '907',
+  roll_number: '2024-0907',
+  card: { barcode: '20240907' },
 };
 
 describe('Sign up and log in', () => {
@@ -25,7 +26,7 @@ describe('Sign up and log in', () => {
       expect(location).toBe('/?signup=1');
       const res = await call(env, 'GET', '/api/signup/session', { cookie });
       expect(res.status).toBe(200);
-      expect(res.json).toEqual({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com' });
+      expect(res.json).toEqual({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com', card_scan: 'required' });
     });
 
     it('is rejected when missing, forged, expired or already used', async () => {
@@ -96,10 +97,13 @@ describe('Sign up and log in', () => {
     it('rejects invalid input with a 400 and creates nothing', async () => {
       const { cookie } = await startSignup(env);
       const bad: Array<[string, Record<string, unknown>]> = [
-        ['roll with 2 digits', { roll_last3: '90' }],
-        ['roll with 4 digits', { roll_last3: '9071' }],
-        ['roll with letters', { roll_last3: '9a7' }],
-        ['roll as number', { roll_last3: 907 }],
+        ['roll too short', { roll_number: '9' }],
+        ['roll with markup', { roll_number: '9<7>' }],
+        ['roll too long', { roll_number: '1'.repeat(40) }],
+        ['roll as number', { roll_number: 907 }],
+        ['old roll_last3 field', { roll_last3: '907' }],
+        ['card with extra field', { card: { barcode: '20240907', verified: true } }],
+        ['card barcode empty', { card: { barcode: '' } }],
         ['short real name', { real_name: 'A' }],
         ['real name with markup', { real_name: '<b>Ayesha</b>' }],
         ['uppercase username', { username: 'Ayesha_K' }],
@@ -156,14 +160,15 @@ describe('Sign up and log in', () => {
       const a = await startSignup(env, { sub: 'a' });
       const b = await startSignup(env, { sub: 'b' });
       const [ra, rb] = await Promise.all([
-        call(env, 'POST', '/api/signup/complete', { cookie: a.cookie, json: VALID }),
-        call(env, 'POST', '/api/signup/complete', { cookie: b.cookie, json: VALID }),
+        call(env, 'POST', '/api/signup/complete', { cookie: a.cookie, json: { ...VALID, roll_number: '111', card: { barcode: '111' } } }),
+        call(env, 'POST', '/api/signup/complete', { cookie: b.cookie, json: { ...VALID, roll_number: '222', card: { barcode: '222' } } }),
       ]);
       expect([ra.status, rb.status].sort()).toEqual([201, 409]);
       expect((await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first<{ n: number }>())?.n).toBe(1);
 
       const loser = ra.status === 409 ? a : b;
-      const retry = await call(env, 'POST', '/api/signup/complete', { cookie: loser.cookie, json: { ...VALID, username: 'ayesha_k2' } });
+      const loserRoll = ra.status === 409 ? '111' : '222';
+      const retry = await call(env, 'POST', '/api/signup/complete', { cookie: loser.cookie, json: { ...VALID, username: 'ayesha_k2', roll_number: loserRoll, card: { barcode: loserRoll } } });
       expect(retry.status).toBe(201);
     });
 
@@ -184,7 +189,7 @@ describe('Sign up and log in', () => {
       const { cookie } = await startSignup(env);
       const statuses: number[] = [];
       for (let i = 0; i < 12; i++) {
-        statuses.push((await call(env, 'POST', '/api/signup/complete', { cookie, json: { ...VALID, roll_last3: 'x' } })).status);
+        statuses.push((await call(env, 'POST', '/api/signup/complete', { cookie, json: { ...VALID, roll_number: 'x!' } })).status);
       }
       expect(statuses.slice(0, 10).every((s) => s === 400)).toBe(true);
       expect(statuses.slice(10)).toEqual([429, 429]);
@@ -213,6 +218,8 @@ describe('Sign up and log in', () => {
       for (const r of responses) {
         const keys = deepKeys(r.json);
         expect(keys.has('roll_last3')).toBe(false);
+        expect(keys.has('roll_key')).toBe(false);
+        expect(keys.has('roll_number')).toBe(false);
         expect(keys.has('email')).toBe(false);
         expect(r.text).not.toContain('ayesha.private@gmail.com');
         expect(r.text).not.toContain('"907"');
@@ -242,7 +249,7 @@ describe('Sign up and log in', () => {
 
     it('does not accept email or roll_last3 through PATCH /api/me', async () => {
       const mine = await seedUser(env, 'usr_me', 'me_user');
-      for (const body of [{ email: 'x@y.com' }, { roll_last3: '111' }]) {
+      for (const body of [{ email: 'x@y.com' }, { roll_last3: '111' }, { roll_number: '111' }, { verification_status: 'provisional' }]) {
         expect((await call(env, 'PATCH', '/api/me', { cookie: mine, json: body })).status).toBe(400);
       }
     });

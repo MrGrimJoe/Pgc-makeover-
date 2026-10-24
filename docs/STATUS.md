@@ -71,3 +71,11 @@ Phase 6 specifically: nothing has run on a real phone. Not verified: the Android
 - Screen sizes, left on purpose: the right-hand column on desktop (suggestions or trending would be new features, so the width goes to Messages and Settings). Hover states are on post actions and navigation only; other buttons keep their current look.
 - Admin: banning removes a person's active posts from circulation but reinstating does not restore them. A banned or suspended admin loses the admin role (the master can appoint them again). The master cannot delete their own account or change their own role through the app (deleting answers 409). The first version has no appeals and no automatic content classification.
 - PWA: the icons are placeholders and the installed name is "Dialtone" (the existing page title); change `name`/`short_name` in `public/manifest.webmanifest` and `apple-mobile-web-app-title` in `index.html` together if the product is called PGC. The Home banner reappears 14 days after "Not now" (`DISMISS_DAYS` in `src/lib/pwa.ts`). Android and desktop get an automatic banner only when the browser offers an install prompt; otherwise the instructions are only in Settings, to avoid nagging. No startup images are provided. Offline use is limited to the offline page by design (student data is never kept for offline use).
+
+## Blueprint work (PGC_Phased_Project_Blueprint)
+
+Its phase numbers differ from the numbered phases above.
+
+- **Infrastructure fixes** (branch `fix/phase1-and-leftovers`): only `/api/*` runs the Worker (static files and headers come from `public/_headers`); atomic rate limiter (the old one let 40 of 40 simultaneous requests through a limit of 10); Node 22.13 guard, cross-platform `clean`, CI workflow, migration `.sql` / embedded-copy parity test.
+- **Student sign-up checks** (blueprint Phase 3, partly): full roll number, unique per campus, barcode scan, "already registered" requests for admins. See README, "Student sign-up checks". Not done: OCR.
+- **Not done yet:** report retention policy and appeals, Turnstile, academic progression / renewal, removal of `DEV-ONLY` code and real branding, real-phone and real-browser checks (the camera scan has never run on a real device).

@@ -18,6 +18,8 @@ import {
 } from '../shared/schema.ts';
 import { findCampus, campusName, cleanCampusOther } from '../shared/campus.ts';
 import { isReservedUsername, normalizeUsername } from '../shared/username.ts';
+import { barcodeMatchesRoll, campusKey, normalizeRoll, rollLast3 } from '../shared/roll.ts';
+import { cardScanRequired, computeRollKey } from './roll-key.ts';
 
 export const SIGNUP_TICKET_COOKIE = 'signup_ticket';
 export const SIGNUP_TICKET_TTL_MS = 15 * 60 * 1000;
@@ -78,6 +80,7 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
       valid: true,
       suggested_name: ticket.display_name,
       email: ticket.email,
+      card_scan: cardScanRequired(env) ? 'required' : 'optional',
     };
     return jsonResponse(body);
   }
@@ -126,6 +129,34 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
       if (!campusOther) return jsonResponse({ error: 'Other campus must be 2 to 80 characters with no markup' }, 400);
     }
 
+    // ---- Student identity: roll number + campus, and what the card said ----
+    const dayLimit = await checkRateLimit(env.DB, `signup-roll:${ticket.provider_subject}`, 20, 24 * 60 * 60 * 1000);
+    if (!dayLimit.allowed) {
+      return jsonResponse({ error: 'Too many attempts today. Please try again tomorrow.' }, 429, {
+        'Retry-After': String(dayLimit.retryAfterSeconds),
+      });
+    }
+    const rollNormalized = normalizeRoll(data.roll_number);
+    const regKey = campusKey(data.campus_id, campusOther);
+    const rollKey = await computeRollKey(env, regKey, rollNormalized);
+    if (!rollKey) return jsonResponse({ error: 'Sign-up is not available right now. Please try again later.' }, 503);
+
+    let verificationStatus: 'unverified' | 'provisional' = 'unverified';
+    if (data.card) {
+      if (!barcodeMatchesRoll(data.card.barcode, data.roll_number)) {
+        return jsonResponse(
+          {
+            error: 'The barcode on your card does not match the roll number you typed. Check the number, or scan the card again.',
+            code: 'card_mismatch',
+          },
+          422
+        );
+      }
+      verificationStatus = 'provisional';
+    } else if (cardScanRequired(env)) {
+      return jsonResponse({ error: 'Scan your student card to finish signing up.', code: 'card_required' }, 422);
+    }
+
     const existingAccount = await env.DB.prepare('SELECT id FROM users WHERE provider_subject = ?')
       .bind(ticket.provider_subject)
       .first();
@@ -137,6 +168,28 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
       .bind(usernameNormalized)
       .first();
     if (taken) return jsonResponse({ error: 'Username is already taken' }, 409);
+
+    const duplicateResponse = async (): Promise<Response> => {
+      // Not a ban and not an error on the student's side: keep the attempt for an administrator, reveal nothing about the other account.
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO registration_disputes (id, provider_subject, email, campus_key, roll_key, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+        .bind(newId('dsp'), ticket.provider_subject, ticket.email, regKey, rollKey, new Date().toISOString())
+        .run();
+      return jsonResponse(
+        {
+          error:
+            'This roll number is already registered at this campus. If it is yours, your request has been passed to an administrator who can help you get access. You have not been blocked.',
+          code: 'duplicate_registration',
+        },
+        409
+      );
+    };
+    const alreadyRegistered = await env.DB.prepare('SELECT 1 FROM user_private WHERE campus_key = ? AND roll_key = ?')
+      .bind(regKey, rollKey)
+      .first();
+    if (alreadyRegistered) return duplicateResponse();
 
     const now = new Date().toISOString();
     const userId = newId('usr');
@@ -157,10 +210,18 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
          VALUES (?, ?, ?, ?, '', ?, ?, ?, ?)`
       ).bind(userId, usernameNormalized, usernameNormalized, usernameNormalized, data.class_id, data.campus_id ?? null, campusOther, data.real_name),
       env.DB.prepare('INSERT INTO user_settings (user_id) VALUES (?)').bind(userId),
-      env.DB.prepare('INSERT INTO user_private (user_id, email, roll_last3) VALUES (?, ?, ?)').bind(
+      env.DB.prepare(
+        `INSERT INTO user_private (user_id, email, roll_last3, campus_key, roll_key, verification_status, verification_method, verified_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
         userId,
         ticket.email,
-        data.roll_last3
+        rollLast3(rollNormalized),
+        regKey,
+        rollKey,
+        verificationStatus,
+        verificationStatus === 'provisional' ? 'barcode' : null,
+        verificationStatus === 'provisional' ? now : null
       ),
       env.DB.prepare('UPDATE signup_tickets SET used_at = ? WHERE id = ? AND used_at IS NULL').bind(now, ticket.id),
       env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)').bind(
@@ -175,6 +236,7 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
     } catch (err) {
       const unique = isUniqueViolation(err);
       if (unique) {
+        if (unique.includes('roll_key')) return duplicateResponse();
         if (unique.includes('provider_subject')) {
           return jsonResponse({ error: 'An account already exists for this Google account. Log in instead.' }, 409);
         }

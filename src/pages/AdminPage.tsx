@@ -15,7 +15,9 @@ interface Preview { exists: boolean; text: string | null; author_id: string | nu
 interface Person { id: string; username: string; display_name: string; role: string; status: string }
 interface Action { id: string; action: string; detail: string | null; created_at: string; actor_username: string | null; target_username: string | null }
 
-type Tab = 'reports' | 'people' | 'activity';
+interface Dispute { id: string; email: string | null; status: string; created_at: string; holder_username: string | null }
+
+type Tab = 'reports' | 'people' | 'signups' | 'activity';
 type Confirm =
   | { kind: 'status'; person: { id: string; username: string }; status: 'suspended' | 'banned' | 'active' }
   | { kind: 'appoint'; person: { id: string; username: string } };
@@ -39,6 +41,7 @@ const ACTION_TEXT: Record<string, string> = {
   'status:active': 'reinstated',
   appoint: 'made an admin',
   'appoint:handover': 'handed the admin role to',
+  'dispute:resolved': 'handled a sign-up request',
 };
 
 export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLostAdmin }) => {
@@ -57,6 +60,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
   const [people, setPeople] = useState<Person[] | null>(null);
   const [query, setQuery] = useState('');
   const [actions, setActions] = useState<Action[] | null>(null);
+  const [disputes, setDisputes] = useState<Dispute[] | null>(null);
 
   const fail = (e: unknown) => setNotice({ type: 'error', text: (e as Error).message });
 
@@ -69,6 +73,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
   }, []);
   const loadActions = useCallback(() => { api<{ actions: Action[] }>('/api/admin/actions').then((b) => setActions(b.actions)).catch(fail); }, []);
 
+  const loadDisputes = useCallback(() => { api<{ disputes: Dispute[] }>('/api/admin/disputes').then((b) => setDisputes(b.disputes)).catch(fail); }, []);
+
   // Opened from the bottom of Settings, so start at the top
   useEffect(() => { window.scrollTo(0, 0); }, []);
   useEffect(() => { loadStats(); }, [loadStats]);
@@ -76,6 +82,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
   // The search box reloads the list on submit, so this runs only when the tab opens
   useEffect(() => { if (tab === 'people') loadPeople(''); }, [tab, loadPeople]);
   useEffect(() => { if (tab === 'activity') loadActions(); }, [tab, loadActions]);
+  useEffect(() => { if (tab === 'signups') loadDisputes(); }, [tab, loadDisputes]);
+  const resolveDispute = async (id: string) => {
+    try { await post(`/api/admin/disputes/${encodeURIComponent(id)}/resolve`, {}); loadDisputes(); } catch (e) { fail(e); }
+  };
 
   const look = async (id: string) => {
     try { const p = await api<Preview>(`/api/admin/reports/${encodeURIComponent(id)}/preview`); setPreviews((m) => ({ ...m, [id]: p })); } catch (e) { fail(e); }
@@ -163,7 +173,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
           </dl>
         )}
 
-        <div role="group" aria-label="Admin sections" className="flex gap-1">{tabBtn('reports', 'Reports')}{tabBtn('people', 'People')}{tabBtn('activity', 'Activity')}</div>
+        <div role="group" aria-label="Admin sections" className="flex gap-1">{tabBtn('reports', 'Reports')}{tabBtn('people', 'People')}{tabBtn('signups', 'Sign-ups')}{tabBtn('activity', 'Activity')}</div>
 
         {confirmPanel}
 
@@ -238,6 +248,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
                   </li>
                 );
               })}
+            </ul>
+          </section>
+        )}
+
+        {tab === 'signups' && (
+          <section aria-label="Sign-up help" className="space-y-2">
+            <p className={`m-0 text-[13px] ${muted}`}>
+              Students who were told their roll number is already registered. Nobody here has been blocked. If the holder is not the real student, suspend or ban that account in People, then ask the student to sign up again.
+            </p>
+            {disputes === null && <p className={`m-0 text-[14px] ${muted}`}>Loading...</p>}
+            {disputes?.length === 0 && <p className={`m-0 text-[14px] ${muted}`}>No requests.</p>}
+            <ul className="list-none m-0 p-0 space-y-2">
+              {disputes?.map((d) => (
+                <li key={d.id} className={`${card} !p-3`}>
+                  <p className="m-0 text-[14px] text-[var(--text,#17233A)]"><strong>{d.email ?? 'Unknown email'}</strong> {d.status === 'open' ? 'asked for help' : '(handled)'}</p>
+                  <p className={`m-0 text-[13px] ${muted}`}>{d.holder_username ? `The roll number belongs to @${d.holder_username}.` : 'The account that held the roll number no longer exists, so the student can sign up again.'}</p>
+                  <p className={`m-0 text-[12px] ${muted}`}>{new Date(d.created_at).toLocaleString()}</p>
+                  {d.status === 'open' && <button type="button" className={ghost} onClick={() => resolveDispute(d.id)}>Mark handled</button>}
+                </li>
+              ))}
             </ul>
           </section>
         )}

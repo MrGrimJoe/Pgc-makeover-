@@ -82,7 +82,9 @@ export async function handleAdminRoute(request: Request, env: Env, url: URL): Pr
   const isAppoint = pathname === '/api/admin/appoint' && method === 'POST';
   const isPreview = /^\/api\/admin\/reports\/[^/]+\/preview$/.test(pathname) && method === 'GET';
   const isLog = pathname === '/api/admin/actions' && method === 'GET';
-  if (!isPeople && !isStatus && !isAppoint && !isPreview && !isLog) return null;
+  const isDisputes = pathname === '/api/admin/disputes' && method === 'GET';
+  const isDisputeResolve = /^\/api\/admin\/disputes\/[^/]+\/resolve$/.test(pathname) && method === 'POST';
+  if (!isPeople && !isStatus && !isAppoint && !isPreview && !isLog && !isDisputes && !isDisputeResolve) return null;
 
   const auth = await authenticateRequest(request, env.DB);
   if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
@@ -91,6 +93,8 @@ export async function handleAdminRoute(request: Request, env: Env, url: URL): Pr
 
   if (isPeople) return listPeople(env, url);
   if (isLog) return listActions(env);
+  if (isDisputes) return listDisputes(env);
+  if (isDisputeResolve) return resolveDispute(request, env, auth, decodeURIComponent(pathname.split('/')[4]!));
   if (isPreview) return reportPreview(env, decodeURIComponent(pathname.split('/')[4]!));
   if (isStatus) return changeStatus(request, env, auth, role, decodeURIComponent(pathname.split('/')[4]!));
   return appoint(request, env, auth, role);
@@ -270,4 +274,41 @@ async function reportPreview(env: Env, reportId: string): Promise<Response> {
     author_username: authorIsMaster ? null : row?.author_username ?? null,
     status: row?.status ?? null,
   });
+}
+
+/**
+ * People who were told "this roll number is already registered at this campus". The admin sees who asked (their
+ * Google email) and the username of the account that holds the roll number, so they can decide who the real student is
+ * using the normal suspend / ban tools. The master account is never shown as the holder.
+ */
+async function listDisputes(env: Env): Promise<Response> {
+  const rows = await env.DB.prepare(
+    `SELECT d.id, d.email, d.status, d.created_at, d.resolved_at,
+            (SELECT pr.username FROM user_private up
+               JOIN users u ON u.id = up.user_id AND u.role != 'master'
+               JOIN profiles pr ON pr.user_id = up.user_id
+              WHERE up.campus_key = d.campus_key AND up.roll_key = d.roll_key) AS holder_username
+     FROM registration_disputes d
+     ORDER BY (d.status = 'open') DESC, d.created_at DESC
+     LIMIT 100`
+  ).all();
+  return jsonResponse({ disputes: rows.results || [] });
+}
+
+async function resolveDispute(request: Request, env: Env, auth: AuthenticatedUser, id: string): Promise<Response> {
+  let note = '';
+  try {
+    const body = (await request.json()) as { note?: unknown };
+    if (typeof body.note === 'string') note = body.note.trim().slice(0, 500);
+  } catch {
+    // no body is fine: the note is optional
+  }
+  const res = await env.DB.prepare(
+    "UPDATE registration_disputes SET status = 'resolved', resolved_at = ?, resolved_by = ?, note = ? WHERE id = ? AND status = 'open'"
+  )
+    .bind(new Date().toISOString(), auth.user.id, note, id)
+    .run();
+  if (res.meta.changes !== 1) return jsonResponse({ error: 'Not found or already resolved' }, 404);
+  await audit(env, auth.user.id, 'dispute:resolved', null, note || null);
+  return jsonResponse({ success: true });
 }

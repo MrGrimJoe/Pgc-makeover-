@@ -24,6 +24,12 @@ export interface Env {
 
   // Admin secret for privileged jobs and moderation endpoints
   ADMIN_SECRET?: string;
+
+  // Secret that keys the hash of roll numbers (wrangler secret put ROLL_KEY_SECRET). Required in production.
+  ROLL_KEY_SECRET?: string;
+
+  // 'false' lets people sign up without scanning their card (they stay 'unverified'). Anything else requires the scan.
+  REQUIRE_CARD_SCAN?: string;
 }
 
 export interface ClassRow {

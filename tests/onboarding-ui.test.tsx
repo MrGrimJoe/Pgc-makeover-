@@ -9,6 +9,16 @@ import { CAMPUSES as BUNDLED } from '../shared/campuses.ts';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// jsdom has no camera. The scanner module is replaced by one that "sees" whatever the test sets.
+let scanOutcome: { barcode: string } | { error: 'denied' | 'no-camera' | 'unsupported' | 'failed' };
+let cameraStopped = 0;
+vi.mock('../src/lib/cardScan.ts', () => ({
+  startCameraScan: async (_video: unknown, onResult: (t: string) => void, onError: (k: string) => void) => {
+    queueMicrotask(() => ('barcode' in scanOutcome ? onResult(scanOutcome.barcode) : onError(scanOutcome.error)));
+    return { stop: () => { cameraStopped++; } };
+  },
+}));
+
 interface Recorded {
   url: string;
   method: string;
@@ -22,6 +32,7 @@ let calls: Recorded[];
 let sessionValid: boolean;
 let completeStatus: number;
 let takenUsernames: string[];
+let cardScanMode: 'required' | 'optional';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -36,7 +47,7 @@ function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 
   if (url === '/api/signup/session') {
     return Promise.resolve(
-      sessionValid ? json({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com' }) : json({ error: 'expired' }, 401)
+      sessionValid ? json({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com', card_scan: cardScanMode }) : json({ error: 'expired' }, 401)
     );
   }
   if (url === '/api/classes') return Promise.resolve(json({ classes: [{ id: 'cls_2026', name: 'Class of 2026' }] }));
@@ -118,7 +129,7 @@ async function fillValidForm(pickCampus = true) {
   await type('signup-username', 'ayesha_k');
   await waitFor(() => /is available/.test(container.textContent ?? ''), 'username availability');
   await choose('signup-class', 'cls_2026');
-  await type('signup-roll', '907');
+  await type('signup-roll', '2024-0907');
   if (!pickCampus) return;
   // pick a campus with the keyboard: type, arrow down, enter
   const input = byId<HTMLInputElement>('signup-campus-input');
@@ -142,6 +153,9 @@ beforeEach(() => {
   sessionValid = true;
   completeStatus = 201;
   takenUsernames = [];
+  cardScanMode = 'optional';
+  scanOutcome = { barcode: '20240907' };
+  cameraStopped = 0;
   vi.stubGlobal('fetch', vi.fn(fakeFetch));
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -182,10 +196,10 @@ describe('Onboarding page (interactive)', () => {
     expect(submitButton().disabled).toBe(false);
   });
 
-  it('only lets the roll number hold three digits', async () => {
-    await mount();
-    await type('signup-roll', '9a0b7c1');
-    expect(byId<HTMLInputElement>('signup-roll').value).toBe('907');
+  it('drops characters a roll number cannot contain, and keeps letters, digits and separators', async () => {
+    await mount(vi.fn());
+    await type('signup-roll', 'ab<12>-3$4');
+    expect(byId<HTMLInputElement>('signup-roll').value).toBe('ab12-34');
   });
 
   it('shows when a username is taken and blocks submitting', async () => {
@@ -211,7 +225,7 @@ describe('Onboarding page (interactive)', () => {
       username: 'ayesha_k',
       campus_id: LISTED.id,
       class_id: 'cls_2026',
-      roll_last3: '907',
+      roll_number: '2024-0907',
     });
   });
 
@@ -271,7 +285,95 @@ describe('Onboarding page (interactive)', () => {
       username: 'ayesha_k',
       campus_other: 'Green Valley College',
       class_id: 'cls_2026',
-      roll_last3: '907',
+      roll_number: '2024-0907',
     });
+  });
+});
+
+describe('Student card step', () => {
+  const scanButton = () => [...container.querySelectorAll('button')].find((b) => /Scan (student card|again)/.test(b.textContent ?? '')) as HTMLButtonElement;
+  const sheetClose = () => [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Close') as HTMLButtonElement | undefined;
+
+  async function scanAndWait() {
+    await click(scanButton());
+    await waitFor(() => !document.querySelector('[role="dialog"]') || !!document.querySelector('[role="dialog"] [role="alert"]'), 'scanner result');
+    await flush(50);
+  }
+
+  it('needs a scan when the server asks for one, and sends the barcode with the form', async () => {
+    cardScanMode = 'required';
+    await mount();
+    await fillValidForm();
+    expect(submitButton().disabled).toBe(true);
+    expect(container.textContent).toContain('Scan the barcode on your card to finish');
+    await scanAndWait();
+    await waitFor(() => /barcode matches your roll number/.test(container.textContent ?? ''), 'match message');
+    expect(cameraStopped).toBeGreaterThan(0);
+    expect(submitButton().disabled).toBe(false);
+    await click(submitButton());
+    await waitFor(() => /Add a profile photo/.test(container.textContent ?? ''), 'photo step');
+    const post = calls.find((c) => c.url === '/api/signup/complete');
+    expect(post?.body).toMatchObject({ roll_number: '2024-0907', card: { barcode: '20240907' } });
+  });
+
+  it('a barcode that disagrees with the typed roll number blocks sign-up and says why; fixing the number clears it', async () => {
+    cardScanMode = 'required';
+    scanOutcome = { barcode: '20240999' };
+    await mount();
+    await fillValidForm();
+    await scanAndWait();
+    await waitFor(() => /does not match the roll number you typed/.test(container.textContent ?? ''), 'mismatch message');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('20240999');
+    expect(submitButton().disabled).toBe(true);
+    await type('signup-roll', '2024-0999');
+    await waitFor(() => /barcode matches your roll number/.test(container.textContent ?? ''), 'match after fixing');
+    expect(submitButton().disabled).toBe(false);
+  });
+
+  it('when the scan is optional the form can be sent without one', async () => {
+    cardScanMode = 'optional';
+    await mount();
+    await fillValidForm();
+    expect(container.textContent).toContain('Scanning your card is optional');
+    expect(submitButton().disabled).toBe(false);
+    await click(submitButton());
+    await waitFor(() => !!calls.find((c) => c.url === '/api/signup/complete'), 'post');
+    expect((calls.find((c) => c.url === '/api/signup/complete')!.body as Record<string, unknown>).card).toBeUndefined();
+  });
+
+  it.each([
+    ['denied', /camera is blocked/],
+    ['no-camera', /No camera was found/],
+    ['unsupported', /cannot open the camera/],
+  ] as const)('explains a camera problem (%s) and leaves the form usable', async (error, text) => {
+    cardScanMode = 'required';
+    scanOutcome = { error };
+    await mount();
+    await fillValidForm();
+    await click(scanButton());
+    await waitFor(() => text.test(document.body.textContent ?? ''), 'camera message');
+    expect([...document.querySelectorAll('[role="dialog"] button')].some((b) => b.textContent === 'Try again')).toBe(true);
+    await click(sheetClose()!);
+    await flush(400);
+    expect(submitButton().disabled).toBe(true);
+  });
+
+  it('server refusals are shown as given (mismatch and duplicate)', async () => {
+    cardScanMode = 'optional';
+    completeStatus = 409;
+    await mount();
+    await fillValidForm();
+    await click(submitButton());
+    await waitFor(() => /already taken|already registered/.test(container.textContent ?? ''), 'error text');
+    expect(submitButton().disabled).toBe(false);
+  });
+
+  it('has no accessibility violations with the card step shown', async () => {
+    cardScanMode = 'required';
+    await mount();
+    await fillValidForm();
+    await scanAndWait();
+    const results = await axe.run(container, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] });
+    expect(results.violations.map((v) => `${v.id}: ${v.nodes[0]?.html}`)).toEqual([]);
   });
 });

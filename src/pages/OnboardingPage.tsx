@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ClassRow, MeResponse, SignupSessionResponse } from '../../shared/schema.ts';
 import { CampusPicker, type CampusChoice } from '../components/CampusPicker.tsx';
 import { Avatar } from '../components/Avatar.tsx';
+import { CardScanner } from '../components/CardScanner.tsx';
+import { ROLL_INPUT_PATTERN, barcodeMatchesRoll, isUsableRoll, normalizeRoll } from '../../shared/roll.ts';
 
 interface OnboardingPageProps {
   /** Called once the account exists (and the optional photo step is finished or skipped). */
@@ -36,6 +38,9 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
   const [campus, setCampus] = useState<CampusChoice | null>(null);
   const [classId, setClassId] = useState('');
   const [roll, setRoll] = useState('');
+  const [cardScan, setCardScan] = useState<'required' | 'optional'>('required');
+  const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
   const [usernameState, setUsernameState] = useState<UsernameState>({ status: 'idle' });
 
   const [submitting, setSubmitting] = useState(false);
@@ -57,6 +62,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
         if (cancelled) return;
         setRealName(data.suggested_name || '');
         setEmail(data.email);
+        setCardScan(data.card_scan === 'optional' ? 'optional' : 'required');
         setSession('ready');
         const cls = await fetch('/api/classes');
         if (cls.ok && !cancelled) {
@@ -114,7 +120,10 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
     usernameState.status !== 'unavailable' &&
     !!campus &&
     !!classId &&
-    /^[0-9]{3}$/.test(roll);
+    ROLL_INPUT_PATTERN.test(roll.trim()) &&
+    isUsableRoll(normalizeRoll(roll)) &&
+    // a scan that disagrees with the typed roll number blocks sign-up; an unscanned card blocks it only when required
+    (scannedBarcode ? barcodeMatchesRoll(scannedBarcode, roll) : cardScan === 'optional');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,7 +139,8 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
           username,
           ...(campus.campus ? { campus_id: campus.campus.id } : { campus_other: campus.other }),
           class_id: classId,
-          roll_last3: roll,
+          roll_number: roll.trim(),
+          ...(scannedBarcode ? { card: { barcode: scannedBarcode } } : {}),
         }),
       });
       const data = (await res.json()) as {
@@ -318,23 +328,44 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
 
         <div>
           <label htmlFor="signup-roll" className={labelClass}>
-            Last three digits of your roll number
+            Roll number
           </label>
           <input
             id="signup-roll"
             type="text"
-            inputMode="numeric"
             autoComplete="off"
-            pattern="[0-9]{3}"
-            maxLength={3}
+            autoCapitalize="characters"
+            maxLength={32}
             value={roll}
-            onChange={(e) => setRoll(e.target.value.replace(/\D/g, '').slice(0, 3))}
+            onChange={(e) => setRoll(e.target.value.replace(/[^A-Za-z0-9 \-/.]/g, ''))}
             aria-describedby="signup-roll-help"
-            className={`${fieldClass} font-mono tracking-widest`}
+            className={`${fieldClass} font-mono tracking-wider`}
           />
           <p id="signup-roll-help" className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">
-            Used to place you in your class. Never shown to anyone.
+            Type it exactly as printed on your card. It is never shown to anyone and is only used to stop one student signing up twice.
           </p>
+        </div>
+
+        <div>
+          <span className={labelClass}>Student card</span>
+          {scannedBarcode && barcodeMatchesRoll(scannedBarcode, roll) ? (
+            <p role="status" className="text-[13px] text-[var(--text,#17233A)]">
+              Card scanned. The barcode matches your roll number.
+            </p>
+          ) : scannedBarcode ? (
+            <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">
+              The barcode reads {scannedBarcode}, which does not match the roll number you typed. Check the number or scan again.
+            </p>
+          ) : (
+            <p className="text-[12px] text-[var(--muted,#5B6577)]">
+              {cardScan === 'required'
+                ? 'Scan the barcode on your card to finish. It is read on this device and the picture is not saved.'
+                : 'Scanning your card is optional for now. Without it your account is marked as not checked.'}
+            </p>
+          )}
+          <button type="button" onClick={() => setScanning(true)} className={`${secondaryButton} mt-2`}>
+            {scannedBarcode ? 'Scan again' : 'Scan student card'}
+          </button>
         </div>
 
         {error && (
@@ -347,6 +378,16 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
           {submitting ? 'Creating account...' : 'Create account'}
         </button>
       </form>
+      {scanning && (
+        <CardScanner
+          onClose={() => setScanning(false)}
+          onResult={(text) => {
+            setScannedBarcode(text);
+            setScanning(false);
+            setError(null);
+          }}
+        />
+      )}
     </div>
   );
 };

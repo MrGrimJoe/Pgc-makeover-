@@ -1,4 +1,5 @@
 import { parseStickerKey, STICKER_KEY_MAX_LENGTH } from './sticker-keys.ts';
+import { ROLL_INPUT_PATTERN, isUsableRoll, normalizeRoll } from './roll.ts';
 import { z } from 'zod';
 import { checkPollOptions, POLL_MAX_OPTIONS } from './poll.ts';
 import { WALLPAPER_IDS, THEME_IDS, TEXT_STYLE_IDS } from './presets.ts';
@@ -32,10 +33,19 @@ export const realNameSchema = z
   .max(60, { message: 'Real name cannot exceed 60 characters' })
   .refine((v) => !/[\u0000-\u001F\u007F<>]/.test(v), { message: 'Real name contains invalid characters' });
 
-/** Last three digits of the roll number. Private: stored, never returned by any API. */
-export const rollLast3Schema = z
+/** The full roll number. Private: only a keyed hash and the last three digits are stored, never returned by any API. */
+export const rollNumberSchema = z
   .string()
-  .regex(/^[0-9]{3}$/, { message: 'Enter exactly the last three digits of your roll number' });
+  .trim()
+  .regex(ROLL_INPUT_PATTERN, { message: 'Enter your roll number using letters, digits, spaces, dashes or slashes' })
+  .refine((v) => isUsableRoll(normalizeRoll(v)), { message: 'Enter your full roll number' });
+
+/** What the sign-up screen read from the card's barcode. Decoded on the phone; the picture itself is never sent. */
+export const cardScanSchema = z
+  .object({
+    barcode: z.string().trim().min(1).max(64),
+  })
+  .strict();
 
 /**
  * Profile update schema for PATCH /api/me
@@ -82,7 +92,8 @@ export const signupCompleteSchema = z
     campus_id: z.string().min(1).max(100).optional(),
     campus_other: z.string().min(2).max(80).optional(),
     class_id: z.string().min(1).max(100),
-    roll_last3: rollLast3Schema,
+    roll_number: rollNumberSchema,
+    card: cardScanSchema.optional(),
   })
   .strict()
   .refine((v) => (v.campus_id ? 1 : 0) + (v.campus_other ? 1 : 0) === 1, {
@@ -117,6 +128,8 @@ export interface SignupSessionResponse {
   suggested_name: string;
   /** The verified Google email, shown back to the person signing up. */
   email: string | null;
+  /** Whether the card scan is a required step of this sign-up. */
+  card_scan: 'required' | 'optional';
 }
 
 /**

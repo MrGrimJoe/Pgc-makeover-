@@ -17,7 +17,7 @@ import { runPostLifecycleExpiry } from '../worker/jobs/expiry.ts';
 const db: any = createSqliteD1(':memory:'); const r2: any = createMemoryR2Bucket();
 await runMigrations(db, ALL_MIGRATIONS);
 const base: any = { DB: db, MEDIA_BUCKET: r2, APP_URL: 'https://app.test', GOOGLE_CLIENT_ID: 'id.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'x' };
-const prod = { ...base, ENVIRONMENT: 'production', ADMIN_SECRET: 's3cret-value' };
+const prod = { ...base, ENVIRONMENT: 'production', ADMIN_SECRET: 's3cret-value', ROLL_KEY_SECRET: 'attack-suite-roll-secret' };
 const dev = { ...base, ENVIRONMENT: 'development' };
 const now = new Date().toISOString(), exp = new Date(Date.now() + 864e5).toISOString();
 const seed = async (id: string, name: string, dm = 'everyone') => {
@@ -146,7 +146,7 @@ const startSignup = async (sub: string, email: string) => {
   const t = /signup_ticket=([^;]+)/.exec(cb.h.get('set-cookie') || '')?.[1];
   return { cookie: t ? 'signup_ticket=' + t : '', location: cb.h.get('location') || '' };
 };
-const VALID = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CMP_A, class_id: 'cls_2026', roll_last3: '907' };
+const VALID = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CMP_A, class_id: 'cls_2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
 // log in never creates accounts
 const initLogin = await call('GET', '/api/auth/google?mock=true&intent=login&mock_sub=stranger', { env: dev });
 const cbLogin = await call('GET', initLogin.h.get('location') || '/', { env: dev, cookie: 'oauth_state=' + (/oauth_state=([^;]+)/.exec(initLogin.h.get('set-cookie') || '')?.[1] || '') });
@@ -161,7 +161,7 @@ for (const [label, ck] of [['no cookie', undefined], ['forged ticket', 'signup_t
 const t1 = await startSignup('att1', 'attacker.one@gmail.com');
 ok('POSITIVE CONTROL: sign up ticket is issued for a new Google account', t1.cookie.startsWith('signup_ticket=tkt_') && t1.location === '/?signup=1', `cookie ${t1.cookie.slice(0, 20)} loc ${t1.location}`);
 // input abuse on signup
-for (const [label, patch] of [['roll 2 digits', { roll_last3: '90' }], ['roll letters', { roll_last3: '9x7' }], ['roll SQLi', { roll_last3: "9'); --" }], ['mass assignment', { status: 'admin', id: 'usr_alice' }], ['SQLi campus id', { campus_id: "x' OR '1'='1" }], ['unknown class', { class_id: 'cls_nope' }], ['reserved username', { username: 'admin' }], ['markup in real name', { real_name: '<img src=x onerror=alert(1)>' }], ['taken username', { username: 'alice' }]] as const) {
+for (const [label, patch] of [['roll too short', { roll_number: '9' }], ['roll markup', { roll_number: '9<7>' }], ['roll SQLi', { roll_number: "9'); --" }], ['old roll_last3 field', { roll_last3: '907' }], ['mass assignment', { status: 'admin', id: 'usr_alice' }], ['SQLi campus id', { campus_id: "x' OR '1'='1" }], ['unknown class', { class_id: 'cls_nope' }], ['reserved username', { username: 'admin' }], ['markup in real name', { real_name: '<img src=x onerror=alert(1)>' }], ['taken username', { username: 'alice' }]] as const) {
   await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: t1.cookie, json: { ...VALID, ...patch } }); ok(`signup complete: ${label} rejected`, r.s >= 400 && r.s < 500, `status ${r.s}`);
 }
 const noUsersYet = (await db.prepare("SELECT COUNT(*) c FROM profiles WHERE username_normalized='ayesha_k'").first()).c; ok('no account was created by the rejected attempts', noUsersYet === 0, `rows ${noUsersYet}`);
@@ -177,11 +177,32 @@ const ayesha = 'session_id=' + (/session_id=([^;]+)/.exec(r.h.get('set-cookie') 
 // ticket cannot be replayed, ticket race
 await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: t1.cookie, json: { ...VALID, username: 'ayesha_two' } }); ok('used ticket cannot be replayed', r.s === 401, `status ${r.s}`);
 const t2 = await startSignup('att2', 'two@gmail.com'), t3 = await startSignup('att3', 'three@gmail.com'); await clearRL();
-const raceS = await Promise.all([call('POST', '/api/signup/complete', { cookie: t2.cookie, json: { ...VALID, username: 'raced_name', roll_last3: '111' } }), call('POST', '/api/signup/complete', { cookie: t3.cookie, json: { ...VALID, username: 'raced_name', roll_last3: '222' } })]);
+const raceS = await Promise.all([call('POST', '/api/signup/complete', { cookie: t2.cookie, json: { ...VALID, username: 'raced_name', roll_number: '111', card: { barcode: '111' } } }), call('POST', '/api/signup/complete', { cookie: t3.cookie, json: { ...VALID, username: 'raced_name', roll_number: '222', card: { barcode: '222' } } })]);
 ok('sign-up username race: one 201 and one 409, no 5xx', raceS.map(x => x.s).sort().join(',') === '201,409', raceS.map(x => x.s).join(','));
 const t4 = await startSignup('att4', 'four@gmail.com'); await clearRL();
-const dbl = await Promise.all([1, 2, 3].map(() => call('POST', '/api/signup/complete', { cookie: t4.cookie, json: { ...VALID, username: 'double_tap', roll_last3: '333' } })));
+const dbl = await Promise.all([1, 2, 3].map(() => call('POST', '/api/signup/complete', { cookie: t4.cookie, json: { ...VALID, username: 'double_tap', roll_number: '333', card: { barcode: '333' } } })));
 const dblUsers = (await db.prepare("SELECT COUNT(*) c FROM profiles WHERE username_normalized='double_tap'").first()).c; ok('triple submit of one ticket creates exactly one account', dbl.filter(x => x.s === 201).length === 1 && dblUsers === 1, `${dbl.map(x => x.s).join(',')} rows ${dblUsers}`);
+// student identity: card, duplicates, disputes
+{
+  const tm = await startSignup('idm', 'idm@gmail.com'); await clearRL();
+  r = await call('POST', '/api/signup/complete', { cookie: tm.cookie, json: { ...VALID, username: 'id_mismatch', roll_number: '444', card: { barcode: '445' } } });
+  ok('card barcode that disagrees with the roll number -> 422 and no account', r.s === 422 && (await db.prepare("SELECT COUNT(*) c FROM profiles WHERE username_normalized='id_mismatch'").first()).c === 0, `status ${r.s}`);
+  await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: tm.cookie, json: { ...VALID, username: 'id_mismatch', roll_number: '444', card: undefined } });
+  ok('no card at all while the scan is required -> 422', r.s === 422, `status ${r.s}`);
+  await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: tm.cookie, json: { ...VALID, username: 'id_mismatch', roll_number: '444', card: { barcode: '444', verified: true } } });
+  ok('card with a smuggled "verified" field rejected', r.s === 400, `status ${r.s}`);
+  await clearRL(); r = await call('POST', '/api/signup/complete', { cookie: tm.cookie, json: { ...VALID, username: 'id_mismatch', roll_number: '444', card: { barcode: '444' } } });
+  ok('POSITIVE CONTROL: matching card signs up', r.s === 201, `status ${r.s}`);
+  const tdup = await startSignup('iddup', 'iddup@gmail.com'); await clearRL();
+  r = await call('POST', '/api/signup/complete', { cookie: tdup.cookie, json: { ...VALID, username: 'id_dup', roll_number: '4-4-4', card: { barcode: '0444' } } });
+  ok('same roll number spelled differently is a duplicate (409)', r.s === 409 && !/id_mismatch|idm@/.test(r.text), `status ${r.s} ${r.text.slice(0, 120)}`);
+  const racers = await Promise.all(Array.from({ length: 6 }, (_, i) => startSignup(`idrace${i}`, `idrace${i}@gmail.com`)));
+  await clearRL();
+  const raced = await Promise.all(racers.map((t, i) => call('POST', '/api/signup/complete', { cookie: t.cookie, json: { ...VALID, username: `id_race_${i}`, roll_number: '777', card: { barcode: '777' } } })));
+  ok('6 simultaneous sign-ups with one roll number: exactly one 201, rest 409, no 5xx', raced.filter(x => x.s === 201).length === 1 && raced.filter(x => x.s === 409).length === 5, raced.map(x => x.s).join(','));
+  r = await call('GET', '/api/admin/disputes'); ok('GET /api/admin/disputes signed out -> 401', r.s === 401, `status ${r.s}`);
+  r = await call('GET', '/api/admin/disputes', { cookie: ayesha }); ok('GET /api/admin/disputes as an ordinary student -> 403', r.s === 403, `status ${r.s}`);
+}
 // username availability
 await clearRL(); const ua = async (u: string) => (await call('GET', '/api/username-available?u=' + encodeURIComponent(u), { cookie: A })).j;
 ok('username check: taken, reserved, invalid and free all answered correctly', (await ua('ayesha_k'))?.reason === 'taken' && (await ua('admin'))?.reason === 'reserved' && (await ua("x' OR '1'='1"))?.reason === 'invalid' && (await ua('fresh_name_9'))?.available === true, '');
@@ -189,7 +210,7 @@ r = await call('PATCH', '/api/me', { cookie: C, json: { username: 'support' } })
 // privacy: roll number and email never leave the server
 const viewer = A;
 const sweep = [await call('GET', '/api/me', { cookie: ayesha }), await call('PATCH', '/api/me', { cookie: ayesha, json: { bio: 'hello #hi' } }), await call('GET', '/api/users/ayesha_k', { cookie: viewer }), await call('GET', '/api/users/ayesha_k', { cookie: ayesha }), await call('GET', '/api/search?q=a', { cookie: viewer }), await call('GET', '/api/people/suggested', { cookie: viewer }), await call('GET', '/api/feed?mode=for_you', { cookie: viewer }), await call('GET', '/api/campuses?q=pending', { cookie: ayesha })];
-const leaked = sweep.filter(x => /roll_last3|"email"|attacker\.one@gmail\.com|"907"/.test(x.text));
+const leaked = sweep.filter(x => /roll_last3|roll_key|roll_number|"email"|attacker\.one@gmail\.com|"907"|20240907/.test(x.text));
 ok('roll number and email never appear in any response', leaked.length === 0, leaked.map(x => x.text.slice(0, 60)).join(' | '));
 ok('POSITIVE CONTROL: those responses really contain the profile', sweep[0]!.j?.profile?.username === 'ayesha_k' && sweep[2]!.j?.real_name === 'Ayesha Khan', sweep[0]!.text.slice(0, 80));
 r = await call('POST', '/api/posts', { cookie: ayesha, json: { body: 'hello from ayesha #hi' } }); const feedLeak = (await call('GET', '/api/search?q=hello', { cookie: viewer })).text;

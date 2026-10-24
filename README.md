@@ -237,6 +237,7 @@ When prompted for each secret:
 - `GOOGLE_CLIENT_ID`: Your Google OAuth client ID (e.g., `*.apps.googleusercontent.com`).
 - `GOOGLE_CLIENT_SECRET`: Your Google OAuth client secret.
 - `APP_URL`: Your canonical production application URL including protocol, with no trailing slash (e.g., `https://classsync.<your-subdomain>.workers.dev`).
+- `ROLL_KEY_SECRET`: keys the hash that stops one student registering twice (see "Student sign-up checks"). Required in production: without it sign-up answers 503. Set it once with `npx wrangler secret put ROLL_KEY_SECRET` (any long random value) and never change it afterwards, or old accounts stop matching their roll numbers.
 - `ADMIN_SECRET`: A high-entropy random secret key for the cron job and scripts that call the admin APIs without signing in (it is not how people use the admin page; see "Admin and moderation"). Windows CMD has no `openssl`; generate one with:
   ```bat
   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -412,7 +413,7 @@ Built on top of `2971c1d`. Each change is its own commit.
 
 - **Log in and Sign up are separate.** The sign-in screen has "Log in with Google" and "Sign up with Google". The OAuth callback never creates an account any more. Log in with an unknown Google account returns to the sign-in screen with a message (`/?auth=no_account`). Sign up issues a 15-minute, single-use ticket (stored in D1 as `signup_tickets`, sent as an HttpOnly cookie) and continues to onboarding (`/?signup=1`). An existing account logs in with either button.
 - **Onboarding** (`POST /api/signup/complete`) creates the user, profile, settings, private record and session in one D1 batch. Fields: real name, unique username (live availability check, reserved names such as `admin` and `support` are refused), campus, class, last three digits of the roll number. The profile photo is an optional last step. A forged, expired or reused ticket is rejected, two people racing for one username get one winner and one `409`, and a double submit creates one account.
-- **Private data.** Email and `roll_last3` live in `user_private`, not in `profiles`, so no `SELECT *` can leak them; `GET/PATCH /api/me` now build their response from named columns only. They are never returned by any endpoint and cannot be set through `PATCH /api/me`. Deleting an account removes them.
+- **Private data.** Email, the last three digits of the roll number, and a keyed hash of the full roll number live in `user_private`, not in `profiles`, so no `SELECT *` can leak them; `GET/PATCH /api/me` now build their response from named columns only. They are never returned by any endpoint and cannot be set through `PATCH /api/me`. Deleting an account removes them.
 - **Real name** is stored in `profiles.real_name` and shown on the profile page only. Posts, feeds, search, suggestions and messages keep using the display name, which starts as the username.
 - **Campuses.** Searchable picker over the list bundled in the app (filtered on the device, no network call). Search ranks name-prefix matches first, then name-contains, then city matches, and can be narrowed by city. A student whose campus is missing types it in (`campus_other`); it is shown on their profile but never drives campus search or suggestions. The server validates `campus_id` against the bundled list; ids no longer in the list read as no campus.
 - **Search tabs work.** `GET /api/search?scope=class|campus|all` filters by the caller's class or campus. If the caller has none set, the response says so (`scope_missing`) instead of silently searching everyone.
@@ -564,3 +565,16 @@ The people directory shows username, display name, role and status only. It neve
 ### Free tier: what to check before you rely on it
 Cloudflare changes these numbers, so check the Workers, D1 and R2 pricing pages before launch. As far as I know at the time of writing: Workers Free allows about 100,000 requests a day (the app stops answering until the next day when it is used up), D1 Free has daily read and write limits and a total size cap, and R2 has a free monthly storage amount. **R2 asks for a payment method on the account to switch it on even for the free amount**, so if you cannot add one, photo and video upload will not work until you can (everything else does). Set a billing alert if you add a card.
 
+
+
+## Student sign-up checks
+
+Sign-up asks for the **full roll number** (as printed on the card) and a **scan of the card barcode**.
+
+- **One student, one account per campus.** The roll number is normalized (case, spaces, dashes, slashes, leading zeros) and combined with the campus. Only an HMAC-SHA256 of that pair, keyed by `ROLL_KEY_SECRET`, is stored (`user_private.roll_key`), with a unique index, so two simultaneous sign-ups cannot both succeed. Class, section and session are not part of the key, so a student keeps the same identity as they move up. The last three digits are still stored for display-free internal use.
+- **Card scan.** The barcode is read in the browser (`@zxing`, loaded only on that step, 1D barcodes only). The picture is never uploaded. The server compares the decoded text with the typed roll number; a mismatch is refused with a reason. A match marks the account `provisional`. This is **not proof**: a barcode can be copied, and no PGC registry is available to check against.
+- **OCR is not implemented.** Reading printed text would need a large language-data download at runtime and cannot be tested here.
+- **"Already registered".** The student gets a clear message (never details of the other account), is not blocked, and a row is kept in `registration_disputes`. Admins see these under Admin, Sign-ups, with the username of the account that holds the roll number, and can mark them handled (logged in Activity). If the holder is an impostor, suspend or ban it in People and the real student can sign up again. Deleting an account frees its roll number.
+- **Guessing.** Per ticket 10 tries per 15 minutes and per Google account 20 per day, so the endpoint cannot be used to map which roll numbers exist.
+- **Switches.** `REQUIRE_CARD_SCAN=false` (a plain variable) lets people sign up without scanning; they stay `unverified`. Use it in `.dev.vars` for local development, where there is no camera. Anything else requires the scan.
+- **Deploying.** Run migration 013 on the remote database first (`npx wrangler d1 migrations apply <db> --remote`), set `ROLL_KEY_SECRET`, then deploy. Accounts made before this have no roll key and stay `unverified`.
