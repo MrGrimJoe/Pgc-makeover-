@@ -56,6 +56,9 @@ async function startServer() {
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || (isDev ? 'PLACEHOLDER' : ''),
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || (isDev ? 'PLACEHOLDER' : ''),
     ENVIRONMENT: isDev ? 'development' : 'production',
+    // No camera is assumed on a development machine; set REQUIRE_CARD_SCAN=true to try the real flow
+    REQUIRE_CARD_SCAN: process.env.REQUIRE_CARD_SCAN ?? (isDev ? 'false' : undefined),
+    ROLL_KEY_SECRET: process.env.ROLL_KEY_SECRET,
   };
 
   // Mount API router directly to the Cloudflare Worker fetch handler
