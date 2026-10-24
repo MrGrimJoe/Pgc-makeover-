@@ -21,6 +21,8 @@ interface SettingsPageProps {
   onBack: () => void;
   /** Opens Edit profile; when omitted the profile card has no Edit button */
   onEditProfile?: () => void;
+  /** Opens the admin page; the entry is only shown to admins and the master admin */
+  onOpenAdmin?: () => void;
 }
 
 const card = 'border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 space-y-3';
@@ -45,7 +47,7 @@ const PreviewBubbles: React.FC = () => (
   </div>
 );
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfileUpdated, onAccountDeleted, onLogout, onBack, onEditProfile }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfileUpdated, onAccountDeleted, onLogout, onBack, onEditProfile, onOpenAdmin }) => {
   const userId = currentUser.user.id;
   const layout = useLayout();
   const split = layout === 'desktop'; // two panes: section list and the chosen section
@@ -297,8 +299,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
         </div>}
         {show('account') && <div role="group" aria-labelledby="grp-account" className="rise-in space-y-3" style={{ '--i': 4 } as React.CSSProperties}>
           <p id="grp-account" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Account</p>
+        {onOpenAdmin && (currentUser.role === 'admin' || currentUser.role === 'master') && (
+          <section aria-labelledby="set-admin" className={card}>
+            <h2 id="set-admin" className={h2}>Admin tools</h2>
+            <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">Reports, people and the activity log.</p>
+            <button type="button" onClick={onOpenAdmin} className={`${ghost} w-full`}>Open admin tools</button>
+          </section>
+        )}
         <section aria-labelledby="set-account" className={card}>
           <h2 id="set-account" className={h2}>Account</h2>
+          <div className="flex items-center gap-2 text-[12px] text-[var(--muted,#5B6577)]">
+            <span className="min-w-0 break-all">Account ID: <code>{userId}</code></span>
+            <button type="button" onClick={() => { void navigator.clipboard?.writeText(userId).then(() => setMessage({ type: 'success', text: 'Account ID copied.' })).catch(() => {}); }} className={`${ghost} shrink-0`}>Copy</button>
+          </div>
           <button type="button" onClick={() => void onLogout()} className={`${ghost} w-full`}>Sign out</button>
           <button type="button" onClick={() => setShowDelete(true)} className="w-full min-h-[44px] bg-transparent border-0 text-[14px] font-semibold text-[var(--danger,#B23A40)] cursor-pointer">Delete account</button>
         </section>

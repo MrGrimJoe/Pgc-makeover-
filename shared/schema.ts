@@ -274,6 +274,21 @@ export const updateReportSchema = z
 
 export type UpdateReportInput = z.infer<typeof updateReportSchema>;
 
+/** Suspend, ban or reinstate an account (admins only) */
+export const adminUserStatusSchema = z
+  .object({
+    status: z.enum(['active', 'suspended', 'banned']),
+    reason: z.string().trim().max(200).optional(),
+  })
+  .strict();
+
+/** Hand the admin role to another account (admins only) */
+export const adminAppointSchema = z
+  .object({
+    user_id: z.string().trim().min(1).max(64),
+  })
+  .strict();
+
 /**
  * Public Profile Response (GET /api/users/:username)
  */
@@ -334,6 +349,8 @@ export interface MeResponse {
     dm_policy: string;
     feed_preferences: string;
   };
+  /** Admin role of the signed-in person; 'user' for everyone who is not an admin */
+  role?: 'user' | 'admin' | 'master';
 }
 
 /**

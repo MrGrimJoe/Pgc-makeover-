@@ -59,7 +59,9 @@ export async function loadMeProfile(db: D1Database, userId: string): Promise<MeR
 export async function buildMeResponse(
   db: D1Database,
   user: Pick<UserRow, 'id' | 'created_at' | 'status'>,
-  settings: Pick<UserSettingsRow, 'dm_policy' | 'feed_preferences'>
+  settings: Pick<UserSettingsRow, 'dm_policy' | 'feed_preferences'>,
+  /** What this account may do as an admin (see effectiveRole in worker/admin.ts); left out when not given */
+  role?: 'user' | 'admin' | 'master'
 ): Promise<MeResponse | null> {
   const profile = await loadMeProfile(db, user.id);
   if (!profile) return null;
@@ -67,5 +69,6 @@ export async function buildMeResponse(
     user: { id: user.id, created_at: user.created_at, status: user.status },
     profile,
     settings: { dm_policy: settings.dm_policy, feed_preferences: settings.feed_preferences },
+    ...(role ? { role } : {}),
   };
 }

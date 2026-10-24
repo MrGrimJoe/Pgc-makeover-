@@ -10,7 +10,7 @@ import { Navbar } from './components/Navbar.tsx';
 import { BottomTabBar, type AppTab } from './components/BottomTabBar.tsx';
 import { SideNav } from './components/SideNav.tsx';
 import { useLayout } from './lib/layout.ts';
-import { SignInPage } from './pages/SignInPage.tsx';
+import { SignInPage, type SignInNotice } from './pages/SignInPage.tsx';
 import { OnboardingPage } from './pages/OnboardingPage.tsx';
 import { FeedPage } from './pages/FeedPage.tsx';
 import { SearchPage } from './pages/SearchPage.tsx';
@@ -18,17 +18,18 @@ import { PostComposerPage } from './pages/PostComposerPage.tsx';
 import { ProfileEditPage } from './pages/ProfileEditPage.tsx';
 import { ProfileViewPage } from './pages/ProfileViewPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
+import { AdminPage } from './pages/AdminPage.tsx';
 import { MessagesPage } from './pages/MessagesPage.tsx';
 // DEV-ONLY: remove before launch
 import { DevBar } from './components/DevBar.tsx';
 
 /** What the OAuth callback asked for, read once from the URL (/?signup=1 or /?auth=no_account). */
-function readAuthRedirect(): { signup: boolean; notice: 'no_account' | 'error' | null } {
+function readAuthRedirect(): { signup: boolean; notice: SignInNotice | null } {
   const params = new URLSearchParams(window.location.search);
   const auth = params.get('auth');
   return {
     signup: params.get('signup') === '1',
-    notice: auth === 'no_account' || auth === 'error' ? auth : null,
+    notice: auth === 'no_account' || auth === 'error' || auth === 'suspended' || auth === 'banned' ? auth : null,
   };
 }
 
@@ -36,7 +37,7 @@ export default function App() {
   const layout = useLayout();
   const wide = layout !== 'phone'; // tablet and desktop use the side navigation instead of the bottom bar
   const [authRedirect] = useState(readAuthRedirect);
-  const [authNotice, setAuthNotice] = useState<'no_account' | 'error' | null>(authRedirect.notice);
+  const [authNotice, setAuthNotice] = useState<SignInNotice | null>(authRedirect.notice);
   const [currentUser, setCurrentUser] = useState<MeResponse | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [activeTab, setActiveTab] = useState<AppTab>('feed');
@@ -195,7 +196,7 @@ export default function App() {
     <div className="min-h-screen bg-[var(--bg2,#F8F9FC)] text-[var(--text,#17233A)] flex justify-center">
       {wide && currentUser && (
         <SideNav
-          activeTab={activeTab}
+          activeTab={activeTab === 'admin' ? 'settings' : activeTab}
           setActiveTab={selectTab}
           onOpenMessages={openMessages}
           onTitleClick={() => setActiveTab('feed')}
@@ -204,7 +205,7 @@ export default function App() {
       )}
       <div className={`w-full ${twoPane ? 'max-w-wide' : 'max-w-content'} min-w-0 min-h-screen ${signedOutWide ? 'bg-[var(--bg2,#F8F9FC)]' : 'bg-[var(--bg,#fff)]'} relative flex flex-col font-sans ${signedOutWide ? '' : wide ? 'border-x border-[var(--line,#E8EBF0)]' : 'pb-16'}`}>
         {/* The app bar is only for phones (wider screens have the side navigation); Settings has its own header */}
-        {!wide && activeTab !== 'settings' && <Navbar
+        {!wide && activeTab !== 'settings' && activeTab !== 'admin' && <Navbar
           onTitleClick={() => setActiveTab(currentUser ? 'feed' : 'signin')}
           onOpenMessages={() => {
             setTargetMessageUser(null);
@@ -270,6 +271,15 @@ export default function App() {
               onLogout={handleLogout}
               onBack={() => goBack(() => { setProfileSubView('view'); setActiveTab('profile'); })}
               onEditProfile={() => { setViewUsername(currentUser.profile.username); setProfileSubView('edit'); setActiveTab('profile'); }}
+              onOpenAdmin={() => setActiveTab('admin')}
+            />
+          )}
+
+          {activeTab === 'admin' && currentUser && (currentUser.role === 'admin' || currentUser.role === 'master') && (
+            <AdminPage
+              currentUser={currentUser}
+              onBack={() => goBack(() => setActiveTab('settings'))}
+              onLostAdmin={() => { setCurrentUser({ ...currentUser, role: 'user' }); setActiveTab('settings'); }}
             />
           )}
 
@@ -309,7 +319,7 @@ export default function App() {
         {/* Bottom tab bar: phones only */}
         {!wide && (
           <BottomTabBar
-            activeTab={activeTab === 'settings' ? 'profile' : activeTab}
+            activeTab={activeTab === 'settings' || activeTab === 'admin' ? 'profile' : activeTab}
             setActiveTab={selectTab}
             isAuthenticated={!!currentUser}
           />

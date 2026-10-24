@@ -13,7 +13,7 @@ export interface HistoryEntry {
   idx: number;
 }
 
-const TABS: AppTab[] = ['feed', 'search', 'post', 'profile', 'signin', 'signup', 'messages', 'settings'];
+const TABS: AppTab[] = ['feed', 'search', 'post', 'profile', 'signin', 'signup', 'messages', 'settings', 'admin'];
 
 export const sameNav = (a: NavState, b: NavState): boolean => a.tab === b.tab && a.sub === b.sub && a.user === b.user;
 

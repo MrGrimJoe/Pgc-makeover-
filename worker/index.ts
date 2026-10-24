@@ -22,6 +22,7 @@ import { normalizeUsername, isReservedUsername } from '../shared/username.ts';
 import { findCampus, campusName, cleanCampusOther } from '../shared/campus.ts';
 import { handleOnboardingRoutes, getValidSignupTicket, purgeExpiredSignupTickets, SIGNUP_TICKET_COOKIE, SIGNUP_TICKET_TTL_MS } from './onboarding.ts';
 import { buildMeResponse } from './me.ts';
+import { effectiveRole, handleAdminRoute, legacyAdminGate } from './admin.ts';
 import { DEFAULT_PRESET_IDS } from '../shared/presets.ts';
 import {
   updateProfileSchema,
@@ -703,6 +704,14 @@ export default {
         return new Response(null, { status: 302, headers: ticketHeaders });
       }
 
+      // Suspended and banned accounts get no session; they are told why instead of looping back to the login screen
+      if (user.status !== 'active') {
+        const blockedHeaders = new Headers();
+        blockedHeaders.append('Set-Cookie', clearOauthStateCookie);
+        blockedHeaders.set('Location', user.status === 'banned' ? '/?auth=banned' : '/?auth=suspended');
+        return new Response(null, { status: 302, headers: blockedHeaders });
+      }
+
       // Existing account: remember the verified email for people who signed up before it was stored.
       if (email) {
         try {
@@ -889,7 +898,7 @@ export default {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
 
-      const me = await buildMeResponse(env.DB, auth.user, auth.settings);
+      const me = await buildMeResponse(env.DB, auth.user, auth.settings, effectiveRole(auth.user));
       if (!me) {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
@@ -1122,7 +1131,7 @@ export default {
         .bind(auth.user.id)
         .first<UserSettingsRow>();
 
-      const meResponse = await buildMeResponse(env.DB, auth.user, updatedSettings ?? auth.settings);
+      const meResponse = await buildMeResponse(env.DB, auth.user, updatedSettings ?? auth.settings, effectiveRole(auth.user));
       if (!meResponse) {
         return jsonResponse({ error: 'Failed to update profile' }, 500);
       }
@@ -1134,6 +1143,11 @@ export default {
       const auth = await authenticateRequest(request, env.DB);
       if (!auth) {
         return jsonResponse({ error: 'Unauthorized' }, 401);
+      }
+
+      // The master admin account cannot be deleted from inside the app: the app would be left without one
+      if (effectiveRole(auth.user) === 'master') {
+        return jsonResponse({ error: 'The master admin account cannot be deleted. Hand it over first (see "Recovery" in the README).' }, 409);
       }
 
       const userId = auth.user.id;
@@ -3209,16 +3223,14 @@ export default {
     // 6. ADMIN MODERATION ROUTES (FIX #8)
     // ==========================================
 
-    // GET /api/admin/stats - System health & usage counts (requires admin secret)
+    // People moderation (users, suspend/ban, appoint, report preview, log): signed-in admins only
+    const adminResponse = await handleAdminRoute(request, env, url);
+    if (adminResponse) return adminResponse;
+
+    // GET /api/admin/stats - System health & usage counts (requires admin secret or a signed-in admin)
     if (pathname === '/api/admin/stats' && method === 'GET') {
-      const adminSecretHeader = request.headers.get('x-admin-secret');
-      if (!adminSecretHeader) {
-        if (!((isDevelopment || isTest) && !env.ADMIN_SECRET)) {
-          return jsonResponse({ error: 'Unauthorized: Admin secret required' }, 401);
-        }
-      } else if (!env.ADMIN_SECRET || !constantTimeCompare(adminSecretHeader, env.ADMIN_SECRET)) {
-        return jsonResponse({ error: 'Forbidden: Invalid admin secret' }, 403);
-      }
+      const adminDenied = await legacyAdminGate(request, env);
+      if (adminDenied) return adminDenied;
 
       const now = Date.now();
       const nowIso = new Date(now).toISOString();
@@ -3272,14 +3284,8 @@ export default {
 
     // GET /api/admin/reports - Retrieve all moderation reports (requires admin secret)
     if (pathname === '/api/admin/reports' && method === 'GET') {
-      const adminSecretHeader = request.headers.get('x-admin-secret');
-      if (!adminSecretHeader) {
-        if (!((isDevelopment || isTest) && !env.ADMIN_SECRET)) {
-          return jsonResponse({ error: 'Unauthorized: Admin secret required' }, 401);
-        }
-      } else if (!env.ADMIN_SECRET || !constantTimeCompare(adminSecretHeader, env.ADMIN_SECRET)) {
-        return jsonResponse({ error: 'Forbidden: Invalid admin secret' }, 403);
-      }
+      const adminDenied = await legacyAdminGate(request, env);
+      if (adminDenied) return adminDenied;
 
       const statusParam = url.searchParams.get('status') || '';
       let query = `
@@ -3303,14 +3309,8 @@ export default {
 
     // PATCH /api/admin/reports/:id - Set report status (reviewed or dismissed)
     if (pathname.startsWith('/api/admin/reports/') && method === 'PATCH') {
-      const adminSecretHeader = request.headers.get('x-admin-secret');
-      if (!adminSecretHeader) {
-        if (!((isDevelopment || isTest) && !env.ADMIN_SECRET)) {
-          return jsonResponse({ error: 'Unauthorized: Admin secret required' }, 401);
-        }
-      } else if (!env.ADMIN_SECRET || !constantTimeCompare(adminSecretHeader, env.ADMIN_SECRET)) {
-        return jsonResponse({ error: 'Forbidden: Invalid admin secret' }, 403);
-      }
+      const adminDenied = await legacyAdminGate(request, env);
+      if (adminDenied) return adminDenied;
 
       const reportId = pathname.slice('/api/admin/reports/'.length);
 

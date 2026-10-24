@@ -10,7 +10,7 @@
     "preview:worker": "npm run build && wrangler dev --local",
     "db:migrate:local": "wrangler d1 migrations apply classsync-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply classsync-db --remote",
-    "db:backup": "wrangler d1 export classsync-db --remote --output=backups/classsync-$(date +%F).sql",
+    "db:backup": "tsx scripts/backup.mts",
     "deploy": "npm run build && wrangler deploy",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
@@ -20,6 +20,7 @@
     "prebuild": "tsx scripts/generate-campuses.ts && tsx scripts/build-stickers.ts",
     "attack": "tsx scripts/attack-suite.mts",
     "shots": "tsx scripts/shots.mts",
+    "bootstrap:master": "tsx scripts/bootstrap-master.mts",
     "prelaunch-check": "tsx scripts/prelaunch-check.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"

@@ -334,7 +334,7 @@ export async function authenticateRequest(
   // Parameterized query looking up session and user
   const sessionRow = await db
     .prepare(
-      `SELECT s.id, s.user_id, s.expires_at, u.created_at, u.status, u.provider_subject
+      `SELECT s.id, s.user_id, s.expires_at, u.created_at, u.status, u.provider_subject, u.role
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.id = ?`
@@ -347,6 +347,7 @@ export async function authenticateRequest(
       created_at: string;
       status: string;
       provider_subject: string;
+      role: string;
     }>();
 
   if (!sessionRow) {
@@ -388,6 +389,7 @@ export async function authenticateRequest(
       provider_subject: sessionRow.provider_subject,
       created_at: sessionRow.created_at,
       status: sessionRow.status,
+      role: sessionRow.role,
     },
     profile: profileRow,
     settings: settingsRow ?? {

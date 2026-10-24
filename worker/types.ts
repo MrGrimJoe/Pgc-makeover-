@@ -36,6 +36,8 @@ export interface UserRow {
   provider_subject: string;
   created_at: string;
   status: string;
+  /** 'user' | 'admin' | 'master' as stored; use effectiveRole() in worker/admin.ts to decide what someone may do */
+  role?: string;
 }
 
 export interface ProfileRow {

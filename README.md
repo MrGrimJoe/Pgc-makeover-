@@ -237,7 +237,10 @@ When prompted for each secret:
 - `GOOGLE_CLIENT_ID`: Your Google OAuth client ID (e.g., `*.apps.googleusercontent.com`).
 - `GOOGLE_CLIENT_SECRET`: Your Google OAuth client secret.
 - `APP_URL`: Your canonical production application URL including protocol, with no trailing slash (e.g., `https://classsync.<your-subdomain>.workers.dev`).
-- `ADMIN_SECRET`: A high-entropy random secret key for admin APIs and cron tasks (e.g., generated with `openssl rand -hex 32`).
+- `ADMIN_SECRET`: A high-entropy random secret key for the cron job and scripts that call the admin APIs without signing in (it is not how people use the admin page; see "Admin and moderation"). Windows CMD has no `openssl`; generate one with:
+  ```bat
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
 
 ### 7. Build and Deploy
 Build the client application and deploy the worker to Cloudflare:
@@ -246,9 +249,18 @@ npm run deploy
 ```
 *(Runs `npm run build && wrangler deploy` to compile Vite assets into `dist/` and upload Worker and static assets)*.
 
+### 8. Become the master admin (once, after you have signed up)
+1. Open your deployed app, sign up with Google, finish onboarding.
+2. Open **Settings**, scroll to **Account**: the line **Account ID** shows `usr_...`. Tap **Copy**.
+3. In CMD, from the repo folder (Wrangler is already logged in from step 1):
+   ```bat
+   npm run bootstrap:master -- --user-id usr_PASTE_YOUR_ID_HERE --remote
+   ```
+   It prints `SUCCESS` and **Admin tools** now appears in your Settings. Details and safety rules are in "Admin and moderation" below.
+
 ---
 
-### 8. Post-Deploy Smoke Checklist
+### 9. Post-Deploy Smoke Checklist
 Verify that your deployed instance functions properly at `https://<APP_URL>`:
 - [ ] **Home route**: `GET https://<APP_URL>/` returns HTTP 200 with HTML application shell.
 - [ ] **SPA client-side routing**: Direct navigation to `https://<APP_URL>/search` loads the SPA without 404.
@@ -481,4 +493,61 @@ Built on top of `2971c1d`. Each change is its own commit.
 | `POST` | `/api/feedback` | **Yes** | Logs `more_like_this`, `show_less`, or `not_interested` feedback |
 | `POST` | `/api/impressions` | **Yes** | Logs post impressions with hourly deduplication |
 | `POST` | `/api/jobs/cleanup-expired` | Dev / Admin Secret | Daily cron lifecycle job (deletes expired posts, orphan media, prunes impressions) |
+
+---
+
+## Admin and moderation
+
+### Three kinds of account
+| | What they can do |
+|---|---|
+| **Master admin** (you, exactly one) | Everything an admin can, plus: act on other admins, reinstate banned accounts, appoint admins without losing the role. Nobody else can see, suspend, ban, demote or appoint the master; to every other admin the account does not exist. |
+| **Appointed admin** | Look at reports and the people directory, suspend or ban ordinary accounts, reinstate suspended ones, and hand the admin role to someone else. |
+| **Everyone else** | Nothing under `/api/admin`. The Admin tools entry in Settings never appears and the API answers 403. |
+
+**Hot potato:** when an appointed admin makes someone an admin, that person becomes an admin and the appointer becomes an ordinary user in one database statement (both change or neither does). Two hand-overs at the same moment cannot both go through. The master is not affected: the master can add admins and stays the master.
+
+Every admin action is written to the activity log (`admin_actions`): who, what, to whom, the reason you typed, and when. The master shows up there only as "master admin".
+
+### How the master is made (and why it is safe)
+The master is created only by a command you run yourself, `npm run bootstrap:master`. There is no web page, endpoint or setting that can do it, and no password or secret is involved (Wrangler uses your own Cloudflare login).
+
+- It needs `--remote` (live database) or `--local` (test database); it never guesses.
+- It **refuses** if a master already exists, if the account does not exist, or if the account is not active. It never replaces a master.
+- Running it again for the same account is safe: "nothing to do".
+- Even if someone edited the command, the database itself allows only one master (unique index `idx_users_one_master`).
+- The role is read from the database on every request, so removing someone's admin access shuts them out at once.
+- The account id is not a secret (it only identifies an account); it is shown in Settings so you can copy it.
+
+### Recovery (lost the master account, or you want to hand it over)
+Because only the person who owns the Cloudflare account can run these commands, this is the "owner can always get back in" path:
+```bat
+npx wrangler d1 execute classsync-db --remote --command "UPDATE users SET role = 'user' WHERE role = 'master'"
+npm run bootstrap:master -- --user-id usr_THE_NEW_MASTER --remote
+```
+The first line removes the current master, the second makes the new one. Both are logged by Cloudflare against your account; the bootstrap also writes its own activity line.
+
+### What admins can and cannot see
+The people directory shows username, display name, role and status only. It never returns email addresses, real names or private sign-up data. A reported message is shown to admins only in the report preview, for the one message that was reported.
+
+### Limits of this version
+- The admin tools are a protected page inside the same app (Settings, Admin tools), not a separate address. A separate address would not be a security boundary by itself; the checks are on the server for every admin request.
+- The master account cannot be deleted from inside the app (the request is refused); use the Recovery steps to hand it over first.
+- Banning also takes the person's active posts out of circulation (they stay in the database until the normal expiry cleanup). Reinstating a banned account does not bring those posts back.
+- Suspended and banned people are signed out at once and cannot sign in again; they see a clear message instead of a loop.
+- Appeals, automatic content classification, and the separate "permanent artifacts" feature from the longer blueprint are not built yet.
+
+---
+
+## Deploying from Windows CMD, free, without your own domain
+
+1. **Tools:** install Node.js 22 from nodejs.org, then in CMD from the repo folder: `npm install`.
+2. **Address:** you do not need a domain. The deploy gives you `https://classsync.<your-name>.workers.dev` for free (the first time you deploy, Wrangler asks you to pick the `<your-name>` part). The app is a single Worker that also serves the pages, so Cloudflare Pages is not needed.
+3. **Follow "Cloudflare Deployment" above, steps 1 to 9.** Every command works in CMD as written, except generating `ADMIN_SECRET` (use the `node -e` line there).
+4. **Tell Google the address:** in the Google console add `https://classsync.<your-name>.workers.dev/api/auth/callback` as an authorized redirect URI, and set `APP_URL` to `https://classsync.<your-name>.workers.dev`.
+5. **Backups:** `npm run db:backup` writes `backups\classsync-YYYY-MM-DD.sql` (works in CMD; the old version of this script did not).
+6. **Sharing:** until the QR code feature is built, share the address itself; a QR code of that address can be made with any free QR maker. The code must contain only the address, never a login.
+
+### Free tier: what to check before you rely on it
+Cloudflare changes these numbers, so check the Workers, D1 and R2 pricing pages before launch. As far as I know at the time of writing: Workers Free allows about 100,000 requests a day (the app stops answering until the next day when it is used up), D1 Free has daily read and write limits and a total size cap, and R2 has a free monthly storage amount. **R2 asks for a payment method on the account to switch it on even for the free amount**, so if you cannot add one, photo and video upload will not work until you can (everything else does). Set a billing alert if you add a card.
 

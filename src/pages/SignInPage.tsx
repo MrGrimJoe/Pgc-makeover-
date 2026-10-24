@@ -4,12 +4,16 @@ import { ArrowRight } from 'lucide-react';
 interface SignInPageProps {
   onSuccessRedirect?: () => void;
   /** Message to show above the buttons, e.g. after a failed log in. */
-  notice?: 'no_account' | 'error' | null;
+  notice?: SignInNotice | null;
 }
 
-const NOTICES: Record<'no_account' | 'error', string> = {
+export type SignInNotice = 'no_account' | 'error' | 'suspended' | 'banned';
+
+const NOTICES: Record<SignInNotice, string> = {
   no_account: 'We could not find an account for that Google account. Sign up to create one.',
   error: 'Something went wrong signing you in. Please try again.',
+  suspended: 'This account is suspended for now, so you cannot sign in. Contact the people who run the app if you think this is a mistake.',
+  banned: 'This account has been banned, so you cannot sign in.',
 };
 
 export const SignInPage: React.FC<SignInPageProps> = ({ notice = null }) => {

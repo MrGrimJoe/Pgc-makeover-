@@ -280,3 +280,12 @@ The free tier covers 10 GB of storage and a monthly number of reads and writes. 
 4. Prefer bundled stickers: moving popular uploaded stickers into a bundled pack removes their R2 cost entirely.
 5. Last resort: move to the paid R2 plan (pay per GB and per million operations). Nothing in the app needs to change.
 `SELECT owner_id, SUM(size_bytes + thumb_size_bytes) AS bytes FROM media GROUP BY owner_id ORDER BY bytes DESC LIMIT 20;` shows who uses the most.
+
+## 11. Admin roles and the master admin
+See "Admin and moderation" in the README for the rules. Day to day:
+- **Make the master:** `npm run bootstrap:master -- --user-id usr_XXXX --remote` (once; it refuses if a master exists).
+- **Change the master (recovery):** `npx wrangler d1 execute classsync-db --remote --command "UPDATE users SET role = 'user' WHERE role = 'master'"`, then bootstrap the new account.
+- **Who is an admin now:** `npx wrangler d1 execute classsync-db --remote --command "SELECT u.id, p.username, u.role, u.appointed_by, u.appointed_at FROM users u JOIN profiles p ON p.user_id = u.id WHERE u.role != 'user'"`
+- **Read the activity log:** `npx wrangler d1 execute classsync-db --remote --command "SELECT created_at, actor_id, action, target_id, detail FROM admin_actions ORDER BY created_at DESC LIMIT 50"`
+- **Deploy order:** run `npm run db:migrate:remote` before `npm run deploy`; sign-in reads the `role` column added by migration 012.
+
