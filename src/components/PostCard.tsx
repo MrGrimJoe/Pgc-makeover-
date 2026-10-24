@@ -1,6 +1,6 @@
 import { StickerView } from './StickerView.tsx';
 import { PollView } from './PollView.tsx';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { PostItem } from '../../shared/schema.ts';
 import { ExpiryChip } from './ExpiryChip.tsx';
 import { Heart, MessageSquare, Flag, Trash2 } from 'lucide-react';
@@ -14,6 +14,8 @@ interface PostCardProps {
   onPostDeleted?: (postId: string) => void;
   onViewAuthorProfile?: (username: string) => void;
   onTopicClick?: (topicSlug: string) => void;
+  /** Reports like/comment changes so a parent that unmounts and re-creates this card can restore them. */
+  onEngagementChange?: (postId: string, state: { likes_count: number; has_liked: boolean; comments_count: number }) => void;
 }
 
 export const PostCard: React.FC<PostCardProps> = ({
@@ -22,6 +24,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   onPostDeleted,
   onViewAuthorProfile,
   onTopicClick,
+  onEngagementChange,
 }) => {
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [hasLiked, setHasLiked] = useState(post.has_liked);
@@ -31,6 +34,10 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [likePopping, setLikePopping] = useState(false);
+
+  useEffect(() => {
+    onEngagementChange?.(post.id, { likes_count: likesCount, has_liked: hasLiked, comments_count: commentsCount });
+  }, [post.id, likesCount, hasLiked, commentsCount, onEngagementChange]);
 
 
   const handleToggleLike = async () => {

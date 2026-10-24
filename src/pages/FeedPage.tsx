@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import type { PostItem, FeedResponse } from '../../shared/schema.ts';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { PostItem } from '../../shared/schema.ts';
 import { PostCard } from '../components/PostCard.tsx';
+import { FeedFrame } from '../components/FeedFrame.tsx';
+import { FeedFrameManager } from '../feed-engine/index.ts';
+import { useEdgeSentinel, useFeedStatus, useMountedFrames, useScrollAnchor } from '../feed-engine/react.ts';
+import { createApiFeedSource, type FeedMode } from '../lib/feed-source.ts';
 
 interface FeedPageProps {
   currentUserId: string;
@@ -8,62 +12,66 @@ interface FeedPageProps {
   onViewAuthorProfile: (username: string) => void;
 }
 
+/** Posts per content frame. */
+const FEED_FRAME_SIZE = 8;
+
+type Engagement = Pick<PostItem, 'likes_count' | 'has_liked' | 'comments_count'>;
+
 export const FeedPage: React.FC<FeedPageProps> = ({
   currentUserId,
   onNavigateToCompose,
   onViewAuthorProfile,
 }) => {
-  const [feedMode, setFeedMode] = useState<'for_you' | 'following'>('for_you');
-  const [posts, setPosts] = useState<PostItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [feedMode, setFeedMode] = useState<FeedMode>('for_you');
+  const [deleted, setDeleted] = useState<ReadonlySet<string>>(() => new Set());
+  // Frames are destroyed when they leave the window, so like/comment changes are kept here.
+  const engagement = useRef(new Map<string, Engagement>());
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const fetchFeed = async (cursor?: string) => {
-    if (cursor) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
-
-    try {
-      const modeParam = feedMode === 'for_you' ? 'mode=for_you' : 'mode=following';
-      const url = cursor
-        ? `/api/feed?${modeParam}&cursor=${encodeURIComponent(cursor)}&limit=10`
-        : `/api/feed?${modeParam}&limit=10`;
-
-      const res = await fetch(url);
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
-        throw new Error(data.error || 'Failed to load posts');
-      }
-
-      const data = (await res.json()) as FeedResponse & { posts: PostItem[] };
-      if (cursor) {
-        setPosts((prev) => [...prev, ...data.posts]);
-      } else {
-        setPosts(data.posts || []);
-      }
-      setNextCursor(data.next_cursor || null);
-      setHasMore(!!data.has_more);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchFeed();
+  const { manager, heights } = useMemo(() => {
+    const m = new FeedFrameManager<PostItem>({ source: createApiFeedSource(feedMode), frameSize: FEED_FRAME_SIZE });
+    // A frame's DOM is destroyed when it leaves the window, so remember how tall it was. The blank
+    // spacer above the list stands in for those frames and keeps the page from jumping.
+    const measured = new Map<number, number>();
+    m.onFrameUnmount(({ frame }) => {
+      const el = listRef.current?.querySelector<HTMLElement>(`[data-frame-index="${frame.index}"]`);
+      if (el) measured.set(frame.index, el.getBoundingClientRect().height);
+    });
+    return { manager: m, heights: measured };
   }, [feedMode]);
+  const mountedFrames = useMountedFrames(manager);
+  const status = useFeedStatus(manager);
+  useScrollAnchor(manager, listRef, mountedFrames);
+  const topSentinel = useEdgeSentinel(() => void manager.retreat().catch(() => undefined), mountedFrames);
+  const bottomSentinel = useEdgeSentinel(() => void manager.advance().catch(() => undefined), mountedFrames);
 
-  const handlePostDeleted = (deletedId: string) => {
-    setPosts((prev) => prev.filter((p) => p.id !== deletedId));
-  };
+  const firstMounted = mountedFrames[0]?.index ?? 0;
+  let topSpacer = 0;
+  if (firstMounted > 0) {
+    const known = [...heights.values()];
+    const average = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 0;
+    for (let i = 0; i < firstMounted; i++) topSpacer += heights.get(i) ?? average;
+  }
+
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (!firstRun.current && window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'instant' });
+    firstRun.current = false;
+    void manager.focus(0).catch(() => undefined); // failures show up in status.error
+    return () => manager.destroy();
+  }, [manager]);
+
+  const handlePostDeleted = useCallback((deletedId: string) => {
+    setDeleted((prev) => new Set(prev).add(deletedId));
+  }, []);
+
+  const handleEngagementChange = useCallback((postId: string, state: Engagement) => {
+    engagement.current.set(postId, state);
+  }, []);
+
+  const error = status.error ? (status.error instanceof Error ? status.error.message : 'Failed to load posts') : null;
+  const loading = mountedFrames.length === 0 && !status.ended && !error;
+  const empty = mountedFrames.length === 0 && status.ended && !error;
 
   return (
     <div className="w-full max-w-content mx-auto pb-16 tablet:pb-0 bg-[var(--bg,#fff)]">
@@ -97,8 +105,15 @@ export const FeedPage: React.FC<FeedPageProps> = ({
 
       {/* Error state */}
       {error && (
-        <div role="alert" className="py-8 text-center text-[var(--danger,#B23A40)] text-[14px] px-4">
-          {error}
+        <div role="alert" className="py-8 text-center text-[var(--danger,#B23A40)] text-[14px] px-4 space-y-2">
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => void manager.retry().catch(() => undefined)}
+            className="text-[13px] font-semibold text-[var(--blue,#244C8A)] hover:underline cursor-pointer min-h-[44px] px-3 bg-transparent border-0"
+          >
+            Try again
+          </button>
         </div>
       )}
 
@@ -122,7 +137,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
       )}
 
       {/* Empty State: one muted line and one small button */}
-      {!loading && posts.length === 0 && !error && (
+      {empty && (
         <div className="py-16 text-center space-y-3 px-4">
           <p className="text-[14px] text-[var(--muted,#5B6577)]">No posts in this feed yet.</p>
           <button
@@ -135,33 +150,33 @@ export const FeedPage: React.FC<FeedPageProps> = ({
         </div>
       )}
 
-      {/* Posts List */}
-      {!loading && posts.length > 0 && (
-        <div>
-          {posts.map((post) => (
-            <PostCard
-              key={post.id}
-              post={post}
-              currentUserId={currentUserId}
-              onPostDeleted={handlePostDeleted}
-              onViewAuthorProfile={onViewAuthorProfile}
-            />
-          ))}
+      {/* Frames: only the sliding window is in the DOM */}
+      <div ref={listRef}>
+        <div aria-hidden="true" data-frame-spacer style={{ height: topSpacer }} />
+        <div ref={topSentinel} aria-hidden="true" data-frame-sentinel="top" style={{ height: 1 }} />
+        {mountedFrames.map((frame) => (
+          <FeedFrame key={frame.id} manager={manager} frame={frame}>
+            {frame.items
+              .filter((post) => !deleted.has(post.id))
+              .map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={{ ...post, ...engagement.current.get(post.id) }}
+                  currentUserId={currentUserId}
+                  onPostDeleted={handlePostDeleted}
+                  onViewAuthorProfile={onViewAuthorProfile}
+                  onEngagementChange={handleEngagementChange}
+                />
+              ))}
+          </FeedFrame>
+        ))}
+        <div ref={bottomSentinel} aria-hidden="true" data-frame-sentinel="bottom" style={{ height: 1 }} />
+      </div>
 
-          {/* Load More Pagination */}
-          {hasMore && (
-            <div className="text-center py-4">
-              <button
-                type="button"
-                onClick={() => nextCursor && fetchFeed(nextCursor)}
-                disabled={loadingMore}
-                className="text-[13px] font-semibold text-[var(--blue,#244C8A)] hover:underline cursor-pointer min-h-[44px] px-4 bg-transparent border-0"
-              >
-                {loadingMore ? 'Loading older posts...' : 'Older posts'}
-              </button>
-            </div>
-          )}
-        </div>
+      {status.loading && mountedFrames.length > 0 && (
+        <p role="status" className="text-center py-4 text-[13px] text-[var(--muted,#5B6577)]">
+          Loading older posts...
+        </p>
       )}
     </div>
   );

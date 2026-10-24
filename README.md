@@ -594,3 +594,681 @@ Optional and off by default. Turn it on to make sign-up need a passed Turnstile 
 4. The widget script comes from `challenges.cloudflare.com`. There is no Content-Security-Policy in this app today; if you add one, allow that host for scripts and frames.
 
 The widget has been tested only against a stand-in for Cloudflare's script, not on a real device.
+
+---
+
+## [EXPERIMENTAL] Core Frame Feed Engine
+
+> WARNING: Do NOT modify or edit this section unless explicitly requested.
+
+The home feed no longer renders one endless list. It renders **frames**: discrete chunks of posts, tagged `SAFE` or `WILD`, with a **Mid-Frame** buffer slot after every two `SAFE` frames. Only a small sliding window of frames is ever in the DOM. The engine knows nothing about monetization; other managers attach to it through events.
+
+### Where it lives
+
+| Path | Role |
+| --- | --- |
+| `src/feed-engine/FeedFrameManager.ts` | The algorithm: frame generation, layout, sliding window, events |
+| `src/feed-engine/pooledSource.ts` | Sorts one mixed paged feed into `SAFE` / `WILD` pools |
+| `src/feed-engine/layout.ts` | Frame layout (default `SAFE, SAFE, MID, WILD`) |
+| `src/feed-engine/react.ts` | React bindings: mounted frames, focus, scroll anchoring, edge sentinels |
+| `src/feed-engine/types.ts` | Types and the event map |
+| `src/lib/feed-source.ts` | Connects `/api/feed` to the engine and decides `SAFE` vs `WILD` (`classifyPost`) |
+| `src/components/FeedFrame.tsx`, `src/pages/FeedPage.tsx` | The only UI that uses it |
+| `tests/feed-engine.test.ts`, `tests/feed-page-frames.test.tsx` | Engine and page tests |
+
+### Concepts
+
+- **Frame**: an immutable chunk of posts (8 by default; set `frameSize` to anything from 5 to 10). Its `index` is stable, so scrolling back up rebuilds the identical frame. Frame *data* is cached; only the *DOM* is destroyed.
+- **Kinds**: `SAFE` and `WILD` frames hold only posts of that moderation state (the pooled source guarantees it). `MID` frames hold no posts: they are an empty transition slot.
+- **Layout**: a pure function from position to kind. The default cycle `SAFE, SAFE, MID, WILD` puts a Mid-Frame after every two `SAFE` frames. Swap it with `layout: cycleLayout([...])`.
+- **Volatile frame**: a frame that may never be mounted next to a `WILD` frame. `MID` frames are volatile by default (this is the "ad or non-compatible slot"); `markVolatile(frameId)` opts any other frame in.
+- **Window**: at most `maxActiveFrames` (default 3: one behind, the focused frame, one ahead) are mounted.
+- **Focus**: the frame crossing the middle of the viewport. `manager.focus(index)` drives everything.
+
+### Guarantees
+
+1. At most 3 frames are mounted at any moment.
+2. A volatile frame and a `WILD` frame are **never in the mounted set together**. Before a `WILD` frame mounts, every volatile frame has been unmounted (`pre-wild`). If the focus is on a volatile frame, the `WILD` neighbour is held back instead (`conflict`).
+3. Scrolling down and up share one code path. The scroll direction decides mount order and which neighbour wins a tie.
+4. When a held-back neighbour leaves nothing to scroll onto, `advance()` (user scrolled past the last frame) and `retreat()` (above the first) move the focus on. The page wires these to two invisible sentinels.
+5. Frames that leave the window are fully removed. A blank spacer of their measured height stands in above the list, and the scroll position is re-anchored after every change, so nothing jumps.
+6. A kind that runs out of posts is skipped rather than ending the feed. The feed never ends on an empty Mid-Frame.
+7. Overlapping `focus()` calls are safe (the latest wins), a failed load can be retried with `retry()`, and a throwing event handler can never break the core.
+
+### Events
+
+| Hook | Fires | Payload |
+| --- | --- | --- |
+| `onFrameMount` | the frame has joined the mounted set | `{ frame, direction }` |
+| `onFrameUnmount` | the frame is about to leave it (tear down your own content here) | `{ frame, reason }`: `window`, `pre-wild`, `conflict` or `destroy` |
+| `onMidFrameReached` | the user landed on, or scrolled past, a Mid-Frame | `{ frame, direction, landed }` |
+| `on('frameFocus')` | the focused frame changed | `{ frame, previous, direction }` |
+| `on('frameCreated')` | a frame was generated | `{ frame }` |
+| `on('feedEnd')` | the source ran out | `{ totalFrames }` |
+| `on('loadError')` | a page fetch failed | `{ error }` |
+
+Every hook returns an unsubscribe function.
+
+### Moderation tag
+
+`PostItem.moderation?: 'SAFE' | 'WILD'` is read by `classifyPost` in `src/lib/feed-source.ts`. A post without the field is `SAFE`. The server does not set it yet; until it does, every post is `SAFE` and the feed shows `SAFE` frames with Mid-Frame slots between them.
+
+### Connecting another manager later (no core edits)
+
+```ts
+manager.onMidFrameReached(({ frame, landed }) => { /* fill or inspect the slot */ });
+manager.onFrameUnmount(({ frame, reason }) => { /* release whatever you attached */ });
+manager.markVolatile(frame.id); // opt another frame into "never beside WILD"
+```
+
+### Source
+
+#### `src/feed-engine/types.ts`
+
+```ts
+/**
+ * Core Frame Feed Engine: shared types.
+ * Nothing in src/feed-engine knows about monetization. Third parties attach through events.
+ */
+export type ModerationState = 'SAFE' | 'WILD';
+/** MID is the buffer slot inserted after every two SAFE frames. It never holds items. */
+export type FrameKind = ModerationState | 'MID';
+export type ScrollDirection = 'up' | 'down';
+/**
+ * window    left the sliding window
+ * pre-wild  a volatile frame removed so a WILD frame can mount
+ * conflict  a WILD frame removed because the focused frame is volatile
+ * destroy   manager.destroy()
+ */
+export type UnmountReason = 'window' | 'pre-wild' | 'conflict' | 'destroy';
+
+export interface Frame<T> {
+  readonly id: string;
+  /** Stable position in the feed. The same index always yields the same frame. */
+  readonly index: number;
+  readonly kind: FrameKind;
+  readonly items: readonly T[];
+}
+
+export interface LoadResult<T> {
+  items: T[];
+  /** True when this moderation state will never produce another item. */
+  done: boolean;
+}
+
+/**
+ * Supplies already-classified items. The manager calls load() once per content frame, in order.
+ * An empty result with done=false means "nothing right now": the slot is skipped, not the feed ended.
+ */
+export interface FeedSource<T> {
+  load(moderation: ModerationState, limit: number): Promise<LoadResult<T>>;
+}
+
+export interface FeedStatus {
+  readonly loading: boolean;
+  readonly ended: boolean;
+  readonly error: unknown | null;
+}
+
+export interface FeedFrameEvents<T> {
+  frameCreated: { frame: Frame<T> };
+  /** The frame has joined the mounted set (the UI commits it right after). */
+  frameMount: { frame: Frame<T>; direction: ScrollDirection };
+  /** The frame is about to leave the mounted set. Tear down anything you attached to it. */
+  frameUnmount: { frame: Frame<T>; reason: UnmountReason };
+  frameFocus: { frame: Frame<T>; previous: Frame<T> | null; direction: ScrollDirection };
+  /** `landed` is false when the user scrolled past the Mid-Frame without stopping on it. */
+  midFrameReached: { frame: Frame<T>; direction: ScrollDirection; landed: boolean };
+  feedEnd: { totalFrames: number };
+  loadError: { error: unknown };
+}
+```
+
+#### `src/feed-engine/layout.ts`
+
+```ts
+import type { FrameKind } from './types.ts';
+
+/** Pure mapping from a layout position to a frame kind. */
+export type FrameLayout = (position: number) => FrameKind;
+
+export function cycleLayout(pattern: readonly FrameKind[]): FrameLayout {
+  if (pattern.length === 0) throw new RangeError('Layout pattern must not be empty');
+  return (position) => pattern[position % pattern.length] ?? 'SAFE';
+}
+
+/** Every two SAFE frames are followed by a Mid-Frame, then one WILD frame. */
+export const DEFAULT_LAYOUT: FrameLayout = cycleLayout(['SAFE', 'SAFE', 'MID', 'WILD']);
+```
+
+#### `src/feed-engine/pooledSource.ts`
+
+```ts
+import type { FeedSource, ModerationState } from './types.ts';
+
+export interface Page<T> {
+  items: readonly T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface PooledSourceOptions<T> {
+  fetchPage: (cursor: string | null) => Promise<Page<T>>;
+  /** The SAFE / WILD classification step. Everything downstream trusts it. */
+  classify: (item: T) => ModerationState;
+  /** Cap on pages fetched per load() while looking for enough items of one state. Default 3. */
+  maxPagesPerLoad?: number;
+}
+
+/**
+ * Turns one paged, mixed feed into two classified pools. Frames drain the pool that matches their kind.
+ * Pages fetched while hunting for one state are kept for the other, so nothing is wasted.
+ */
+export function createPooledSource<T>(options: PooledSourceOptions<T>): FeedSource<T> {
+  const { fetchPage, classify, maxPagesPerLoad = 3 } = options;
+  const pools: Record<ModerationState, T[]> = { SAFE: [], WILD: [] };
+  let cursor: string | null = null;
+  let serverDone = false;
+
+  async function fetchNext(): Promise<void> {
+    const page = await fetchPage(cursor); // throws leave cursor and pools untouched
+    for (const item of page.items) pools[classify(item)].push(item);
+    cursor = page.nextCursor;
+    if (!page.hasMore || page.nextCursor === null) serverDone = true;
+  }
+
+  return {
+    async load(moderation, limit) {
+      let pages = 0;
+      while (pools[moderation].length < limit && !serverDone && pages < maxPagesPerLoad) {
+        await fetchNext();
+        pages++;
+      }
+      const items = pools[moderation].splice(0, limit);
+      return { items, done: serverDone && pools[moderation].length === 0 };
+    },
+  };
+}
+```
+
+#### `src/feed-engine/FeedFrameManager.ts`
+
+```ts
+import { DEFAULT_LAYOUT, type FrameLayout } from './layout.ts';
+import type {
+  FeedFrameEvents,
+  FeedSource,
+  FeedStatus,
+  Frame,
+  FrameKind,
+  ModerationState,
+  ScrollDirection,
+  UnmountReason,
+} from './types.ts';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyHandler = (payload: any) => void;
+
+/** Upper bound on layout steps spent looking for the next frame, so a bad layout cannot spin forever. */
+const MAX_LAYOUT_STEPS = 64;
+
+export interface FeedFrameManagerOptions<T> {
+  source: FeedSource<T>;
+  layout?: FrameLayout;
+  /** Items per content frame. Default 8 (recommended range 5-10). */
+  frameSize?: number;
+  /** Frames kept mounted behind / ahead of the focused frame. Default 1 / 1. */
+  windowBehind?: number;
+  windowAhead?: number;
+  /** Hard cap on simultaneously mounted frames. Default 3. */
+  maxActiveFrames?: number;
+}
+
+/**
+ * Core Frame Feed Engine.
+ *
+ * Slices a feed into frames (SAFE / WILD content frames plus MID buffer slots), keeps only a small
+ * sliding window of them mounted, and emits events so other managers can attach without touching
+ * this file. It renders nothing itself: the UI renders getMountedFrames().
+ */
+export class FeedFrameManager<T> {
+  private readonly source: FeedSource<T>;
+  private readonly layout: FrameLayout;
+  private readonly frameSize: number;
+  private readonly windowBehind: number;
+  private readonly windowAhead: number;
+
+  /** Data cache: every generated frame by index. Never evicted, so scrolling back rebuilds the same frame. */
+  private readonly frames: Frame<T>[] = [];
+  /** Frames currently in the UI, by index. */
+  private readonly mounted = new Map<number, Frame<T>>();
+  private readonly volatileIds = new Set<string>();
+  private readonly exhausted = new Set<ModerationState>();
+  private readonly handlers = new Map<keyof FeedFrameEvents<T>, Set<AnyHandler>>();
+  private readonly changeListeners = new Set<() => void>();
+
+  private mountedSnapshot: readonly Frame<T>[] = Object.freeze([]);
+  private status: FeedStatus = Object.freeze({ loading: false, ended: false, error: null });
+  private layoutCursor = 0;
+  private focusIndex = -1;
+  private lastDirection: ScrollDirection = 'down';
+  private focusToken = 0;
+  private generation: Promise<void> = Promise.resolve();
+
+  constructor(options: FeedFrameManagerOptions<T>) {
+    const { windowBehind = 1, windowAhead = 1, maxActiveFrames = 3 } = options;
+    if (windowBehind < 0 || windowAhead < 0 || windowBehind + windowAhead + 1 > maxActiveFrames) {
+      throw new RangeError(
+        `Window (${windowBehind} behind + focus + ${windowAhead} ahead) exceeds maxActiveFrames (${maxActiveFrames})`,
+      );
+    }
+    this.source = options.source;
+    this.layout = options.layout ?? DEFAULT_LAYOUT;
+    this.frameSize = Math.max(1, Math.floor(options.frameSize ?? 8));
+    this.windowBehind = windowBehind;
+    this.windowAhead = windowAhead;
+  }
+
+  // ------------------------------------------------------------------ public API
+
+  /**
+   * Move focus to a frame index. Generates missing frames, then reconciles the mounted window.
+   * Rejects if the source throws (also surfaced via getStatus().error and the loadError event).
+   */
+  focus(index: number): Promise<void> {
+    return this.moveFocus(index, false);
+  }
+
+  /** Re-run the current focus, e.g. after a load error. */
+  retry(): Promise<void> {
+    return this.moveFocus(Math.max(this.focusIndex, 0), true);
+  }
+
+  /**
+   * Call when the user has scrolled past the last mounted frame. Needed because a deferred neighbour
+   * (a WILD frame below a focused Mid-Frame) leaves nothing below to scroll onto. No-op when a frame
+   * ahead of the focus is already mounted.
+   */
+  advance(): Promise<void> {
+    if (this.focusIndex < 0 || Math.max(...this.mounted.keys()) > this.focusIndex) return Promise.resolve();
+    return this.focus(this.focusIndex + 1);
+  }
+
+  /** Mirror of advance(): the user has scrolled above the first mounted frame. */
+  retreat(): Promise<void> {
+    if (this.focusIndex <= 0 || Math.min(...this.mounted.keys()) < this.focusIndex) return Promise.resolve();
+    return this.focus(this.focusIndex - 1);
+  }
+
+  getFocusIndex(): number {
+    return this.focusIndex;
+  }
+
+  /** Mark a frame as one that must never be mounted beside a WILD frame. MID frames already are. */
+  markVolatile(frameId: string, volatile = true): void {
+    if (volatile) this.volatileIds.add(frameId);
+    else this.volatileIds.delete(frameId);
+    if (this.focusIndex >= 0) this.reconcile(this.focusIndex, this.lastDirection);
+  }
+
+  isVolatile(frame: Frame<T>): boolean {
+    return frame.kind === 'MID' || this.volatileIds.has(frame.id);
+  }
+
+  /** Immutable snapshot of mounted frames sorted by index. Same reference until something changes. */
+  readonly getMountedFrames = (): readonly Frame<T>[] => this.mountedSnapshot;
+
+  readonly getStatus = (): FeedStatus => this.status;
+
+  /** Subscribe to mounted-set / status changes (useSyncExternalStore compatible). */
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.changeListeners.add(listener);
+    return () => {
+      this.changeListeners.delete(listener);
+    };
+  };
+
+  on<K extends keyof FeedFrameEvents<T>>(
+    event: K,
+    handler: (payload: FeedFrameEvents<T>[K]) => void,
+  ): () => void {
+    let set = this.handlers.get(event);
+    if (!set) {
+      set = new Set();
+      this.handlers.set(event, set);
+    }
+    set.add(handler);
+    return () => {
+      set.delete(handler);
+    };
+  }
+
+  onFrameMount(handler: (p: FeedFrameEvents<T>['frameMount']) => void): () => void {
+    return this.on('frameMount', handler);
+  }
+  onFrameUnmount(handler: (p: FeedFrameEvents<T>['frameUnmount']) => void): () => void {
+    return this.on('frameUnmount', handler);
+  }
+  onMidFrameReached(handler: (p: FeedFrameEvents<T>['midFrameReached']) => void): () => void {
+    return this.on('midFrameReached', handler);
+  }
+
+  /** Unmounts every frame and cancels in-flight focus calls. The instance can be focused again. */
+  destroy(): void {
+    this.focusToken++;
+    for (const frame of [...this.mounted.values()]) this.unmountFrame(frame, 'destroy');
+    this.focusIndex = -1;
+  }
+
+  // ------------------------------------------------------------ frame generation
+
+  private async moveFocus(index: number, force: boolean): Promise<void> {
+    if (!Number.isInteger(index) || index < 0) throw new RangeError(`Invalid frame index: ${index}`);
+    if (!force && index === this.focusIndex) return;
+
+    const token = ++this.focusToken;
+    const direction: ScrollDirection =
+      index === this.focusIndex ? this.lastDirection : index > this.focusIndex ? 'down' : 'up';
+
+    await this.ensureFrames(index + this.windowAhead);
+    if (token !== this.focusToken) return; // superseded by a newer focus() or destroy()
+
+    const last = this.frames.length - 1;
+    if (last < 0) return; // empty feed
+    this.reconcile(Math.min(index, last), direction);
+  }
+
+  /** Serialises generation so frames are always created in index order. */
+  private ensureFrames(upTo: number): Promise<void> {
+    const run = this.generation.then(async () => {
+      if (this.frames.length > upTo || this.status.ended) return;
+      this.setStatus({ loading: true });
+      try {
+        while (this.frames.length <= upTo && !this.status.ended) await this.generateNext();
+        this.setStatus({ loading: false, error: null });
+      } catch (error) {
+        this.setStatus({ loading: false, error });
+        this.emit('loadError', { error });
+        throw error;
+      }
+    });
+    this.generation = run.catch(() => undefined); // a failed load must not wedge the chain
+    return run;
+  }
+
+  /**
+   * Builds the next content frame (plus any Mid-Frames due before it).
+   * Exhausted kinds are skipped, and Mid-Frames are only created when content follows them,
+   * so the feed never ends on an empty slot.
+   */
+  private async generateNext(): Promise<void> {
+    let pendingMids = 0;
+    for (let step = 0; step < MAX_LAYOUT_STEPS; step++) {
+      if (this.exhausted.has('SAFE') && this.exhausted.has('WILD')) break;
+      const kind = this.layout(this.layoutCursor++);
+      if (kind === 'MID') {
+        pendingMids++;
+        continue;
+      }
+      if (this.exhausted.has(kind)) continue;
+
+      const result = await this.source.load(kind, this.frameSize);
+      if (result.done) this.exhausted.add(kind);
+      if (result.items.length === 0) continue; // nothing right now: skip this slot
+
+      for (let i = 0; i < pendingMids; i++) this.pushFrame('MID', []);
+      this.pushFrame(kind, result.items);
+      return;
+    }
+    this.setStatus({ ended: true });
+    this.emit('feedEnd', { totalFrames: this.frames.length });
+  }
+
+  private pushFrame(kind: FrameKind, items: readonly T[]): void {
+    const index = this.frames.length;
+    const frame: Frame<T> = Object.freeze({
+      id: `frame-${index}`,
+      index,
+      kind,
+      items: Object.freeze([...items]),
+    });
+    this.frames.push(frame);
+    this.emit('frameCreated', { frame });
+  }
+
+  // --------------------------------------------------------------- reconciliation
+
+  private reconcile(focus: number, direction: ScrollDirection): void {
+    const focused = this.frames[focus];
+    if (!focused) return;
+    const previous = this.focusIndex >= 0 ? (this.frames[this.focusIndex] ?? null) : null;
+    this.focusIndex = focus;
+    this.lastDirection = direction;
+
+    const target = this.resolveWindow(focused, direction);
+    const targetIndexes = new Set(target.map((f) => f.index));
+    const targetHasWild = target.some((f) => f.kind === 'WILD');
+
+    // 1. Unmount everything outside the target, farthest first. The target never mixes a volatile
+    //    frame with a WILD frame, so by the time step 2 mounts a WILD frame every volatile frame is gone.
+    const evict = [...this.mounted.values()]
+      .filter((f) => !targetIndexes.has(f.index))
+      .sort((a, b) => Math.abs(b.index - focus) - Math.abs(a.index - focus));
+    for (const frame of evict) {
+      let reason: UnmountReason = 'window';
+      if (this.isVolatile(frame) && targetHasWild) reason = 'pre-wild';
+      else if (frame.index >= focus - this.windowBehind && frame.index <= focus + this.windowAhead) {
+        reason = 'conflict';
+      }
+      this.unmountFrame(frame, reason);
+    }
+
+    // 2. Mount what is missing, in scroll-direction order.
+    const toMount = target
+      .filter((f) => !this.mounted.has(f.index))
+      .sort((a, b) => (direction === 'down' ? a.index - b.index : b.index - a.index));
+    for (const frame of toMount) this.mountFrame(frame, direction);
+
+    // 3. Focus and Mid-Frame events.
+    if (previous?.index !== focus) {
+      this.emit('frameFocus', { frame: focused, previous, direction });
+      this.emitMidFramesPassed(previous, focus, direction);
+    }
+  }
+
+  /** Emits midFrameReached for every Mid-Frame between the old and new focus, in travel order. */
+  private emitMidFramesPassed(previous: Frame<T> | null, focus: number, direction: ScrollDirection): void {
+    const indexes: number[] = [];
+    if (!previous) indexes.push(focus);
+    else if (direction === 'down') for (let i = previous.index + 1; i <= focus; i++) indexes.push(i);
+    else for (let i = previous.index - 1; i >= focus; i--) indexes.push(i);
+
+    for (const i of indexes) {
+      const frame = this.frames[i];
+      if (frame?.kind === 'MID') this.emit('midFrameReached', { frame, direction, landed: i === focus });
+    }
+  }
+
+  /**
+   * Picks the frames to keep mounted. The focused frame always wins, then neighbours by distance
+   * (the neighbour in the scroll direction wins ties). A candidate that would put a volatile frame
+   * next to a WILD frame is deferred until focus reaches it.
+   */
+  private resolveWindow(focused: Frame<T>, direction: ScrollDirection): Frame<T>[] {
+    const picked: Frame<T>[] = [focused];
+    const maxDistance = Math.max(this.windowBehind, this.windowAhead);
+
+    for (let d = 1; d <= maxDistance; d++) {
+      const deltas = direction === 'down' ? [d, -d] : [-d, d];
+      for (const delta of deltas) {
+        if (delta > 0 && d > this.windowAhead) continue;
+        if (delta < 0 && d > this.windowBehind) continue;
+        const candidate = this.frames[focused.index + delta];
+        if (candidate && !this.conflicts(candidate, picked)) picked.push(candidate);
+      }
+    }
+    return picked;
+  }
+
+  private conflicts(candidate: Frame<T>, picked: readonly Frame<T>[]): boolean {
+    const candidateWild = candidate.kind === 'WILD';
+    const candidateVolatile = this.isVolatile(candidate);
+    return picked.some(
+      (p) => (candidateWild && this.isVolatile(p)) || (candidateVolatile && p.kind === 'WILD'),
+    );
+  }
+
+  private mountFrame(frame: Frame<T>, direction: ScrollDirection): void {
+    this.mounted.set(frame.index, frame);
+    this.refreshSnapshot();
+    this.emit('frameMount', { frame, direction });
+  }
+
+  private unmountFrame(frame: Frame<T>, reason: UnmountReason): void {
+    if (!this.mounted.has(frame.index)) return;
+    this.emit('frameUnmount', { frame, reason }); // before removal: listeners tear down first
+    this.mounted.delete(frame.index);
+    this.refreshSnapshot();
+  }
+
+  private refreshSnapshot(): void {
+    this.mountedSnapshot = Object.freeze([...this.mounted.values()].sort((a, b) => a.index - b.index));
+    this.notify();
+  }
+
+  private setStatus(patch: Partial<FeedStatus>): void {
+    const next = { ...this.status, ...patch };
+    if (next.loading === this.status.loading && next.ended === this.status.ended && next.error === this.status.error) {
+      return;
+    }
+    this.status = Object.freeze(next);
+    this.notify();
+  }
+
+  private notify(): void {
+    this.changeListeners.forEach((listener) => listener());
+  }
+
+  private emit<K extends keyof FeedFrameEvents<T>>(event: K, payload: FeedFrameEvents<T>[K]): void {
+    this.handlers.get(event)?.forEach((handler) => {
+      try {
+        handler(payload);
+      } catch (err) {
+        console.error(`[FeedFrameManager] "${String(event)}" handler threw`, err);
+      }
+    });
+  }
+}
+```
+
+#### `src/feed-engine/react.ts`
+
+```ts
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
+import type { FeedFrameManager } from './FeedFrameManager.ts';
+import type { FeedStatus, Frame } from './types.ts';
+
+/** The frames that should currently be in the React tree (3 at most by default). */
+export function useMountedFrames<T>(manager: FeedFrameManager<T>): readonly Frame<T>[] {
+  return useSyncExternalStore(manager.subscribe, manager.getMountedFrames, manager.getMountedFrames);
+}
+
+export function useFeedStatus<T>(manager: FeedFrameManager<T>): FeedStatus {
+  return useSyncExternalStore(manager.subscribe, manager.getStatus, manager.getStatus);
+}
+
+/**
+ * Put the returned ref on a frame's root element: the frame crossing the middle of the viewport
+ * becomes the manager's focus. Load failures are reported through getStatus().error.
+ */
+export function useFrameFocus<T>(manager: FeedFrameManager<T>, index: number): RefObject<HTMLDivElement | null> {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void manager.focus(index).catch(() => undefined);
+      },
+      { rootMargin: '-50% 0px -50% 0px', threshold: 0 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [manager, index]);
+  return ref;
+}
+
+/**
+ * Fires onEnter whenever the returned element is in view, and again after `watch` changes while it
+ * still is (a plain observer would only report the first crossing). Use one below the last frame
+ * (manager.advance) and one above the first (manager.retreat).
+ */
+export function useEdgeSentinel(onEnter: () => void, watch: unknown): RefObject<HTMLDivElement | null> {
+  const ref = useRef<HTMLDivElement>(null);
+  const callback = useRef(onEnter);
+  callback.current = onEnter;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) callback.current();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [watch]);
+  return ref;
+}
+
+const FRAME_SELECTOR = '[data-frame-index]';
+
+function measureTops(container: HTMLElement | null): Map<number, number> {
+  const tops = new Map<number, number>();
+  container?.querySelectorAll<HTMLElement>(FRAME_SELECTOR).forEach((el) => {
+    tops.set(Number(el.dataset.frameIndex), el.getBoundingClientRect().top);
+  });
+  return tops;
+}
+
+/**
+ * Keeps the page still while frames above the viewport are added or removed (scrolling either way).
+ * Frame elements need a data-frame-index attribute. The position is measured when the manager
+ * announces a change (before React commits) and corrected right after the commit.
+ */
+export function useScrollAnchor<T>(
+  manager: FeedFrameManager<T>,
+  containerRef: RefObject<HTMLElement | null>,
+  mounted: readonly Frame<T>[],
+): void {
+  const tops = useRef(new Map<number, number>());
+
+  useEffect(
+    () =>
+      manager.subscribe(() => {
+        tops.current = measureTops(containerRef.current);
+      }),
+    [manager, containerRef],
+  );
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const before = tops.current;
+    const focus = manager.getFocusIndex();
+
+    let anchor: { index: number; el: HTMLElement } | null = null;
+    container.querySelectorAll<HTMLElement>(FRAME_SELECTOR).forEach((el) => {
+      const index = Number(el.dataset.frameIndex);
+      if (!before.has(index)) return; // newly mounted: nothing to compare against
+      if (!anchor || Math.abs(index - focus) < Math.abs(anchor.index - focus)) anchor = { index, el };
+    });
+
+    const found = anchor as { index: number; el: HTMLElement } | null;
+    const previousTop = found ? before.get(found.index) : undefined;
+    if (found && previousTop !== undefined) {
+      const delta = found.el.getBoundingClientRect().top - previousTop;
+      if (Math.abs(delta) > 0.5) window.scrollBy({ top: delta, behavior: 'instant' });
+    }
+    tops.current = measureTops(container);
+  }, [mounted, manager, containerRef]);
+}
+```

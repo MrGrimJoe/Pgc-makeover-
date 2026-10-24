@@ -432,6 +432,8 @@ export interface PostItem {
   /** Null when the post has no poll. */
   poll?: PollItem | null;
   topics?: TopicItem[];
+  /** Moderation tag read by the frame feed engine. Missing means SAFE. */
+  moderation?: 'SAFE' | 'WILD';
   likes_count: number;
   has_liked: boolean;
   comments_count: number;
