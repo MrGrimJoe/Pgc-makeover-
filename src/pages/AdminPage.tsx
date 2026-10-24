@@ -17,7 +17,9 @@ interface Action { id: string; action: string; detail: string | null; created_at
 
 interface Dispute { id: string; email: string | null; status: string; created_at: string; holder_username: string | null }
 
-type Tab = 'reports' | 'people' | 'signups' | 'activity';
+interface AppealItem { id: string; username: string; message: string; status: string; account_status: string; created_at: string; decision_note: string }
+
+type Tab = 'reports' | 'people' | 'signups' | 'appeals' | 'activity';
 type Confirm =
   | { kind: 'status'; person: { id: string; username: string }; status: 'suspended' | 'banned' | 'active' }
   | { kind: 'appoint'; person: { id: string; username: string } };
@@ -42,6 +44,8 @@ const ACTION_TEXT: Record<string, string> = {
   appoint: 'made an admin',
   'appoint:handover': 'handed the admin role to',
   'dispute:resolved': 'handled a sign-up request',
+  'appeal:granted': 'approved an appeal from',
+  'appeal:denied': 'turned down an appeal',
 };
 
 export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLostAdmin }) => {
@@ -61,6 +65,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
   const [query, setQuery] = useState('');
   const [actions, setActions] = useState<Action[] | null>(null);
   const [disputes, setDisputes] = useState<Dispute[] | null>(null);
+  const [appeals, setAppeals] = useState<AppealItem[] | null>(null);
 
   const fail = (e: unknown) => setNotice({ type: 'error', text: (e as Error).message });
 
@@ -83,6 +88,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
   useEffect(() => { if (tab === 'people') loadPeople(''); }, [tab, loadPeople]);
   useEffect(() => { if (tab === 'activity') loadActions(); }, [tab, loadActions]);
   useEffect(() => { if (tab === 'signups') loadDisputes(); }, [tab, loadDisputes]);
+  const loadAppeals = useCallback(() => { api<{ appeals: AppealItem[] }>('/api/admin/appeals').then((b) => setAppeals(b.appeals)).catch(fail); }, []);
+  useEffect(() => { if (tab === 'appeals') loadAppeals(); }, [tab, loadAppeals]);
+  const decide = async (id: string, decision: 'granted' | 'denied') => {
+    try { await post(`/api/admin/appeals/${encodeURIComponent(id)}/decide`, { decision }); loadAppeals(); loadPeople(query); } catch (e) { fail(e); }
+  };
   const resolveDispute = async (id: string) => {
     try { await post(`/api/admin/disputes/${encodeURIComponent(id)}/resolve`, {}); loadDisputes(); } catch (e) { fail(e); }
   };
@@ -173,7 +183,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
           </dl>
         )}
 
-        <div role="group" aria-label="Admin sections" className="flex gap-1">{tabBtn('reports', 'Reports')}{tabBtn('people', 'People')}{tabBtn('signups', 'Sign-ups')}{tabBtn('activity', 'Activity')}</div>
+        <div role="group" aria-label="Admin sections" className="flex gap-1">{tabBtn('reports', 'Reports')}{tabBtn('people', 'People')}{tabBtn('signups', 'Sign-ups')}{tabBtn('appeals', 'Appeals')}{tabBtn('activity', 'Activity')}</div>
 
         {confirmPanel}
 
@@ -266,6 +276,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
                   <p className={`m-0 text-[13px] ${muted}`}>{d.holder_username ? `The roll number belongs to @${d.holder_username}.` : 'The account that held the roll number no longer exists, so the student can sign up again.'}</p>
                   <p className={`m-0 text-[12px] ${muted}`}>{new Date(d.created_at).toLocaleString()}</p>
                   {d.status === 'open' && <button type="button" className={ghost} onClick={() => resolveDispute(d.id)}>Mark handled</button>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {tab === 'appeals' && (
+          <section aria-label="Appeals" className="space-y-2">
+            {appeals === null && <p className={`m-0 text-[14px] ${muted}`}>Loading...</p>}
+            {appeals?.length === 0 && <p className={`m-0 text-[14px] ${muted}`}>No appeals.</p>}
+            <ul className="list-none m-0 p-0 space-y-2">
+              {appeals?.map((a) => (
+                <li key={a.id} className={`${card} !p-3`}>
+                  <p className="m-0 text-[14px] text-[var(--text,#17233A)]"><strong>@{a.username}</strong> ({a.account_status}) {a.status === 'open' ? '' : `- ${a.status}`}</p>
+                  <p className="m-0 text-[14px] text-[var(--text,#17233A)] whitespace-pre-wrap">{a.message}</p>
+                  <p className={`m-0 text-[12px] ${muted}`}>{new Date(a.created_at).toLocaleString()}</p>
+                  {a.status === 'open' && (
+                    <div className="flex gap-2">
+                      <button type="button" className={ghost} onClick={() => decide(a.id, 'granted')}>Reinstate</button>
+                      <button type="button" className={ghost} onClick={() => decide(a.id, 'denied')}>Keep blocked</button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

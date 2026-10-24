@@ -2,6 +2,7 @@ import { adminAppointSchema, adminUserStatusSchema } from '../shared/schema.ts';
 import { authenticateRequest, generateRandomString, type AuthenticatedUser } from './auth.ts';
 import { constantTimeCompare, jsonResponse } from './http.ts';
 import type { Env } from './types.ts';
+import { decideAppeal, listAppeals } from './appeals.ts';
 
 /**
  * Admin roles and moderation of people.
@@ -82,9 +83,11 @@ export async function handleAdminRoute(request: Request, env: Env, url: URL): Pr
   const isAppoint = pathname === '/api/admin/appoint' && method === 'POST';
   const isPreview = /^\/api\/admin\/reports\/[^/]+\/preview$/.test(pathname) && method === 'GET';
   const isLog = pathname === '/api/admin/actions' && method === 'GET';
+  const isAppeals = pathname === '/api/admin/appeals' && method === 'GET';
+  const isAppealDecide = /^\/api\/admin\/appeals\/[^/]+\/decide$/.test(pathname) && method === 'POST';
   const isDisputes = pathname === '/api/admin/disputes' && method === 'GET';
   const isDisputeResolve = /^\/api\/admin\/disputes\/[^/]+\/resolve$/.test(pathname) && method === 'POST';
-  if (!isPeople && !isStatus && !isAppoint && !isPreview && !isLog && !isDisputes && !isDisputeResolve) return null;
+  if (!isPeople && !isStatus && !isAppoint && !isPreview && !isLog && !isDisputes && !isDisputeResolve && !isAppeals && !isAppealDecide) return null;
 
   const auth = await authenticateRequest(request, env.DB);
   if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
@@ -94,6 +97,16 @@ export async function handleAdminRoute(request: Request, env: Env, url: URL): Pr
   if (isPeople) return listPeople(env, url);
   if (isLog) return listActions(env);
   if (isDisputes) return listDisputes(env);
+  if (isAppeals) return listAppeals(env);
+  if (isAppealDecide) {
+    let body: { decision?: unknown; note?: unknown } = {};
+    try { body = (await request.json()) as typeof body; } catch { /* decision is validated below */ }
+    const result = await decideAppeal(env, auth.user.id, role === 'master', decodeURIComponent(pathname.split('/')[4]!), body);
+    if (result.response.status === 200) {
+      await audit(env, auth.user.id, `appeal:${body.decision}`, result.reinstated ?? null, typeof body.note === 'string' ? body.note.slice(0, 200) : null);
+    }
+    return result.response;
+  }
   if (isDisputeResolve) return resolveDispute(request, env, auth, decodeURIComponent(pathname.split('/')[4]!));
   if (isPreview) return reportPreview(env, decodeURIComponent(pathname.split('/')[4]!));
   if (isStatus) return changeStatus(request, env, auth, role, decodeURIComponent(pathname.split('/')[4]!));

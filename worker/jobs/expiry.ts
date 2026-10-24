@@ -23,6 +23,12 @@ export interface ExpiryJobResult {
  * - Expiry deletes post, comments, reactions, post_media rows, media records, and R2 objects together.
  * - Cleans up orphaned media records older than 24 hours not attached to any post.
  */
+/** How long handled moderation records are kept (days). Open reports, disputes and appeals are never deleted by this job. */
+export const REPORT_RETENTION_DAYS = 90;
+export const DISPUTE_RETENTION_DAYS = 90;
+export const APPEAL_RETENTION_DAYS = 180;
+export const ADMIN_LOG_RETENTION_DAYS = 365;
+
 export async function runPostLifecycleExpiry(
   env: Env,
   referenceTime = Date.now()
@@ -144,6 +150,24 @@ export async function runPostLifecycleExpiry(
       .run();
   } catch {
     // report_evidence table does not exist if migration 004 has not yet run
+  }
+
+  // Moderation records are not kept forever. Open items are never touched; handled ones go after a fixed time.
+  const daysAgo = (n: number) => new Date(new Date(referenceIso).getTime() - n * 24 * 60 * 60 * 1000).toISOString();
+  const retention: Array<[string, string, string]> = [
+    // table, condition, cutoff
+    ['reports', "status != 'pending' AND created_at <= ?", daysAgo(REPORT_RETENTION_DAYS)],
+    ['registration_disputes', "status = 'resolved' AND resolved_at <= ?", daysAgo(DISPUTE_RETENTION_DAYS)],
+    ['appeals', "status != 'open' AND decided_at <= ?", daysAgo(APPEAL_RETENTION_DAYS)],
+    ['appeal_tickets', 'expires_at <= ?', referenceIso],
+    ['admin_actions', 'created_at <= ?', daysAgo(ADMIN_LOG_RETENTION_DAYS)],
+  ];
+  for (const [table, condition, cutoff] of retention) {
+    try {
+      await env.DB.prepare(`DELETE FROM ${table} WHERE ${condition}`).bind(cutoff).run();
+    } catch {
+      // the table does not exist until its migration has run
+    }
   }
 
   return {

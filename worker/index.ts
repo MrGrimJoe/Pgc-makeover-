@@ -22,6 +22,7 @@ import { normalizeUsername, isReservedUsername } from '../shared/username.ts';
 import { findCampus, campusName, cleanCampusOther } from '../shared/campus.ts';
 import { handleOnboardingRoutes, getValidSignupTicket, purgeExpiredSignupTickets, SIGNUP_TICKET_COOKIE, SIGNUP_TICKET_TTL_MS } from './onboarding.ts';
 import { buildMeResponse } from './me.ts';
+import { handleAppealRoutes, issueAppealTicket } from './appeals.ts';
 import { effectiveRole, handleAdminRoute, legacyAdminGate } from './admin.ts';
 import { DEFAULT_PRESET_IDS } from '../shared/presets.ts';
 import {
@@ -418,6 +419,10 @@ export default {
       });
     }
 
+    // Appeals from suspended or banned students (ticket cookie, no session)
+    const appealResponse = await handleAppealRoutes(request, env, pathname);
+    if (appealResponse) return appealResponse;
+
     // Sign-up, campuses, username availability, suggested people and campus admin
     const onboardingResponse = await handleOnboardingRoutes(request, env);
     if (onboardingResponse) return onboardingResponse;
@@ -708,6 +713,8 @@ export default {
       if (user.status !== 'active') {
         const blockedHeaders = new Headers();
         blockedHeaders.append('Set-Cookie', clearOauthStateCookie);
+        // Lets them send one request for a review; it cannot do anything else
+        blockedHeaders.append('Set-Cookie', await issueAppealTicket(request, env, user.id));
         blockedHeaders.set('Location', user.status === 'banned' ? '/?auth=banned' : '/?auth=suspended');
         return new Response(null, { status: 302, headers: blockedHeaders });
       }

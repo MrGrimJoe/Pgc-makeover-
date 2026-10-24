@@ -78,4 +78,5 @@ Its phase numbers differ from the numbered phases above.
 
 - **Infrastructure fixes** (branch `fix/phase1-and-leftovers`): only `/api/*` runs the Worker (static files and headers come from `public/_headers`); atomic rate limiter (the old one let 40 of 40 simultaneous requests through a limit of 10); Node 22.13 guard, cross-platform `clean`, CI workflow, migration `.sql` / embedded-copy parity test.
 - **Student sign-up checks** (blueprint Phase 3, partly): full roll number, unique per campus, barcode scan, "already registered" requests for admins. See README, "Student sign-up checks". Not done: OCR.
-- **Not done yet:** report retention policy and appeals, Turnstile, academic progression / renewal, removal of `DEV-ONLY` code and real branding, real-phone and real-browser checks (the camera scan has never run on a real device).
+- **Appeals and retention** (blueprint Phase 7, partly): appeal tickets for blocked students, admin Appeals tab, handled-record retention. See README.
+- **Not done yet:** Turnstile, academic progression / renewal, removal of `DEV-ONLY` code and real branding, real-phone and real-browser checks (the camera scan has never run on a real device).
