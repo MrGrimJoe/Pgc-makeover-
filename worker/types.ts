@@ -25,6 +25,10 @@ export interface Env {
   // Admin secret for privileged jobs and moderation endpoints
   ADMIN_SECRET?: string;
 
+  // Cloudflare Turnstile (optional). Both set = sign-up needs a passed check. Secret via `wrangler secret put`, site key is public.
+  TURNSTILE_SECRET_KEY?: string;
+  TURNSTILE_SITE_KEY?: string;
+
   // Secret that keys the hash of roll numbers (wrangler secret put ROLL_KEY_SECRET). Required in production.
   ROLL_KEY_SECRET?: string;
 

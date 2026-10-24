@@ -33,6 +33,7 @@ let sessionValid: boolean;
 let completeStatus: number;
 let takenUsernames: string[];
 let cardScanMode: 'required' | 'optional';
+let turnstileKey: string | undefined;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -47,7 +48,7 @@ function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 
   if (url === '/api/signup/session') {
     return Promise.resolve(
-      sessionValid ? json({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com', card_scan: cardScanMode }) : json({ error: 'expired' }, 401)
+      sessionValid ? json({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com', card_scan: cardScanMode, ...(turnstileKey ? { turnstile_site_key: turnstileKey } : {}) }) : json({ error: 'expired' }, 401)
     );
   }
   if (url === '/api/classes') return Promise.resolve(json({ classes: [{ id: 'cls_2026', name: 'Class of 2026' }] }));
@@ -156,6 +157,7 @@ beforeEach(() => {
   cardScanMode = 'optional';
   scanOutcome = { barcode: '20240907' };
   cameraStopped = 0;
+  turnstileKey = undefined;
   vi.stubGlobal('fetch', vi.fn(fakeFetch));
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -375,5 +377,37 @@ describe('Student card step', () => {
     await scanAndWait();
     const results = await axe.run(container, { runOnly: ['wcag2a', 'wcag2aa', 'wcag21aa'] });
     expect(results.violations.map((v) => `${v.id}: ${v.nodes[0]?.html}`)).toEqual([]);
+  });
+});
+
+describe('Bot check step', () => {
+  it('is absent when the server does not ask for it', async () => {
+    await mount();
+    expect(container.querySelector('[aria-label="Security check"]')).toBeNull();
+  });
+
+  it('blocks Create account until the check passes, sends the token, and asks for a new check after a refusal', async () => {
+    turnstileKey = 'site-key';
+    let onToken: (t: string | null) => void = () => {};
+    const resets: number[] = [];
+    (window as unknown as { turnstile: unknown }).turnstile = {
+      render: (_el: HTMLElement, o: { callback: (t: string) => void; 'expired-callback': () => void }) => { onToken = (t) => (t ? o.callback(t) : o['expired-callback']()); return 'w1'; },
+      reset: () => resets.push(1),
+      remove: () => {},
+    };
+    completeStatus = 409;
+    await mount();
+    await fillValidForm();
+    await waitFor(() => !!container.querySelector('[aria-label="Security check"]'), 'widget host');
+    await flush(30);
+    expect(submitButton().disabled).toBe(true);
+    await act(async () => onToken('tok-1'));
+    expect(submitButton().disabled).toBe(false);
+    await click(submitButton());
+    await waitFor(() => !!calls.find((c) => c.url === '/api/signup/complete'), 'post');
+    expect((calls.find((c) => c.url === '/api/signup/complete')!.body as Record<string, unknown>).turnstile_token).toBe('tok-1');
+    await waitFor(() => resets.length > 0, 'widget reset after a refused sign-up');
+    expect(submitButton().disabled).toBe(true); // the used token is gone until a new check passes
+    delete (window as unknown as { turnstile?: unknown }).turnstile;
   });
 });

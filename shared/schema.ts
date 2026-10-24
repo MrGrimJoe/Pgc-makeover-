@@ -94,6 +94,7 @@ export const signupCompleteSchema = z
     class_id: z.string().min(1).max(100),
     roll_number: rollNumberSchema,
     card: cardScanSchema.optional(),
+    turnstile_token: z.string().max(2048).optional(),
   })
   .strict()
   .refine((v) => (v.campus_id ? 1 : 0) + (v.campus_other ? 1 : 0) === 1, {
@@ -130,6 +131,8 @@ export interface SignupSessionResponse {
   email: string | null;
   /** Whether the card scan is a required step of this sign-up. */
   card_scan: 'required' | 'optional';
+  /** Public Turnstile site key when the check is on; the sign-up form then shows the widget. */
+  turnstile_site_key?: string;
 }
 
 /**

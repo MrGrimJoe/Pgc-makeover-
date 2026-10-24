@@ -583,3 +583,14 @@ Sign-up asks for the **full roll number** (as printed on the card) and a **scan 
 
 - **Appeals.** A suspended or banned student has no session, so signing in with Google gives them a one-hour *appeal ticket* cookie that can do exactly two things: send one request (1 to 500 characters, no markup, 10 tries a day) and read its status. They see the form on the sign-in screen. Admins decide under Admin, Appeals. *Reinstate* sets the account active again (a ban can only be lifted by the master, the same rule as the People tab); *Keep blocked* leaves it and shows the student the note. Every decision is logged in Activity. One open appeal per account, enforced by the database. Run migration 014 before deploying.
 - **Retention** (the daily cleanup job, `POST /api/jobs/cleanup-expired`). Open reports, sign-up requests and appeals are never deleted by it. Handled ones go after: reports 90 days, sign-up requests 90 days, appeals 180 days, the admin activity log 365 days. Expired appeal tickets are removed straight away. Report evidence still expires after 30 days. The numbers are constants at the top of `worker/jobs/expiry.ts`.
+
+## Bot check (Cloudflare Turnstile)
+
+Optional and off by default. Turn it on to make sign-up need a passed Turnstile check:
+
+1. In the Cloudflare dashboard create a Turnstile widget for your domain (free). Copy the site key and the secret key.
+2. `npx wrangler secret put TURNSTILE_SECRET_KEY`, and add the site key as a plain variable `TURNSTILE_SITE_KEY` in `wrangler.toml` (`[vars]`). Both must be set; with only one, the check stays off.
+3. The sign-up form then shows the check, and `POST /api/signup/complete` verifies the token with Cloudflare before anything is looked up or written. It fails closed: a missing token, a rejected token, or Cloudflare being unreachable all refuse the sign-up (403, `turnstile_failed`) without using up the sign-up ticket. A token works once, so the form asks for a new check after any refused attempt.
+4. The widget script comes from `challenges.cloudflare.com`. There is no Content-Security-Policy in this app today; if you add one, allow that host for scripts and frames.
+
+The widget has been tested only against a stand-in for Cloudflare's script, not on a real device.

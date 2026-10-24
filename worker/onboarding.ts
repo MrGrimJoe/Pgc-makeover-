@@ -20,6 +20,7 @@ import { findCampus, campusName, cleanCampusOther } from '../shared/campus.ts';
 import { isReservedUsername, normalizeUsername } from '../shared/username.ts';
 import { barcodeMatchesRoll, campusKey, normalizeRoll, rollLast3 } from '../shared/roll.ts';
 import { cardScanRequired, computeRollKey } from './roll-key.ts';
+import { turnstileEnabled, verifyTurnstile } from './turnstile.ts';
 
 export const SIGNUP_TICKET_COOKIE = 'signup_ticket';
 export const SIGNUP_TICKET_TTL_MS = 15 * 60 * 1000;
@@ -81,6 +82,7 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
       suggested_name: ticket.display_name,
       email: ticket.email,
       card_scan: cardScanRequired(env) ? 'required' : 'optional',
+      ...(turnstileEnabled(env) ? { turnstile_site_key: env.TURNSTILE_SITE_KEY } : {}),
     };
     return jsonResponse(body);
   }
@@ -127,6 +129,11 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
     if (data.campus_other !== undefined) {
       campusOther = cleanCampusOther(data.campus_other);
       if (!campusOther) return jsonResponse({ error: 'Other campus must be 2 to 80 characters with no markup' }, 400);
+    }
+
+    // Bot check, before anything is looked up or written
+    if (!(await verifyTurnstile(env, data.turnstile_token, request.headers.get('CF-Connecting-IP')))) {
+      return jsonResponse({ error: 'The security check did not pass. Reload the check and try again.', code: 'turnstile_failed' }, 403);
     }
 
     // ---- Student identity: roll number + campus, and what the card said ----

@@ -3,6 +3,7 @@ import type { ClassRow, MeResponse, SignupSessionResponse } from '../../shared/s
 import { CampusPicker, type CampusChoice } from '../components/CampusPicker.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { CardScanner } from '../components/CardScanner.tsx';
+import { TurnstileWidget } from '../components/TurnstileWidget.tsx';
 import { ROLL_INPUT_PATTERN, barcodeMatchesRoll, isUsableRoll, normalizeRoll } from '../../shared/roll.ts';
 
 interface OnboardingPageProps {
@@ -41,6 +42,9 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
   const [cardScan, setCardScan] = useState<'required' | 'optional'>('required');
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
   const [usernameState, setUsernameState] = useState<UsernameState>({ status: 'idle' });
 
   const [submitting, setSubmitting] = useState(false);
@@ -63,6 +67,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
         setRealName(data.suggested_name || '');
         setEmail(data.email);
         setCardScan(data.card_scan === 'optional' ? 'optional' : 'required');
+        setSiteKey(data.turnstile_site_key ?? null);
         setSession('ready');
         const cls = await fetch('/api/classes');
         if (cls.ok && !cancelled) {
@@ -120,6 +125,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
     usernameState.status !== 'unavailable' &&
     !!campus &&
     !!classId &&
+    (!siteKey || !!turnstileToken) &&
     ROLL_INPUT_PATTERN.test(roll.trim()) &&
     isUsableRoll(normalizeRoll(roll)) &&
     // a scan that disagrees with the typed roll number blocks sign-up; an unscanned card blocks it only when required
@@ -141,6 +147,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
           class_id: classId,
           roll_number: roll.trim(),
           ...(scannedBarcode ? { card: { barcode: scannedBarcode } } : {}),
+          ...(siteKey && turnstileToken ? { turnstile_token: turnstileToken } : {}),
         }),
       });
       const data = (await res.json()) as {
@@ -158,6 +165,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
       setCreated(data.me);
     } catch (err) {
       setError((err as Error).message);
+      if (siteKey) setTurnstileReset((n) => n + 1); // a check can be used once
     } finally {
       setSubmitting(false);
     }
@@ -367,6 +375,8 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
             {scannedBarcode ? 'Scan again' : 'Scan student card'}
           </button>
         </div>
+
+        {siteKey && <TurnstileWidget siteKey={siteKey} onToken={setTurnstileToken} resetKey={turnstileReset} />}
 
         {error && (
           <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">
