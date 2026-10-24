@@ -8,7 +8,7 @@ import { isDeepPage, readEntry, sameNav, type NavState } from './lib/nav-history
 import type { MeResponse } from '../shared/schema.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { BottomTabBar, type AppTab } from './components/BottomTabBar.tsx';
-import { SideNav } from './components/SideNav.tsx';
+import { SideNav, useSideNavCollapsed } from './components/SideNav.tsx';
 import { useLayout } from './lib/layout.ts';
 import { SignInPage, type SignInNotice } from './pages/SignInPage.tsx';
 import { OnboardingPage } from './pages/OnboardingPage.tsx';
@@ -36,6 +36,7 @@ function readAuthRedirect(): { signup: boolean; notice: SignInNotice | null } {
 
 export default function App() {
   const layout = useLayout();
+  const [navCollapsed, toggleNavCollapsed] = useSideNavCollapsed(layout);
   const wide = layout !== 'phone'; // tablet and desktop use the side navigation instead of the bottom bar
   const [authRedirect] = useState(readAuthRedirect);
   const [authNotice, setAuthNotice] = useState<SignInNotice | null>(authRedirect.notice);
@@ -194,16 +195,20 @@ export default function App() {
   const signedOutWide = wide && !currentUser;
 
   return (
-    <div className="min-h-screen bg-[var(--bg2,#F8F9FC)] text-[var(--text,#17233A)] flex justify-center">
+    <div className="min-h-screen bg-[var(--bg2,#F8F9FC)] text-[var(--text,#17233A)] flex">
+      {/* The navigation is docked to the left edge of the window; the column is centered in the space that is left,
+          so the navigation never moves when the column gets wider (Messages) or narrower. */}
       {wide && currentUser && (
         <SideNav
           activeTab={activeTab === 'admin' ? 'settings' : activeTab}
           setActiveTab={selectTab}
           onOpenMessages={openMessages}
           onTitleClick={() => setActiveTab('feed')}
-          expanded={layout === 'desktop'}
+          expanded={layout === 'desktop' && !navCollapsed}
+          onToggleCollapsed={layout === 'desktop' ? toggleNavCollapsed : undefined}
         />
       )}
+      <div className="flex-1 min-w-0 flex justify-center">
       <div className={`w-full ${twoPane ? 'max-w-wide' : 'max-w-content'} min-w-0 min-h-screen ${signedOutWide ? 'bg-[var(--bg2,#F8F9FC)]' : 'bg-[var(--bg,#fff)]'} relative flex flex-col font-sans ${signedOutWide ? '' : wide ? 'border-x border-[var(--line,#E8EBF0)]' : 'pb-16'}`}>
         {/* The app bar is only for phones (wider screens have the side navigation); Settings has its own header */}
         {!wide && activeTab !== 'settings' && activeTab !== 'admin' && <Navbar
@@ -331,6 +336,7 @@ export default function App() {
 
         {/* DEV-ONLY: remove before launch */}
         <DevBar currentUser={currentUser} onLogout={handleLogout} />
+      </div>
       </div>
     </div>
   );

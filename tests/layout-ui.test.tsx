@@ -135,3 +135,23 @@ describe('overlays follow the layout', () => {
     expect(document.querySelector<HTMLElement>('[role="dialog"]')!.dataset.closing).toBe('false');
   });
 });
+
+describe('the desktop sidebar can be collapsed to the rail', () => {
+  it('Collapse sidebar turns it into the rail, Expand sidebar brings it back, and --nav-w follows', async () => {
+    await boot(1280);
+    expect(navs()[0]!.dataset.nav).toBe('sidebar');
+    await click(byLabel(navs()[0]!, 'Collapse sidebar'));
+    expect(navs().map((n) => n.dataset.nav)).toEqual(['rail']);
+    expect(document.documentElement.dataset.navCollapsed).toBe('true');
+    expect(byLabel(navs()[0]!, 'Feed')?.getAttribute('aria-current')).toBe('page'); // still where you were
+    await click(byLabel(navs()[0]!, 'Expand sidebar'));
+    expect(navs().map((n) => n.dataset.nav)).toEqual(['sidebar']);
+    expect(document.documentElement.dataset.navCollapsed).toBeUndefined();
+  });
+
+  it('the tablet rail has no toggle (it is already as small as it gets)', async () => {
+    await boot(820);
+    expect(byLabel(navs()[0]!, 'Collapse sidebar')).toBeFalsy();
+    expect(byLabel(navs()[0]!, 'Expand sidebar')).toBeFalsy();
+  });
+});
