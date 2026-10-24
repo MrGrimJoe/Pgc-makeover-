@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#244C8A" />
+<title>Offline</title>
+<style>
+  :root { color-scheme: light dark; --bg:#FFFFFF; --text:#17233A; --muted:#5B6577; --blue:#244C8A; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0F1522; --text:#E8ECF5; --muted:#A7B1C4; --blue:#9DB8E8; } }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:360px; padding:24px; text-align:center; }
+  h1 { font-size:20px; margin:0 0 8px; }
+  p { margin:0 0 20px; color:var(--muted); font-size:15px; line-height:1.5; }
+  button { min-height:44px; padding:0 20px; border:0; border-radius:8px; background:var(--blue); color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
+  @media (prefers-color-scheme: dark) { button { color:#0F1522; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>You are offline</h1>
+  <p>Dialtone needs a connection to show posts and messages. Your private data is never kept on this device for offline use.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

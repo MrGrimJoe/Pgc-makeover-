@@ -12,6 +12,7 @@ import { BottomSheet } from '../components/BottomSheet.tsx';
 import { Avatar } from '../components/Avatar.tsx';
 import { useLayout } from '../lib/layout.ts';
 import { arrowKeyNav } from '../lib/arrow-keys.ts';
+import { ShareApp } from '../components/ShareApp.tsx';
 
 interface SettingsPageProps {
   currentUser: MeResponse;
@@ -306,6 +307,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
             <button type="button" onClick={onOpenAdmin} className={`${ghost} w-full`}>Open admin tools</button>
           </section>
         )}
+        <ShareApp className={card} />
         <section aria-labelledby="set-account" className={card}>
           <h2 id="set-account" className={h2}>Account</h2>
           <div className="flex items-center gap-2 text-[12px] text-[var(--muted,#5B6577)]">

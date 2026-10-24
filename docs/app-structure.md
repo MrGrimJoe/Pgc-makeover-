@@ -4,14 +4,14 @@ This is the contract for where each feature lives. Navigation: bottom tabs Home,
 
 | Page | What lives there |
 |---|---|
-| Home | Feed (For you, Following). Post cards: avatar (picture or initial), username, class, expiry chip, text, photos, poll, a sticker/GIF if the post has one. Like, comment, report. |
+| Home | A dismissible install banner when installing is possible (see README, "Install as an app"). Feed (For you, Following). Post cards: avatar (picture or initial), username, class, expiry chip, text, photos, poll, a sticker/GIF if the post has one. Like, comment, report. |
 | Search | Search box, My class / Campus / Everyone tabs, trending, suggested people. |
 | New post | Text, plus exactly one of: photos (up to 4), a poll, or one sticker/GIF. Expiry note. |
 | Messages list | Conversations; previews show "Photo", "Sticker", "GIF" for non-text messages. |
 | Chat | Header (avatar, name, menu with Block and Report), background, messages, typing bar, picker panel, media viewer. |
 | Profile | Wallpaper header, stats, posts grid. Own profile: Edit profile, Settings (gear), Sign out. Others: Follow, Message, menu (Block, Report). |
 | Edit profile | Photo, display name, real name, bio, campus and class, profile wallpaper (presets or the person's own image), accent, text style. Identity and look only. |
-| Settings (new) | Chat background (all chats), who can message you, blocked people, interests, my stickers & GIFs (manage), sign out, delete account. |
+| Settings (new) | Chat background (all chats), who can message you, blocked people, interests, my stickers & GIFs (manage), sign out, delete account. Account group also has Install and share (install steps for this device, Share link, QR code). |
 
 ## Rules
 

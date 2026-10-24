@@ -289,3 +289,9 @@ See "Admin and moderation" in the README for the rules. Day to day:
 - **Read the activity log:** `npx wrangler d1 execute classsync-db --remote --command "SELECT created_at, actor_id, action, target_id, detail FROM admin_actions ORDER BY created_at DESC LIMIT 50"`
 - **Deploy order:** run `npm run db:migrate:remote` before `npm run deploy`; sign-in reads the `role` column added by migration 012.
 
+## 11. Service worker and app icons
+
+- `public/sw.js` keeps only static files (offline page, icons, `/assets/`, `/stickers/`) and never `/api/`. It cannot hold anyone's private data, so signing out or deleting an account needs no cache clearing.
+- **A bad service worker release:** fix `public/sw.js`, bump `CACHE` (for example `dialtone-static-v2`), deploy. Browsers re-check the worker file on each visit and the new version deletes the old cache. As a last resort ship a `sw.js` that only calls `self.registration.unregister()`.
+- **Changing icons or the app name:** edit `public/icons/*.png` and `public/manifest.webmanifest`. Phones that already installed the app may keep the old icon until it is removed and added again (iOS) or for a few days (Android).
+- **Cloudflare free tier:** as far as I know, static-asset requests are free only when they are answered without running the Worker; this project sets `run_worker_first = true`, so page and asset requests probably count toward the Workers free request limit. Verify this against Cloudflare's current Static Assets pricing text. The service worker lowers that number for repeat visits (hashed assets and stickers come from the phone's cache). Check the current limit on Cloudflare's pricing page before inviting many students.

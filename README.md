@@ -295,6 +295,7 @@ Before opening the platform to real students, verify all production hardening cr
   - `database_id` is set to the real provisioned D1 UUID (not `placeholder-d1-id`).
   - `ENVIRONMENT = "production"` under `[vars]`.
 - [ ] **Replace the placeholder stickers and GIFs** with the real ones (see "Stickers and GIFs" above). `npm run build` warns until `public/stickers/placeholder/` is gone.
+- [ ] **Replace the placeholder app icons** in `public/icons/` (see "Install as an app (PWA)").
 - [ ] **Run Prelaunch Check**:
   Execute the prelaunch verification gate and verify it passes:
   ```bash
@@ -336,6 +337,18 @@ Before opening the platform to real students, verify all production hardening cr
 - **3-day lock:** a refused post is recorded as a strike. Three strikes in a row (no normal post in between, all within 3 days) pause posting for 3 days from the newest strike (`403`, `code: spam_locked`, `locked_until`, `Retry-After`). A normal post clears the streak, and old strikes expire by themselves.
 - The check covers new posts only. Comments, messages and profile text are not checked yet, and there is no appeal screen: a wrongly refused post is fixed by editing the text, and a lock can be lifted by deleting the person's rows in `spam_strikes`.
 - Counts in polls leave out votes from anyone blocked with the poll's author (either direction, even if the block came after the vote); the vote rows stay, so unblocking brings them back.
+
+## Install as an app (PWA)
+
+Dialtone can be added to a phone's home screen without any app store. What exists:
+
+- **Files** (all in `public/`, copied to the site root by the build): `manifest.webmanifest` (name, colours, icons, `display: standalone`), `sw.js` (service worker), `offline.html`, `icons/` (192, 512, maskable 512, 180 px Apple icon). `index.html` links the manifest, the theme colour and the Apple home-screen tags. The icons are **placeholders** (a yellow ring on the brand blue): replace the four PNGs in `public/icons/` with the real logo, keeping the file names and sizes (`tests/pwa.test.ts` checks both). The maskable icon must keep its artwork inside the middle 80%.
+- **Service worker rules** (`public/sw.js`): static files only. It keeps the offline page, the icons, the hashed build files in `/assets/` and the bundled stickers. It never touches `/api/` (so feeds, profiles, messages, media and sign-in always come from the server), never stores HTML pages, uploads or anything from a signed-in session, and ignores non-GET and range (video) requests. Page loads always use the network; if the phone is offline the offline page is shown. It registers only in production builds on HTTPS (`registerServiceWorker` in `src/lib/pwa.ts`). When you change its rules, change `CACHE` at the top of the file; old caches are deleted on the next visit.
+- **Install help** (`src/lib/pwa.ts`, `InstallBanner`, `ShareApp`): Android and desktop Chrome/Edge use the browser's own prompt, captured and shown as a banner with Install and Not now. On iPhone/iPad Safari, which has no install prompt, the banner explains Share, then Add to Home Screen. In another app's built-in browser (Instagram, Facebook, TikTok, WebViews) it asks the person to open Safari or Chrome; the sign-in page shows only this notice, because Google refuses sign-in inside those browsers. Other iOS browsers (Chrome, Firefox, Edge on iPhone) are also sent to Safari rather than promising something unverified. "Not now" hides the banner for 14 days on that device, installing hides it for good, and Settings, Install and share, always shows the instructions.
+- **Share and QR** (Settings, Install and share): Share link (the phone share sheet, or copy) and a QR code. The code holds only the site address (`window.location.origin` plus `/`): no query, no fragment, no account information. The QR drawing uses the small MIT library `qrcode-generator` (no dependencies).
+- **Not done on purpose:** the page does not claim it can force an install dialog on iOS, there are no startup (splash) images, and no private API response is cached.
+
+After deploying, check on the real site: Chrome DevTools, Application, Manifest shows no errors and "Installable"; Service Workers shows `sw.js` running; Network shows `/api/` requests are not served from the service worker; on an iPhone in Safari, Share, Add to Home Screen gives the right icon and name. The canonical address (and so the QR code) is whatever address people use to open the site; if you later move to your own domain, the QR code follows automatically.
 
 ## Polls and profile backgrounds
 

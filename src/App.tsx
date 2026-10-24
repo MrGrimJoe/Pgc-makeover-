@@ -20,6 +20,7 @@ import { ProfileViewPage } from './pages/ProfileViewPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { AdminPage } from './pages/AdminPage.tsx';
 import { MessagesPage } from './pages/MessagesPage.tsx';
+import { InstallBanner } from './components/InstallBanner.tsx';
 // DEV-ONLY: remove before launch
 import { DevBar } from './components/DevBar.tsx';
 
@@ -212,6 +213,9 @@ export default function App() {
             setActiveTab('messages');
           }}
         />}
+
+        {/* Install help: Home only when signed in; the sign-in page only gets the open-in-your-browser notice */}
+        {currentUser ? activeTab === 'feed' && <InstallBanner /> : (activeTab === 'signin' || activeTab === 'signup') && <InstallBanner signedOut />}
 
         <main className="flex-1 w-full overflow-x-hidden">
           <div key={pageKey} className={pageClass}>
