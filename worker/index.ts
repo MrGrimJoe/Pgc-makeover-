@@ -2058,7 +2058,22 @@ export default {
           impressions_count: Number(r.impressions_count || 0),
         }));
 
-        const ranked = rankPosts(candidates, rankingContext, limit);
+        // Pagination: cursor is the page number. Page N is ranked from the candidates that pages
+        // 0..N-1 did not take, so page 0 is exactly what an unpaginated request returns and every
+        // page gets the same diversity caps and exploration mix. Candidate pool is at most 100 posts.
+        const rawPage = Number.parseInt(url.searchParams.get('cursor') ?? '', 10);
+        const pageIndex = Number.isFinite(rawPage) && rawPage > 0 ? Math.min(rawPage, 50) : 0;
+        let remaining = candidates.filter(
+          (c) => c.status === 'active' && c.expires_at > nowIso && !notInterestedPostIds.has(c.id)
+        );
+        let ranked = rankPosts(remaining, rankingContext, limit);
+        for (let page = 0; page < pageIndex; page++) {
+          const taken = new Set(ranked.map((rp) => rp.post.id));
+          remaining = remaining.filter((c) => !taken.has(c.id));
+          ranked = rankPosts(remaining, rankingContext, limit);
+        }
+        const takenOnPage = new Set(ranked.map((rp) => rp.post.id));
+        const hasMoreRanked = remaining.some((c) => !takenOnPage.has(c.id));
         const rankedIds = ranked.map((rp) => rp.post.id);
         const matchedRows = (candidateRows.results || []).filter((r) => rankedIds.includes(r.id));
         const hydrated = await hydratePosts(env.DB, matchedRows, auth.user.id);
@@ -2068,8 +2083,8 @@ export default {
 
         return jsonResponse({
           posts: hydrated,
-          next_cursor: null,
-          has_more: false,
+          next_cursor: hasMoreRanked ? String(pageIndex + 1) : null,
+          has_more: hasMoreRanked,
         });
       }
 

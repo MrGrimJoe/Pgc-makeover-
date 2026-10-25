@@ -14,6 +14,7 @@ const PAGE_SIZE = 10;
 export function createApiFeedSource(mode: FeedMode): FeedSource<PostItem> {
   return createPooledSource<PostItem>({
     classify: classifyPost,
+    getKey: (post) => post.id,
     fetchPage: async (cursor) => {
       const params = new URLSearchParams({ mode, limit: String(PAGE_SIZE) });
       if (cursor) params.set('cursor', cursor);
