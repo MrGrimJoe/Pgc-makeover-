@@ -186,3 +186,21 @@ describe('FeedPage frame architecture', () => {
     expect(m.container.textContent).toContain('No posts in this feed yet.');
   });
 });
+
+describe('Mid-Frame slot', () => {
+  it('adds no visible gap: it is an empty zero-height element', async () => {
+    observed.clear();
+    vi.stubGlobal('IntersectionObserver', FakeIO);
+    installFeedApi();
+    const m = await mount(<FeedPage currentUserId="u1" onNavigateToCompose={() => {}} onViewAuthorProfile={() => {}} />);
+    await flush();
+    await flush();
+    await scrollToFrame(m.container, 1);
+    const mid = m.container.querySelector<HTMLElement>('[data-frame-kind="MID"]');
+    expect(mid).not.toBeNull();
+    expect(mid?.style.minHeight ?? '').toBe('');
+    expect(mid?.childElementCount).toBe(0);
+    m.unmount();
+    vi.unstubAllGlobals();
+  });
+});

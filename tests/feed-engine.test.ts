@@ -100,13 +100,25 @@ describe('FeedFrameManager', () => {
     expect(kinds(m)).toEqual(['SAFE', 'MID']);
   });
 
-  it('advance() and retreat() do nothing while a neighbour is already mounted or at the start', async () => {
+  it('advance() steps to the last mounted frame (a zero-height Mid-Frame never crosses the midline)', async () => {
+    const m = new FeedFrameManager<Item>({ source: source() });
+    await m.focus(1); // window 0,1,2: frame 2 is the Mid-Frame
+    expect(indexes(m)).toEqual([0, 1, 2]);
+    await m.advance();
+    expect(m.getFocusIndex()).toBe(2);
+    await m.advance(); // already on the last mounted frame: one further, onto WILD 3
+    expect(m.getFocusIndex()).toBe(3);
+    expect(kinds(m)).toEqual(['WILD', 'SAFE']);
+  });
+
+  it('retreat() mirrors advance() and does nothing at the start', async () => {
     const m = new FeedFrameManager<Item>({ source: source() });
     await m.focus(0);
     await m.retreat();
     expect(m.getFocusIndex()).toBe(0);
-    await m.advance(); // frame 1 is already mounted ahead
-    expect(m.getFocusIndex()).toBe(0);
+    await m.focus(4);
+    await m.retreat();
+    expect(m.getFocusIndex()).toBe(3);
   });
 
   it('rebuilds the exact same frame when scrolling back', async () => {

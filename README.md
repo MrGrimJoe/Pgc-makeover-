@@ -619,7 +619,7 @@ The home feed no longer renders one endless list. It renders **frames**: discret
 ### Concepts
 
 - **Frame**: an immutable chunk of posts (8 by default; set `frameSize` to anything from 5 to 10). Its `index` is stable, so scrolling back up rebuilds the identical frame. Frame *data* is cached; only the *DOM* is destroyed.
-- **Kinds**: `SAFE` and `WILD` frames hold only posts of that moderation state (the pooled source guarantees it). `MID` frames hold no posts: they are an empty transition slot.
+- **Kinds**: `SAFE` and `WILD` frames hold only posts of that moderation state (the pooled source guarantees it). `MID` frames hold no posts: they are an empty, zero-height transition slot (no visible gap) that another manager can fill later.
 - **Layout**: a pure function from position to kind. The default cycle `SAFE, SAFE, MID, WILD` puts a Mid-Frame after every two `SAFE` frames. Swap it with `layout: cycleLayout([...])`.
 - **Volatile frame**: a frame that may never be mounted next to a `WILD` frame. `MID` frames are volatile by default (this is the "ad or non-compatible slot"); `markVolatile(frameId)` opts any other frame in.
 - **Window**: at most `maxActiveFrames` (default 3: one behind, the focused frame, one ahead) are mounted.
@@ -630,7 +630,7 @@ The home feed no longer renders one endless list. It renders **frames**: discret
 1. At most 3 frames are mounted at any moment.
 2. A volatile frame and a `WILD` frame are **never in the mounted set together**. Before a `WILD` frame mounts, every volatile frame has been unmounted (`pre-wild`). If the focus is on a volatile frame, the `WILD` neighbour is held back instead (`conflict`).
 3. Scrolling down and up share one code path. The scroll direction decides mount order and which neighbour wins a tie.
-4. When a held-back neighbour leaves nothing to scroll onto, `advance()` (user scrolled past the last frame) and `retreat()` (above the first) move the focus on. The page wires these to two invisible sentinels.
+4. When the user reaches the end of the mounted frames, `advance()` moves the focus on (and `retreat()` at the top). This keeps the feed moving past a zero-height Mid-Frame and past a `WILD` frame held back behind a focused one. The page wires them to two invisible sentinels.
 5. Frames that leave the window are fully removed. A blank spacer of their measured height stands in above the list, and the scroll position is re-anchored after every change, so nothing jumps.
 6. A kind that runs out of posts is skipped rather than ending the feed. The feed never ends on an empty Mid-Frame.
 7. Overlapping `focus()` calls are safe (the latest wins), a failed load can be retried with `retry()`, and a throwing event handler can never break the core.
@@ -885,19 +885,20 @@ export class FeedFrameManager<T> {
   }
 
   /**
-   * Call when the user has scrolled past the last mounted frame. Needed because a deferred neighbour
-   * (a WILD frame below a focused Mid-Frame) leaves nothing below to scroll onto. No-op when a frame
-   * ahead of the focus is already mounted.
+   * Call when the user has scrolled to the end of the mounted frames. Moves the focus to the last
+   * mounted frame, or one further when it is already there. This keeps the feed moving when the last
+   * mounted frame is a zero-height Mid-Frame (it never crosses the viewport middle) and when a WILD
+   * neighbour is held back behind a focused Mid-Frame (nothing below to scroll onto).
    */
   advance(): Promise<void> {
-    if (this.focusIndex < 0 || Math.max(...this.mounted.keys()) > this.focusIndex) return Promise.resolve();
-    return this.focus(this.focusIndex + 1);
+    if (this.focusIndex < 0 || this.mounted.size === 0) return Promise.resolve();
+    return this.focus(Math.max(this.focusIndex + 1, Math.max(...this.mounted.keys())));
   }
 
-  /** Mirror of advance(): the user has scrolled above the first mounted frame. */
+  /** Mirror of advance(): the user has scrolled to the top of the mounted frames. */
   retreat(): Promise<void> {
-    if (this.focusIndex <= 0 || Math.min(...this.mounted.keys()) < this.focusIndex) return Promise.resolve();
-    return this.focus(this.focusIndex - 1);
+    if (this.focusIndex <= 0 || this.mounted.size === 0) return Promise.resolve();
+    return this.focus(Math.min(this.focusIndex - 1, Math.min(...this.mounted.keys())));
   }
 
   getFocusIndex(): number {

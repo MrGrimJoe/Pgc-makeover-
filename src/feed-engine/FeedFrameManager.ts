@@ -89,19 +89,20 @@ export class FeedFrameManager<T> {
   }
 
   /**
-   * Call when the user has scrolled past the last mounted frame. Needed because a deferred neighbour
-   * (a WILD frame below a focused Mid-Frame) leaves nothing below to scroll onto. No-op when a frame
-   * ahead of the focus is already mounted.
+   * Call when the user has scrolled to the end of the mounted frames. Moves the focus to the last
+   * mounted frame, or one further when it is already there. This keeps the feed moving when the last
+   * mounted frame is a zero-height Mid-Frame (it never crosses the viewport middle) and when a WILD
+   * neighbour is held back behind a focused Mid-Frame (nothing below to scroll onto).
    */
   advance(): Promise<void> {
-    if (this.focusIndex < 0 || Math.max(...this.mounted.keys()) > this.focusIndex) return Promise.resolve();
-    return this.focus(this.focusIndex + 1);
+    if (this.focusIndex < 0 || this.mounted.size === 0) return Promise.resolve();
+    return this.focus(Math.max(this.focusIndex + 1, Math.max(...this.mounted.keys())));
   }
 
-  /** Mirror of advance(): the user has scrolled above the first mounted frame. */
+  /** Mirror of advance(): the user has scrolled to the top of the mounted frames. */
   retreat(): Promise<void> {
-    if (this.focusIndex <= 0 || Math.min(...this.mounted.keys()) < this.focusIndex) return Promise.resolve();
-    return this.focus(this.focusIndex - 1);
+    if (this.focusIndex <= 0 || this.mounted.size === 0) return Promise.resolve();
+    return this.focus(Math.min(this.focusIndex - 1, Math.min(...this.mounted.keys())));
   }
 
   getFocusIndex(): number {
