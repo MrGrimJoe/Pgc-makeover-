@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { makeEnv, call, startSignup, CAMPUS_X } from './_helpers.ts';
 import type { Env } from '../worker/types.ts';
 
-const body = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CAMPUS_X, class_id: 'cls_2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
+const body = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CAMPUS_X, class_id: 'cls_2026', program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
 
 describe('Turnstile on sign-up', () => {
   let verifier: ReturnType<typeof vi.fn<(url: string, init?: RequestInit) => Promise<Response>>>;

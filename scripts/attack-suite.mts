@@ -146,7 +146,7 @@ const startSignup = async (sub: string, email: string) => {
   const t = /signup_ticket=([^;]+)/.exec(cb.h.get('set-cookie') || '')?.[1];
   return { cookie: t ? 'signup_ticket=' + t : '', location: cb.h.get('location') || '' };
 };
-const VALID = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CMP_A, class_id: 'cls_2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
+const VALID = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CMP_A, class_id: 'cls_2026', program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
 // log in never creates accounts
 const initLogin = await call('GET', '/api/auth/google?mock=true&intent=login&mock_sub=stranger', { env: dev });
 const cbLogin = await call('GET', initLogin.h.get('location') || '/', { env: dev, cookie: 'oauth_state=' + (/oauth_state=([^;]+)/.exec(initLogin.h.get('set-cookie') || '')?.[1] || '') });
@@ -202,6 +202,17 @@ const dblUsers = (await db.prepare("SELECT COUNT(*) c FROM profiles WHERE userna
   ok('6 simultaneous sign-ups with one roll number: exactly one 201, rest 409, no 5xx', raced.filter(x => x.s === 201).length === 1 && raced.filter(x => x.s === 409).length === 5, raced.map(x => x.s).join(','));
   r = await call('GET', '/api/admin/disputes'); ok('GET /api/admin/disputes signed out -> 401', r.s === 401, `status ${r.s}`);
   r = await call('GET', '/api/admin/disputes', { cookie: ayesha }); ok('GET /api/admin/disputes as an ordinary student -> 403', r.s === 403, `status ${r.s}`);
+}
+// academic details
+{
+  r = await call('GET', '/api/me/academic'); ok('GET /api/me/academic signed out -> 401', r.s === 401, `status ${r.s}`);
+  r = await call('PUT', '/api/me/academic', { json: { program: 'ics', session: '2024-2026', class_id: 'cls_2026' } }); ok('PUT /api/me/academic signed out -> 401', r.s === 401, `status ${r.s}`);
+  for (const [label, patch] of [['unknown program', { program: 'x' }], ['bad session', { session: '2024' }], ['markup section', { section: '<img src=x onerror=alert(1)>' }], ['unknown class', { class_id: 'cls_nope' }], ['extra field (role)', { role: 'admin' }], ['SQLi session', { session: "2024-2026'); --" }]] as const) {
+    r = await call('PUT', '/api/me/academic', { cookie: ayesha, json: { program: 'ics', session: '2024-2026', class_id: 'cls_2026', ...patch } });
+    ok(`academic update rejected: ${label}`, r.s === 400, `status ${r.s}`);
+  }
+  r = await call('GET', '/api/me/academic', { cookie: ayesha }); ok('own academic details come back, unchanged by the rejected updates', r.s === 200 && JSON.parse(r.text).session === '2024-2026' && JSON.parse(r.text).program === 'fsc_pre_engineering', r.text.slice(0, 120));
+  r = await call('GET', '/api/me', { cookie: ayesha }); ok('/api/me does not carry academic or roll data', !/fsc_pre_engineering|roll_key|2024-2026/.test(r.text), '');
 }
 // username availability
 await clearRL(); const ua = async (u: string) => (await call('GET', '/api/username-available?u=' + encodeURIComponent(u), { cookie: A })).j;

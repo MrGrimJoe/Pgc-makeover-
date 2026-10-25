@@ -218,8 +218,9 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
       ).bind(userId, usernameNormalized, usernameNormalized, usernameNormalized, data.class_id, data.campus_id ?? null, campusOther, data.real_name),
       env.DB.prepare('INSERT INTO user_settings (user_id) VALUES (?)').bind(userId),
       env.DB.prepare(
-        `INSERT INTO user_private (user_id, email, roll_last3, campus_key, roll_key, verification_status, verification_method, verified_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO user_private (user_id, email, roll_last3, campus_key, roll_key, verification_status, verification_method, verified_at,
+                                  program, session, section, academic_confirmed_at, verification_detail)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         userId,
         ticket.email,
@@ -228,7 +229,12 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
         rollKey,
         verificationStatus,
         verificationStatus === 'provisional' ? 'barcode' : null,
-        verificationStatus === 'provisional' ? now : null
+        verificationStatus === 'provisional' ? now : null,
+        data.program,
+        data.session,
+        data.section || null,
+        now,
+        data.card?.printed ? JSON.stringify(data.card.printed) : null
       ),
       env.DB.prepare('UPDATE signup_tickets SET used_at = ? WHERE id = ? AND used_at IS NULL').bind(now, ticket.id),
       env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)').bind(

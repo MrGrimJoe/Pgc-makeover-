@@ -15,3 +15,6 @@ bun.lockb
 backups/
 .wrangler/
 shots/
+
+# copied from node_modules by scripts/copy-ocr-assets.mjs
+public/ocr/

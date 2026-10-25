@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { makeEnv, call, seedClassCampus, startSignup, seedUser, CAMPUS_X } from './_helpers.ts';
 import type { Env } from '../worker/types.ts';
 
-const base = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CAMPUS_X, class_id: 'cls_2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
+const base = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CAMPUS_X, class_id: 'cls_2026', program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
 
 describe('sign-up help requests (admin)', () => {
   let env: Env;

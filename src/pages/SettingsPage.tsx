@@ -1,3 +1,4 @@
+import { AcademicCard } from '../components/AcademicCard.tsx';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import type { BlockItem, MeResponse, UserInterestTopic } from '../../shared/schema.ts';
@@ -300,6 +301,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
         </div>}
         {show('account') && <div role="group" aria-labelledby="grp-account" className="rise-in space-y-3" style={{ '--i': 4 } as React.CSSProperties}>
           <p id="grp-account" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Account</p>
+        <AcademicCard />
         {onOpenAdmin && (currentUser.role === 'admin' || currentUser.role === 'master') && (
           <section aria-labelledby="set-admin" className={card}>
             <h2 id="set-admin" className={h2}>Admin tools</h2>

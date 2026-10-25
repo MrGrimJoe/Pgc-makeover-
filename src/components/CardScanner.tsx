@@ -4,7 +4,7 @@ import { startCameraScan, type CameraScan, type CameraScanError } from '../lib/c
 
 interface CardScannerProps {
   /** The decoded barcode text. Called once; the camera is already stopped. */
-  onResult: (barcode: string) => void;
+  onResult: (barcode: string, frame?: HTMLCanvasElement) => void;
   onClose: () => void;
 }
 
@@ -31,8 +31,8 @@ export const CardScanner: React.FC<CardScannerProps> = ({ onResult, onClose }) =
     setError(null);
     startCameraScan(
       video,
-      (text) => {
-        if (!cancelled) onResultRef.current(text);
+      (text, frame) => {
+        if (!cancelled) onResultRef.current(text, frame);
       },
       (kind) => {
         if (!cancelled) setError(kind);

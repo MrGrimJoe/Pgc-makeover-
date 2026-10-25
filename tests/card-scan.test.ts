@@ -2,7 +2,15 @@
 import { describe, it, expect } from 'vitest';
 import bwipjs from 'bwip-js';
 import { PNG } from 'pngjs';
+import { readFileSync } from 'node:fs';
 import { decodeBarcodeFromGrey, classifyCameraError } from '../src/lib/cardScan.ts';
+
+function greyOf(file: string) {
+  const img = PNG.sync.read(readFileSync(new URL(`./fixtures/${file}`, import.meta.url)));
+  const grey = new Uint8ClampedArray(img.width * img.height);
+  for (let i = 0; i < grey.length; i++) grey[i] = (img.data[i * 4]! * 77 + img.data[i * 4 + 1]! * 150 + img.data[i * 4 + 2]! * 29) >> 8;
+  return { width: img.width, height: img.height, grey };
+}
 
 async function picture(bcid: string, text: string, scale = 3, extra: Record<string, unknown> = {}) {
   const png = await bwipjs.toBuffer({ bcid, text, scale, height: 14, includetext: false, paddingwidth: 12, paddingheight: 8, backgroundcolor: 'FFFFFF', ...extra });
@@ -26,6 +34,17 @@ describe('reading the roll number from a card barcode', () => {
   it('reads a small, low-resolution barcode', async () => {
     const p = await picture('code128', '24157', 1);
     expect(await decodeBarcodeFromGrey(p.width, p.height, p.grey)).toBe('24157');
+  });
+
+  it.each([['card-ok.png', '20240907'], ['card-other.png', '20220311']])('reads the barcode on a whole card picture with a border, text and a photo-sized margin (%s)', async (file, roll) => {
+    const p = greyOf(file);
+    expect(await decodeBarcodeFromGrey(p.width, p.height, p.grey)).toBe(roll);
+  });
+
+  it('a card with a dark line left of the barcode still reads (found by testing: it used to fail)', async () => {
+    const p = greyOf('card-ok.png');
+    for (let y = 0; y < p.height; y++) for (let x = 14; x < 20; x++) p.grey[y * p.width + x] = 0; // a thick vertical line
+    expect(await decodeBarcodeFromGrey(p.width, p.height, p.grey)).toBe('20240907');
   });
 
   it('returns null, not a guess, for a picture with no barcode', async () => {

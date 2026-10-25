@@ -21,6 +21,7 @@ import { SettingsPage } from './pages/SettingsPage.tsx';
 import { AdminPage } from './pages/AdminPage.tsx';
 import { MessagesPage } from './pages/MessagesPage.tsx';
 import { InstallBanner } from './components/InstallBanner.tsx';
+import { AcademicBanner } from './components/AcademicBanner.tsx';
 // DEV-ONLY: remove before launch
 import { DevBar } from './components/DevBar.tsx';
 
@@ -220,7 +221,7 @@ export default function App() {
         />}
 
         {/* Install help: Home only when signed in; the sign-in page only gets the open-in-your-browser notice */}
-        {currentUser ? activeTab === 'feed' && <InstallBanner /> : (activeTab === 'signin' || activeTab === 'signup') && <InstallBanner signedOut />}
+        {currentUser ? activeTab === 'feed' && (<><AcademicBanner onOpenSettings={() => setActiveTab('settings')} /><InstallBanner /></>) : (activeTab === 'signin' || activeTab === 'signup') && <InstallBanner signedOut />}
 
         {/* overflow-x-clip, not -hidden: hidden turns main into its own scroll container, so every sticky header and bar inside it stopped sticking to the window */}
         <main className="flex-1 w-full overflow-x-clip">

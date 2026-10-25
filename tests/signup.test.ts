@@ -8,7 +8,7 @@ const VALID = {
   username: 'ayesha_k',
   campus_id: CAMPUS_X,
   class_id: 'cls_2026',
-  roll_number: '2024-0907',
+  program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907',
   card: { barcode: '20240907' },
 };
 

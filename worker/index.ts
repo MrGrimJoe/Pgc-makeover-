@@ -23,6 +23,7 @@ import { findCampus, campusName, cleanCampusOther } from '../shared/campus.ts';
 import { handleOnboardingRoutes, getValidSignupTicket, purgeExpiredSignupTickets, SIGNUP_TICKET_COOKIE, SIGNUP_TICKET_TTL_MS } from './onboarding.ts';
 import { buildMeResponse } from './me.ts';
 import { handleAppealRoutes, issueAppealTicket } from './appeals.ts';
+import { handleAcademicRoutes } from './academic.ts';
 import { effectiveRole, handleAdminRoute, legacyAdminGate } from './admin.ts';
 import { DEFAULT_PRESET_IDS } from '../shared/presets.ts';
 import {
@@ -428,6 +429,10 @@ export default {
         },
       });
     }
+
+    // Own academic details: update, confirm, graduate
+    const academicResponse = await handleAcademicRoutes(request, env, pathname);
+    if (academicResponse) return academicResponse;
 
     // Appeals from suspended or banned students (ticket cookie, no session)
     const appealResponse = await handleAppealRoutes(request, env, pathname);

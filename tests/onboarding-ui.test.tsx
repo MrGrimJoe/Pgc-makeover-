@@ -12,9 +12,11 @@ import { CAMPUSES as BUNDLED } from '../shared/campuses.ts';
 // jsdom has no camera. The scanner module is replaced by one that "sees" whatever the test sets.
 let scanOutcome: { barcode: string } | { error: 'denied' | 'no-camera' | 'unsupported' | 'failed' };
 let cameraStopped = 0;
+let ocrText: string | null; // null = the scan gives no picture, so OCR is skipped
+vi.mock('../src/lib/cardOcr.ts', () => ({ readCardText: async () => ocrText ?? '' }));
 vi.mock('../src/lib/cardScan.ts', () => ({
   startCameraScan: async (_video: unknown, onResult: (t: string) => void, onError: (k: string) => void) => {
-    queueMicrotask(() => ('barcode' in scanOutcome ? onResult(scanOutcome.barcode) : onError(scanOutcome.error)));
+    queueMicrotask(() => ('barcode' in scanOutcome ? (onResult as (t: string, f?: unknown) => void)(scanOutcome.barcode, ocrText === null ? undefined : { width: 10 }) : onError(scanOutcome.error)));
     return { stop: () => { cameraStopped++; } };
   },
 }));
@@ -130,6 +132,8 @@ async function fillValidForm(pickCampus = true) {
   await type('signup-username', 'ayesha_k');
   await waitFor(() => /is available/.test(container.textContent ?? ''), 'username availability');
   await choose('signup-class', 'cls_2026');
+  await choose('signup-program', 'fsc_pre_engineering');
+  await type('signup-session', '2024-2026');
   await type('signup-roll', '2024-0907');
   if (!pickCampus) return;
   // pick a campus with the keyboard: type, arrow down, enter
@@ -157,6 +161,7 @@ beforeEach(() => {
   cardScanMode = 'optional';
   scanOutcome = { barcode: '20240907' };
   cameraStopped = 0;
+  ocrText = null;
   turnstileKey = undefined;
   vi.stubGlobal('fetch', vi.fn(fakeFetch));
   container = document.createElement('div');
@@ -227,7 +232,7 @@ describe('Onboarding page (interactive)', () => {
       username: 'ayesha_k',
       campus_id: LISTED.id,
       class_id: 'cls_2026',
-      roll_number: '2024-0907',
+      program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907',
     });
   });
 
@@ -287,7 +292,7 @@ describe('Onboarding page (interactive)', () => {
       username: 'ayesha_k',
       campus_other: 'Green Valley College',
       class_id: 'cls_2026',
-      roll_number: '2024-0907',
+      program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907',
     });
   });
 });
@@ -315,7 +320,7 @@ describe('Student card step', () => {
     await click(submitButton());
     await waitFor(() => /Add a profile photo/.test(container.textContent ?? ''), 'photo step');
     const post = calls.find((c) => c.url === '/api/signup/complete');
-    expect(post?.body).toMatchObject({ roll_number: '2024-0907', card: { barcode: '20240907' } });
+    expect(post?.body).toMatchObject({ program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907', card: { barcode: '20240907' } });
   });
 
   it('a barcode that disagrees with the typed roll number blocks sign-up and says why; fixing the number clears it', async () => {
@@ -409,5 +414,56 @@ describe('Bot check step', () => {
     await waitFor(() => resets.length > 0, 'widget reset after a refused sign-up');
     expect(submitButton().disabled).toBe(true); // the used token is gone until a new check passes
     delete (window as unknown as { turnstile?: unknown }).turnstile;
+  });
+});
+
+describe('Printed details on the card (OCR)', () => {
+  const scanButton = () => [...container.querySelectorAll('button')].find((b) => /Scan (student card|again)/.test(b.textContent ?? '')) as HTMLButtonElement;
+  const CARD = `sample student card ${LISTED.name} name ayesha khan program pre medical session 2024-2026 roll no 20240907`;
+  async function scan() {
+    await click(scanButton());
+    await waitFor(() => /barcode matches your roll number/.test(container.textContent ?? ''), 'match message');
+    await flush(80);
+  }
+
+  it('says what looks right when the card agrees with the form', async () => {
+    cardScanMode = 'required';
+    ocrText = CARD;
+    await mount();
+    await fillValidForm();
+    await choose('signup-program', 'fsc_pre_medical');
+    await scan();
+    expect(container.textContent).toMatch(/printed name, campus, program, session on your card look right/);
+    expect(submitButton().disabled).toBe(false);
+    await click(submitButton());
+    await waitFor(() => !!calls.find((c) => c.url === '/api/signup/complete'), 'post');
+    const card = (calls.find((c) => c.url === '/api/signup/complete')!.body as { card: { printed: unknown } }).card;
+    expect(card.printed).toEqual({ name: 'match', campus: 'match', program: 'match', session: 'match' });
+  });
+
+  it('a clear mismatch is shown plainly and needs the student to confirm; nothing is changed for them', async () => {
+    cardScanMode = 'required';
+    ocrText = 'sample student card multan campus name bilal ahmed program commerce session 2022-2024 roll no 20240907';
+    await mount();
+    await fillValidForm();
+    await scan();
+    expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/do not seem to match what you typed/);
+    expect(byId<HTMLInputElement>('signup-real-name').value).toBe('Ayesha Khan');
+    expect(submitButton().disabled).toBe(true);
+    const box = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await act(async () => box.click());
+    expect(submitButton().disabled).toBe(false);
+    await scan();
+    expect(submitButton().disabled).toBe(true); // scanning again starts over
+  });
+
+  it('unreadable text never blocks sign-up', async () => {
+    cardScanMode = 'required';
+    ocrText = '~~ ..';
+    await mount();
+    await fillValidForm();
+    await scan();
+    expect(container.textContent).toMatch(/Could not read the printed/);
+    expect(submitButton().disabled).toBe(false);
   });
 });

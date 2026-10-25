@@ -82,4 +82,8 @@ Its phase numbers differ from the numbered phases above.
 - **Student sign-up checks** (blueprint Phase 3, partly): full roll number, unique per campus, barcode scan, "already registered" requests for admins. See README, "Student sign-up checks". Not done: OCR.
 - **Appeals and retention** (blueprint Phase 7, partly): appeal tickets for blocked students, admin Appeals tab, handled-record retention. See README.
 - **Turnstile** (blueprint Phase 8, partly): optional, server-verified on sign-up, fails closed. Rate limits reviewed only for sign-up, appeals and the limiter itself.
-- **Not done yet:** academic progression / renewal, removal of `DEV-ONLY` code and real branding, real-phone and real-browser checks (the camera scan has never run on a real device).
+- **Academic details and progression** (blueprint Phase 3, rest): program, session, class/year and section as separate fields; update, confirm, graduate; configurable renewal prompt. See README.
+- **OCR** (blueprint Phase 3, rest): Tesseract.js on the device, self-hosted, compared field by field, never blocks and never edits. Tested on real card pictures.
+- **Real-browser checks done** with a headless Chromium: `npm run shots` (phone, tablet, desktop) and `npm run e2e:signup` (11 checks) pass. This is a headless browser with a fake camera, not a real phone: lighting, focus, a cracked lens and a real card are still untested.
+- **Found by that browser test, and fixed:** the live scanner stopped after one frame with no message (zxing's browser reader cannot rotate a frame), and a card with a dark line left of the barcode could not be read at all. Neither showed in unit tests.
+- **Not done yet:** removal of `DEV-ONLY` code and real branding (kept on purpose while the app is still in development; `npm run prelaunch-check` lists what to remove), and the real-phone check with a real card.

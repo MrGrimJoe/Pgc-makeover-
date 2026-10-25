@@ -5,7 +5,7 @@ import { normalizeRoll, rollLast3, barcodeMatchesRoll, campusKey } from '../shar
 import type { Env } from '../worker/types.ts';
 
 const CAMPUS_Y = CAMPUSES.find((c) => c.id !== CAMPUS_X)!.id;
-const base = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CAMPUS_X, class_id: 'cls_2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
+const base = { real_name: 'Ayesha Khan', username: 'ayesha_k', campus_id: CAMPUS_X, class_id: 'cls_2026', program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907', card: { barcode: '20240907' } };
 
 async function signup(env: Env, sub: string, body: Record<string, unknown>) {
   const { cookie } = await startSignup(env, { sub, email: `${sub}@gmail.com` });
@@ -66,6 +66,17 @@ describe('student verification at sign-up', () => {
     expect(retry.status).toBe(201);
   });
 
+  it('keeps what the browser said about the printed text (as information only), and refuses nonsense in it', async () => {
+    const printed = { name: 'match', campus: 'uncertain', program: 'unreadable', session: 'mismatch' };
+    expect((await signup(env, 'p1', { ...base, card: { ...base.card, printed } })).status).toBe(201);
+    const row = await env.DB.prepare('SELECT verification_detail, verification_status FROM user_private').first<Record<string, string>>();
+    expect(JSON.parse(row!.verification_detail!)).toEqual(printed);
+    expect(row!.verification_status).toBe('provisional'); // a printed-text mismatch does not change what the server concluded
+    for (const bad of [{ ...printed, name: 'perfect' }, { ...printed, extra: 'match' }, { name: 'match' }]) {
+      expect((await signup(env, 'p2', { ...base, username: 'other_name', roll_number: '9999', card: { barcode: '9999', printed: bad } })).status).toBe(400);
+    }
+  });
+
   it('the scan is required by default', async () => {
     const { card: _c, ...noCard } = base;
     const res = await signup(env, 'n', noCard);
@@ -94,9 +105,9 @@ describe('one registration per student per campus', () => {
   });
 
   it.each([
-    ['the same roll number', { roll_number: '2024-0907', card: { barcode: '20240907' } }],
+    ['the same roll number', { program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907', card: { barcode: '20240907' } }],
     ['different punctuation and case', { roll_number: '2024 0907', card: { barcode: '2024/0907' } }],
-    ['another class (section, class and session are not in the key)', { class_id: 'cls_2025', roll_number: '2024-0907', card: { barcode: '20240907' } }],
+    ['another class (section, class and session are not in the key)', { class_id: 'cls_2025', program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907', card: { barcode: '20240907' } }],
   ])('refuses %s as a duplicate, without revealing the other account', async (_label, patch) => {
     expect((await signup(env, 'first', base)).status).toBe(201);
     const dup = await signup(env, 'second', { ...base, username: 'someone_else', ...patch });

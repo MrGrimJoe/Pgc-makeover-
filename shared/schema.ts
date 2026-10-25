@@ -1,5 +1,6 @@
 import { parseStickerKey, STICKER_KEY_MAX_LENGTH } from './sticker-keys.ts';
 import { ROLL_INPUT_PATTERN, isUsableRoll, normalizeRoll } from './roll.ts';
+import { PROGRAM_IDS, cleanSection, isValidSession } from './academic.ts';
 import { z } from 'zod';
 import { checkPollOptions, POLL_MAX_OPTIONS } from './poll.ts';
 import { WALLPAPER_IDS, THEME_IDS, TEXT_STYLE_IDS } from './presets.ts';
@@ -41,10 +42,32 @@ export const rollNumberSchema = z
   .refine((v) => isUsableRoll(normalizeRoll(v)), { message: 'Enter your full roll number' });
 
 /** What the sign-up screen read from the card's barcode. Decoded on the phone; the picture itself is never sent. */
+export const OCR_RESULTS = ['match', 'uncertain', 'mismatch', 'unreadable'] as const;
 export const cardScanSchema = z
   .object({
     barcode: z.string().trim().min(1).max(64),
+    /** How the printed text on the card compared with what was typed. Reported by the browser; informational only. */
+    printed: z
+      .object({ name: z.enum(OCR_RESULTS), campus: z.enum(OCR_RESULTS), program: z.enum(OCR_RESULTS), session: z.enum(OCR_RESULTS) })
+      .strict()
+      .optional(),
   })
+  .strict();
+
+export const programSchema = z.enum(PROGRAM_IDS);
+export const sessionSchema = z.string().trim().refine(isValidSession, { message: 'Enter the session as two years, like 2024-2026' });
+export const sectionSchema = z
+  .string()
+  .max(40)
+  .transform((v, ctx) => {
+    const c = cleanSection(v);
+    if (c === null) ctx.addIssue({ code: 'custom', message: 'Section can have up to 10 letters, digits or dashes' });
+    return c ?? '';
+  });
+
+/** PUT /api/me/academic: move up a year, change section or session. */
+export const academicUpdateSchema = z
+  .object({ program: programSchema, session: sessionSchema, class_id: z.string().min(1).max(100), section: sectionSchema.optional() })
   .strict();
 
 /**
@@ -92,6 +115,9 @@ export const signupCompleteSchema = z
     campus_id: z.string().min(1).max(100).optional(),
     campus_other: z.string().min(2).max(80).optional(),
     class_id: z.string().min(1).max(100),
+    program: programSchema,
+    session: sessionSchema,
+    section: sectionSchema.optional(),
     roll_number: rollNumberSchema,
     card: cardScanSchema.optional(),
     turnstile_token: z.string().max(2048).optional(),

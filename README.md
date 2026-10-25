@@ -573,7 +573,7 @@ Sign-up asks for the **full roll number** (as printed on the card) and a **scan 
 
 - **One student, one account per campus.** The roll number is normalized (case, spaces, dashes, slashes, leading zeros) and combined with the campus. Only an HMAC-SHA256 of that pair, keyed by `ROLL_KEY_SECRET`, is stored (`user_private.roll_key`), with a unique index, so two simultaneous sign-ups cannot both succeed. Class, section and session are not part of the key, so a student keeps the same identity as they move up. The last three digits are still stored for display-free internal use.
 - **Card scan.** The barcode is read in the browser (`@zxing`, loaded only on that step, 1D barcodes only). The picture is never uploaded. The server compares the decoded text with the typed roll number; a mismatch is refused with a reason. A match marks the account `provisional`. This is **not proof**: a barcode can be copied, and no PGC registry is available to check against.
-- **OCR is not implemented.** Reading printed text would need a large language-data download at runtime and cannot be tested here.
+- **Printed text (OCR).** After the barcode matches, the same camera picture is read with Tesseract.js, on the device (engine and English data are served from `/ocr`, copied from `node_modules` by `scripts/copy-ocr-assets.mjs` before `dev` and `build`, about 22 MB, loaded only at this step). The name, campus, program and session you typed are compared with the printed text and each gets *match*, *uncertain*, *mismatch* or *unreadable* (`shared/card-match.ts`). It never changes what you typed. A clear mismatch is shown plainly and the student must tick "I checked, and what I typed is correct"; unreadable or uncertain text never blocks sign-up. The result is stored as information in `user_private.verification_detail` and never changes the verification status. The picture is dropped after reading.
 - **"Already registered".** The student gets a clear message (never details of the other account), is not blocked, and a row is kept in `registration_disputes`. Admins see these under Admin, Sign-ups, with the username of the account that holds the roll number, and can mark them handled (logged in Activity). If the holder is an impostor, suspend or ban it in People and the real student can sign up again. Deleting an account frees its roll number.
 - **Guessing.** Per ticket 10 tries per 15 minutes and per Google account 20 per day, so the endpoint cannot be used to map which roll numbers exist.
 - **Switches.** `REQUIRE_CARD_SCAN=false` (a plain variable) lets people sign up without scanning; they stay `unverified`. The local dev server (`npm run dev`) already turns the requirement off; set `REQUIRE_CARD_SCAN=true` to try the real flow. For a deployed test site, set it as a variable. Anything else requires the scan.
@@ -1302,3 +1302,15 @@ export function useScrollAnchor<T>(
   }, [mounted, manager, containerRef]);
 }
 ```
+
+## Academic details and moving up
+
+Program (the seven PGC programs), session (like `2024-2026`), class/year and section are four separate fields, asked at sign-up and kept in `user_private` (class/year is `profiles.class_id`). None is part of the identity key.
+
+- **Settings, Account, Academic details** lets a student change them as they move up, confirm "nothing has changed", or mark themselves **graduated**. Graduating sets the class to Alumni and the status to `graduated`; posts, messages and media are not touched, and graduates are not asked to renew. It cannot be undone by the student.
+- **Renewal prompt.** A banner on the feed asks the student to confirm once `ACADEMIC_RENEWAL_DAYS` (default 365) have passed since they last confirmed or changed anything. Accounts made before these fields existed are asked once. Set the variable in `wrangler.toml` `[vars]` to change the period.
+- API: `GET/PUT /api/me/academic`, `POST /api/me/academic/confirm`, `POST /api/me/academic/graduate` (own details only, never returned by `/api/me` or to other people). Run migration 015 before deploying.
+
+## Checking it in a real browser
+
+`npm run shots` (screens at phone, tablet and desktop widths) and `npm run e2e:signup` (a real sign-up with a fake camera looking at a sample card: scan, printed-text reading, account creation, mismatch confirmation and duplicate refusal) need a browser. Playwright's own download is blocked on some networks; any Chromium works: `CHROMIUM_PATH=/path/to/chrome`. The npm package `@sparticuz/chromium` ships one if you cannot download (`npx -y @sparticuz/chromium` documents it). `e2e:signup` needs `ffmpeg`, the dev server started with `REQUIRE_CARD_SCAN=true PORT=3111 npm run dev`, and `npm install --no-save playwright`.

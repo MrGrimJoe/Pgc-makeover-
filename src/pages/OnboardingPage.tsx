@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ClassRow, MeResponse, SignupSessionResponse } from '../../shared/schema.ts';
 import { CampusPicker, type CampusChoice } from '../components/CampusPicker.tsx';
 import { Avatar } from '../components/Avatar.tsx';
+import { compareCard, describeCheck, hasMismatch, type PrintedCheck } from '../../shared/card-match.ts';
+import { readCardText } from '../lib/cardOcr.ts';
 import { CardScanner } from '../components/CardScanner.tsx';
 import { TurnstileWidget } from '../components/TurnstileWidget.tsx';
+import { PROGRAMS, cleanSection, isValidSession } from '../../shared/academic.ts';
 import { ROLL_INPUT_PATTERN, barcodeMatchesRoll, isUsableRoll, normalizeRoll } from '../../shared/roll.ts';
 
 interface OnboardingPageProps {
@@ -29,6 +32,28 @@ const secondaryButton =
 
 const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9]|_(?=[a-z0-9])){1,18}[a-z0-9]$/;
 
+const PrintedSummary: React.FC<{ check: PrintedCheck; confirmed: boolean; onConfirm: (v: boolean) => void }> = ({ check, confirmed, onConfirm }) => {
+  const d = describeCheck(check);
+  const bad = hasMismatch(check);
+  return (
+    <div className="mt-1 space-y-1 text-[13px] text-[var(--text,#17233A)]">
+      {d.ok.length > 0 && <p role="status" className="m-0">The printed {d.ok.join(', ')} on your card look right.</p>}
+      {d.check.length > 0 && (
+        <p role={bad ? 'alert' : 'status'} className={`m-0 ${bad ? 'text-[var(--danger,#B23A40)]' : ''}`}>
+          {bad ? 'The printed ' : 'Could not be sure about the printed '}{d.check.join(', ')}{bad ? ' on your card do not seem to match what you typed.' : '.'} Reading a card can go wrong, so check what you typed, or scan again with better light.
+        </p>
+      )}
+      {d.unread.length > 0 && <p className="m-0 text-[var(--muted,#5B6577)]">Could not read the printed {d.unread.join(', ')}.</p>}
+      {bad && (
+        <label className="flex items-start gap-2 min-h-[44px] cursor-pointer">
+          <input type="checkbox" checked={confirmed} onChange={(e) => onConfirm(e.target.checked)} className="mt-1" />
+          <span>I checked, and what I typed is correct.</span>
+        </label>
+      )}
+    </div>
+  );
+};
+
 export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRestart }) => {
   const [session, setSession] = useState<'loading' | 'ready' | 'expired'>('loading');
   const [email, setEmail] = useState<string | null>(null);
@@ -38,10 +63,15 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
   const [username, setUsername] = useState('');
   const [campus, setCampus] = useState<CampusChoice | null>(null);
   const [classId, setClassId] = useState('');
+  const [program, setProgram] = useState('');
+  const [acadSession, setAcadSession] = useState('');
+  const [section, setSection] = useState('');
   const [roll, setRoll] = useState('');
   const [cardScan, setCardScan] = useState<'required' | 'optional'>('required');
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [printed, setPrinted] = useState<PrintedCheck | 'reading' | null>(null);
+  const [mismatchOk, setMismatchOk] = useState(false);
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileReset, setTurnstileReset] = useState(0);
@@ -125,7 +155,12 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
     usernameState.status !== 'unavailable' &&
     !!campus &&
     !!classId &&
+    !!program &&
+    isValidSession(acadSession.trim()) &&
+    cleanSection(section) !== null &&
     (!siteKey || !!turnstileToken) &&
+    printed !== 'reading' &&
+    (!printed || !hasMismatch(printed) || mismatchOk) &&
     ROLL_INPUT_PATTERN.test(roll.trim()) &&
     isUsableRoll(normalizeRoll(roll)) &&
     // a scan that disagrees with the typed roll number blocks sign-up; an unscanned card blocks it only when required
@@ -145,8 +180,11 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
           username,
           ...(campus.campus ? { campus_id: campus.campus.id } : { campus_other: campus.other }),
           class_id: classId,
+          program,
+          session: acadSession.trim(),
+          ...(section.trim() ? { section: section.trim() } : {}),
           roll_number: roll.trim(),
-          ...(scannedBarcode ? { card: { barcode: scannedBarcode } } : {}),
+          ...(scannedBarcode ? { card: { barcode: scannedBarcode, ...(typeof printed === 'object' && printed ? { printed } : {}) } } : {}),
           ...(siteKey && turnstileToken ? { turnstile_token: turnstileToken } : {}),
         }),
       });
@@ -335,6 +373,52 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
         </div>
 
         <div>
+          <label htmlFor="signup-program" className={labelClass}>
+            Program
+          </label>
+          <select id="signup-program" value={program} onChange={(e) => setProgram(e.target.value)} className={`${fieldClass} cursor-pointer`}>
+            <option value="">Choose your program</option>
+            {PROGRAMS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="signup-session" className={labelClass}>
+            Session
+          </label>
+          <input
+            id="signup-session"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={9}
+            placeholder="2024-2026"
+            value={acadSession}
+            onChange={(e) => setAcadSession(e.target.value.replace(/[^0-9-]/g, ''))}
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="signup-section" className={labelClass}>
+            Section (optional)
+          </label>
+          <input
+            id="signup-section"
+            type="text"
+            autoComplete="off"
+            maxLength={10}
+            value={section}
+            onChange={(e) => setSection(e.target.value.replace(/[^A-Za-z0-9 -]/g, ''))}
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
           <label htmlFor="signup-roll" className={labelClass}>
             Roll number
           </label>
@@ -371,7 +455,9 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
                 : 'Scanning your card is optional for now. Without it your account is marked as not checked.'}
             </p>
           )}
-          <button type="button" onClick={() => setScanning(true)} className={`${secondaryButton} mt-2`}>
+          {printed === 'reading' && <p role="status" className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">Reading the printed details on your card...</p>}
+          {printed && printed !== 'reading' && <PrintedSummary check={printed} confirmed={mismatchOk} onConfirm={setMismatchOk} />}
+          <button type="button" onClick={() => { setPrinted(null); setScanning(true); }} className={`${secondaryButton} mt-2`}>
             {scannedBarcode ? 'Scan again' : 'Scan student card'}
           </button>
         </div>
@@ -391,10 +477,20 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
       {scanning && (
         <CardScanner
           onClose={() => setScanning(false)}
-          onResult={(text) => {
+          onResult={(text, frame) => {
             setScannedBarcode(text);
             setScanning(false);
             setError(null);
+            setMismatchOk(false);
+            setPrinted(null);
+            if (!frame || !campus) return;
+            // Read the printed text on this device, then compare. A failure just means "could not read".
+            setPrinted('reading');
+            const typed = { name: realName, campusName: campus.campus ? campus.campus.name : campus.other, program, session: acadSession.trim() };
+            void readCardText(frame).then((t) => {
+              setPrinted(compareCard(t, typed));
+              frame.width = 0; // the picture is dropped; nothing keeps it
+            });
           }}
         />
       )}
