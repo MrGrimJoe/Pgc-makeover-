@@ -222,7 +222,8 @@ export default function App() {
         {/* Install help: Home only when signed in; the sign-in page only gets the open-in-your-browser notice */}
         {currentUser ? activeTab === 'feed' && <InstallBanner /> : (activeTab === 'signin' || activeTab === 'signup') && <InstallBanner signedOut />}
 
-        <main className="flex-1 w-full overflow-x-hidden">
+        {/* overflow-x-clip, not -hidden: hidden turns main into its own scroll container, so every sticky header and bar inside it stopped sticking to the window */}
+        <main className="flex-1 w-full overflow-x-clip">
           <div key={pageKey} className={pageClass}>
           {activeTab === 'signin' && (
             <SignInPage onSuccessRedirect={() => checkAuth()} notice={authNotice} />

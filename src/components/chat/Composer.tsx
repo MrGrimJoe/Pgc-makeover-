@@ -27,6 +27,8 @@ interface ComposerProps {
   onTogglePicker?: () => void;
   /** Sending is allowed with empty text (for example when attachments are waiting). */
   canSendEmpty?: boolean;
+  /** Phone chat page only: the bar sticks just above the fixed bottom tab bar (56px, which already covers the safe area) instead of behind it. */
+  dockAboveTabBar?: boolean;
   disabled?: boolean;
   busy?: boolean;
   placeholder?: string;
@@ -37,12 +39,13 @@ interface ComposerProps {
 /** WhatsApp-style typing bar that rides above the keyboard. */
 export const Composer: React.FC<ComposerProps> = ({
   variant = 'chat', onSend, onAttach, picker, pickerOpen = false, onTogglePicker, canSendEmpty = false,
-  disabled = false, busy = false, placeholder = 'Message', maxLength = 2000, label = 'Message',
+  dockAboveTabBar = false, disabled = false, busy = false, placeholder = 'Message', maxLength = 2000, label = 'Message',
 }) => {
   const [text, setText] = useState('');
   const ta = useRef<HTMLTextAreaElement>(null);
   const { inset, lastKeyboardHeight } = useKeyboardInset();
   const compact = variant === 'compact';
+  const docked = dockAboveTabBar && inset === 0;
 
   useLayoutEffect(() => {
     const el = ta.current;
@@ -91,8 +94,9 @@ export const Composer: React.FC<ComposerProps> = ({
   return (
     <div
       data-testid="composer"
-      style={inset > 0 ? { transform: `translateY(-${inset}px)` } : undefined}
-      className="sticky bottom-0 bg-[var(--bg,#fff)] border-t border-[var(--line,#E8EBF0)] px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
+      // With the keyboard open the tab bar is covered by it, so the bar rides on the keyboard as before
+      style={inset > 0 ? { transform: `translateY(-${inset}px)` } : docked ? { bottom: '56px' } : undefined}
+      className={`sticky bottom-0 bg-[var(--bg,#fff)] border-t border-[var(--line,#E8EBF0)] px-2 pt-2 ${docked ? 'pb-2' : 'pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]'}`}
     >
       <div className="flex items-end gap-1">
         {!compact && onAttach && (
