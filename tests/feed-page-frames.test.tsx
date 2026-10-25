@@ -4,6 +4,7 @@ import { act } from 'react';
 import { mount, flush, type Mounted } from './_ui.tsx';
 import { FeedPage } from '../src/pages/FeedPage.tsx';
 import type { PostItem } from '../shared/schema.ts';
+import { MODERATED_LAYOUT } from '../src/feed-engine/index.ts';
 
 const post = (n: number, moderation?: 'SAFE' | 'WILD'): PostItem => ({
   id: `post-${n}`,
@@ -83,7 +84,7 @@ describe('FeedPage frame architecture', () => {
   });
 
   const render = async () => {
-    m = await mount(<FeedPage currentUserId="u1" onNavigateToCompose={() => {}} onViewAuthorProfile={() => {}} />);
+    m = await mount(<FeedPage currentUserId="u1" onNavigateToCompose={() => {}} onViewAuthorProfile={() => {}} frameLayout={MODERATED_LAYOUT} />);
     await flush();
     await flush();
   };
@@ -192,7 +193,7 @@ describe('Mid-Frame slot', () => {
     observed.clear();
     vi.stubGlobal('IntersectionObserver', FakeIO);
     installFeedApi();
-    const m = await mount(<FeedPage currentUserId="u1" onNavigateToCompose={() => {}} onViewAuthorProfile={() => {}} />);
+    const m = await mount(<FeedPage currentUserId="u1" onNavigateToCompose={() => {}} onViewAuthorProfile={() => {}} frameLayout={MODERATED_LAYOUT} />);
     await flush();
     await flush();
     await scrollToFrame(m.container, 1);
@@ -200,6 +201,23 @@ describe('Mid-Frame slot', () => {
     expect(mid).not.toBeNull();
     expect(mid?.style.minHeight ?? '').toBe('');
     expect(mid?.childElementCount).toBe(0);
+    m.unmount();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('FeedPage default layout', () => {
+  it('is one continuous run of SAFE frames with no Mid-Frame slots', async () => {
+    observed.clear();
+    vi.stubGlobal('IntersectionObserver', FakeIO);
+    installFeedApi();
+    const m = await mount(<FeedPage currentUserId="u1" onNavigateToCompose={() => {}} onViewAuthorProfile={() => {}} />);
+    await flush();
+    await flush();
+    for (const i of [1, 2, 3]) await scrollToFrame(m.container, i);
+    expect(m.container.querySelector('[data-frame-kind="MID"]')).toBeNull();
+    expect(m.container.querySelector('[data-frame-kind="WILD"]')).toBeNull();
+    expect(frameIndexes(m.container)).toEqual([2, 3, 4]);
     m.unmount();
     vi.unstubAllGlobals();
   });

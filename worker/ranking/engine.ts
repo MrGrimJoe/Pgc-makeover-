@@ -21,6 +21,10 @@ export interface UserRankingContext {
   followedUserIds: Set<string>;
   notInterestedPostIds: Set<string>;
   userTopicSignals: Map<string, { weight: number; updatedAt: string }>;
+  /** Topic slug -> trend strength in 0..1 (from the 24h trend snapshots). */
+  trendingTopics?: Map<string, number>;
+  /** Posts the viewer was shown recently. They are demoted, not removed. */
+  seenPostIds?: Set<string>;
   nowMs?: number;
 }
 
@@ -33,6 +37,8 @@ export interface ScoredPost {
     recency: number;
     engagement: number;
     classContext: number;
+    trend: number;
+    seen: boolean;
   };
 }
 
@@ -89,13 +95,25 @@ export function scoreCandidate(
     classContextScore = 0.5;
   }
 
-  // Final weighted score: 0.30*interest + 0.25*social + 0.20*recency + 0.15*engagement + 0.10*class
-  const totalScore =
+  // 6. Trend Score: the hottest trending topic on the post, weighted by how sure we are of the topic
+  let trendScore = 0;
+  if (context.trendingTopics && post.topics) {
+    for (const t of post.topics) {
+      const strength = context.trendingTopics.get(t.slug);
+      if (strength) trendScore = Math.max(trendScore, Math.min(1, strength * t.confidence));
+    }
+  }
+
+  // Final weighted score (weights in RANKING_CONFIG sum to 1)
+  const seen = context.seenPostIds?.has(post.id) ?? false;
+  const weighted =
     RANKING_CONFIG.WEIGHTS.INTEREST * interestScore +
     RANKING_CONFIG.WEIGHTS.SOCIAL * socialScore +
     RANKING_CONFIG.WEIGHTS.RECENCY * recencyScore +
     RANKING_CONFIG.WEIGHTS.ENGAGEMENT * engagementScore +
-    RANKING_CONFIG.WEIGHTS.CLASS_CONTEXT * classContextScore;
+    RANKING_CONFIG.WEIGHTS.CLASS_CONTEXT * classContextScore +
+    RANKING_CONFIG.WEIGHTS.TREND * trendScore;
+  const totalScore = seen ? weighted * RANKING_CONFIG.SEEN_MULTIPLIER : weighted;
 
   return {
     post,
@@ -106,6 +124,8 @@ export function scoreCandidate(
       recency: Number(recencyScore.toFixed(4)),
       engagement: Number(engagementScore.toFixed(4)),
       classContext: Number(classContextScore.toFixed(4)),
+      trend: Number(trendScore.toFixed(4)),
+      seen,
     },
   };
 }

@@ -595,6 +595,29 @@ Optional and off by default. Turn it on to make sign-up need a passed Turnstile 
 
 The widget has been tested only against a stand-in for Cloudflare's script, not on a real device.
 
+## How the For You feed ranks
+
+Each request ranks a pool of candidates for that viewer. Pages are ranked from what earlier pages did not take, so the feed never repeats and never dead-ends until the pool is used up.
+
+**Candidates**: the newest 100 posts, plus up to 100 more on the viewer's strongest interests and on trending topics (however old, as long as they have not expired). Blocked users and "not interested" posts are excluded.
+
+**Score** (weights in `worker/ranking/config.ts`, summing to 1):
+
+| Signal | Weight | What it is |
+| --- | --- | --- |
+| Interest | 0.30 | The post's topics matched against the viewer's topic signals (14-day half-life) |
+| Social | 0.20 | Followed author 1.0, same class 0.5 |
+| Recency | 0.15 | Fades linearly over 7 days |
+| Engagement | 0.15 | Distinct people who liked or commented, relative to how often it was shown |
+| Class context | 0.10 | Same class as the viewer |
+| Trend | 0.10 | The hottest 24h trending topic on the post |
+
+A post the viewer was shown in the last 3 days keeps 35% of its score, so it sinks instead of repeating. Then a diversity pass applies (at most 2 posts per author and 3 per topic per page, with about 15% of slots kept for posts from outside the viewer's circle).
+
+**What the feed learns from**: a like (+1), a comment (+3), "more like this" (+3), "show less" (-3), "not interested" (-4), and a view of 3 seconds or more (+0.1). The client reports how long each post was on screen to `POST /api/impressions`. Stored signals are decayed to the present before a new one is added, and clamped between -10 and 25.
+
+**How posts are understood**: `#hashtags` (full weight) and a small keyword list, matched with plurals and "-ing" / "-ed" forms ("exams", "studying"). Related words also share one category topic (for example "gym" and "fitness" both add `sports-fitness`), so liking one kind of post surfaces its neighbours. There is no semantic model yet; the embedding hook in `worker/content/topics.ts` is switched off.
+
 ---
 
 ## [EXPERIMENTAL] Core Frame Feed Engine
@@ -619,8 +642,8 @@ The home feed no longer renders one endless list. It renders **frames**: discret
 ### Concepts
 
 - **Frame**: an immutable chunk of posts (8 by default; set `frameSize` to anything from 5 to 10). Its `index` is stable, so scrolling back up rebuilds the identical frame. Frame *data* is cached; only the *DOM* is destroyed.
-- **Kinds**: `SAFE` and `WILD` frames hold only posts of that moderation state (the pooled source guarantees it). `MID` frames hold no posts: they are an empty, zero-height transition slot (no visible gap) that another manager can fill later.
-- **Layout**: a pure function from position to kind. The default cycle `SAFE, SAFE, MID, WILD` puts a Mid-Frame after every two `SAFE` frames. Swap it with `layout: cycleLayout([...])`.
+- **Kinds**: `SAFE` and `WILD` frames hold only posts of that moderation state (the pooled source guarantees it). `MID` frames hold no posts: they are an empty, zero-height transition slot (no visible gap) that another manager can fill later. They only exist when a layout includes them.
+- **Layout**: a pure function from position to kind. The v1 default (`DEFAULT_LAYOUT`) is one continuous run of `SAFE` frames: no Mid-Frame, nothing `WILD`. `MODERATED_LAYOUT` is the moderation-phase layout (`SAFE, SAFE, MID, WILD`, a Mid-Frame after every two `SAFE` frames); pass it as `layout` (or `frameLayout` on `FeedPage`) when you are ready. Any other pattern: `cycleLayout([...])`.
 - **Volatile frame**: a frame that may never be mounted next to a `WILD` frame. `MID` frames are volatile by default (this is the "ad or non-compatible slot"); `markVolatile(frameId)` opts any other frame in.
 - **Window**: at most `maxActiveFrames` (default 3: one behind, the focused frame, one ahead) are mounted.
 - **Focus**: the frame crossing the middle of the viewport. `manager.focus(index)` drives everything.
@@ -651,7 +674,7 @@ Every hook returns an unsubscribe function.
 
 ### Moderation tag
 
-`PostItem.moderation?: 'SAFE' | 'WILD'` is read by `classifyPost` in `src/lib/feed-source.ts`. A post without the field is `SAFE`. The server does not set it yet; until it does, every post is `SAFE` and the feed shows `SAFE` frames with Mid-Frame slots between them.
+`PostItem.moderation?: 'SAFE' | 'WILD'` is read by `classifyPost` in `src/lib/feed-source.ts`. A post without the field is `SAFE`. There is no moderation tagging in v1, so the default layout shows `SAFE` frames only and the feed is one continuous list. When moderation exists, set the field on the server and switch to `MODERATED_LAYOUT`.
 
 ### Connecting another manager later (no core edits)
 
@@ -737,8 +760,14 @@ export function cycleLayout(pattern: readonly FrameKind[]): FrameLayout {
   return (position) => pattern[position % pattern.length] ?? 'SAFE';
 }
 
-/** Every two SAFE frames are followed by a Mid-Frame, then one WILD frame. */
-export const DEFAULT_LAYOUT: FrameLayout = cycleLayout(['SAFE', 'SAFE', 'MID', 'WILD']);
+/** v1 default: one continuous run of SAFE frames. No Mid-Frames, nothing WILD. */
+export const DEFAULT_LAYOUT: FrameLayout = cycleLayout(['SAFE']);
+
+/**
+ * The moderation-phase layout: every two SAFE frames are followed by a Mid-Frame, then one WILD frame.
+ * Pass it as `layout` once posts carry a SAFE / WILD tag and something fills the Mid-Frame slot.
+ */
+export const MODERATED_LAYOUT: FrameLayout = cycleLayout(['SAFE', 'SAFE', 'MID', 'WILD']);
 ```
 
 #### `src/feed-engine/pooledSource.ts`

@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PostItem } from '../../shared/schema.ts';
 import { PostCard } from '../components/PostCard.tsx';
 import { FeedFrame } from '../components/FeedFrame.tsx';
-import { FeedFrameManager } from '../feed-engine/index.ts';
+import { TrackedPost } from '../components/TrackedPost.tsx';
+import { ImpressionTracker, sendImpressions } from '../lib/impressions.ts';
+import { FeedFrameManager, type FrameLayout } from '../feed-engine/index.ts';
 import { useEdgeSentinel, useFeedStatus, useMountedFrames, useScrollAnchor } from '../feed-engine/react.ts';
 import { createApiFeedSource, type FeedMode } from '../lib/feed-source.ts';
 
@@ -10,6 +12,8 @@ interface FeedPageProps {
   currentUserId: string;
   onNavigateToCompose: () => void;
   onViewAuthorProfile: (username: string) => void;
+  /** Frame layout. Defaults to one continuous run of SAFE frames. */
+  frameLayout?: FrameLayout;
 }
 
 /** Posts per content frame. */
@@ -21,15 +25,23 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   currentUserId,
   onNavigateToCompose,
   onViewAuthorProfile,
+  frameLayout,
 }) => {
   const [feedMode, setFeedMode] = useState<FeedMode>('for_you');
   const [deleted, setDeleted] = useState<ReadonlySet<string>>(() => new Set());
   // Frames are destroyed when they leave the window, so like/comment changes are kept here.
   const engagement = useRef(new Map<string, Engagement>());
   const listRef = useRef<HTMLDivElement>(null);
+  // Reports how long each post is on screen so For You learns from what the viewer actually looks at.
+  const [tracker] = useState(() => new ImpressionTracker(sendImpressions));
+  useEffect(() => () => tracker.dispose(), [tracker]);
 
   const { manager, heights } = useMemo(() => {
-    const m = new FeedFrameManager<PostItem>({ source: createApiFeedSource(feedMode), frameSize: FEED_FRAME_SIZE });
+    const m = new FeedFrameManager<PostItem>({
+      source: createApiFeedSource(feedMode),
+      layout: frameLayout,
+      frameSize: FEED_FRAME_SIZE,
+    });
     // A frame's DOM is destroyed when it leaves the window, so remember how tall it was. The blank
     // spacer above the list stands in for those frames and keeps the page from jumping.
     const measured = new Map<number, number>();
@@ -38,7 +50,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
       if (el) measured.set(frame.index, el.getBoundingClientRect().height);
     });
     return { manager: m, heights: measured };
-  }, [feedMode]);
+  }, [feedMode, frameLayout]);
   const mountedFrames = useMountedFrames(manager);
   const status = useFeedStatus(manager);
   useScrollAnchor(manager, listRef, mountedFrames);
@@ -158,15 +170,16 @@ export const FeedPage: React.FC<FeedPageProps> = ({
           <FeedFrame key={frame.id} manager={manager} frame={frame}>
             {frame.items
               .filter((post) => !deleted.has(post.id))
-              .map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={{ ...post, ...engagement.current.get(post.id) }}
-                  currentUserId={currentUserId}
-                  onPostDeleted={handlePostDeleted}
-                  onViewAuthorProfile={onViewAuthorProfile}
-                  onEngagementChange={handleEngagementChange}
-                />
+              .map((post, i) => (
+                <TrackedPost key={post.id} tracker={tracker} postId={post.id} position={frame.index * FEED_FRAME_SIZE + i}>
+                  <PostCard
+                    post={{ ...post, ...engagement.current.get(post.id) }}
+                    currentUserId={currentUserId}
+                    onPostDeleted={handlePostDeleted}
+                    onViewAuthorProfile={onViewAuthorProfile}
+                    onEngagementChange={handleEngagementChange}
+                  />
+                </TrackedPost>
               ))}
           </FeedFrame>
         ))}

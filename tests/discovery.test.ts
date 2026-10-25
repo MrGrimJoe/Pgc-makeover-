@@ -331,7 +331,7 @@ describe('Milestone 3 Discovery Engine & Phase B Fixes', () => {
       const intData = (await interestRes.json()) as { interests: any[] };
       const techTopic = intData.interests.find((i) => i.slug === 'technology');
       expect(techTopic).toBeDefined();
-      expect(techTopic.raw_weight).toBe(4); // 1 (like) + 3 (comment)
+      expect(techTopic.raw_weight).toBeCloseTo(4, 3); // 1 (like) + 3 (comment), decayed by a few ms in between
       expect(techTopic.effective_weight).toBeGreaterThan(3.5);
 
       // 5. Reset interests

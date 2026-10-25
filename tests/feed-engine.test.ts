@@ -4,6 +4,7 @@ import {
   createPooledSource,
   cycleLayout,
   DEFAULT_LAYOUT,
+  MODERATED_LAYOUT,
   type FeedSource,
   type Frame,
   type ModerationState,
@@ -30,8 +31,15 @@ const kinds = (m: FeedFrameManager<Item>) => m.getMountedFrames().map((f) => f.k
 const indexes = (m: FeedFrameManager<Item>) => m.getMountedFrames().map((f) => f.index);
 
 describe('layout', () => {
-  it('puts a Mid-Frame after every two SAFE frames, then a WILD frame', () => {
-    expect([0, 1, 2, 3, 4, 5, 6, 7].map(DEFAULT_LAYOUT)).toEqual(['SAFE', 'SAFE', 'MID', 'WILD', 'SAFE', 'SAFE', 'MID', 'WILD']);
+  it('defaults to one continuous run of SAFE frames: no Mid-Frame, no WILD', async () => {
+    expect([0, 1, 2, 3, 4, 5].map(DEFAULT_LAYOUT)).toEqual(Array(6).fill('SAFE'));
+    const m = new FeedFrameManager<Item>({ source: source() });
+    for (let i = 0; i <= 8; i++) await m.focus(i);
+    expect(m.getMountedFrames().every((f) => f.kind === 'SAFE')).toBe(true);
+    expect(m.getMountedFrames()).toHaveLength(3);
+  });
+  it('MODERATED_LAYOUT puts a Mid-Frame after every two SAFE frames, then a WILD frame', () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7].map(MODERATED_LAYOUT)).toEqual(['SAFE', 'SAFE', 'MID', 'WILD', 'SAFE', 'SAFE', 'MID', 'WILD']);
   });
   it('rejects an empty pattern', () => {
     expect(() => cycleLayout([])).toThrow(RangeError);
@@ -40,7 +48,7 @@ describe('layout', () => {
 
 describe('FeedFrameManager', () => {
   it('only holds SAFE items in SAFE frames and WILD items in WILD frames', async () => {
-    const m = new FeedFrameManager<Item>({ source: source(), frameSize: 5 });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source(), frameSize: 5 });
     const created: Frame<Item>[] = [];
     m.on('frameCreated', ({ frame }) => created.push(frame));
     await m.focus(8);
@@ -55,7 +63,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('never exceeds the window, and never has a volatile frame beside a WILD frame, scrolling down then up', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     const check = () => {
       const frames = m.getMountedFrames();
       expect(frames.length).toBeLessThanOrEqual(3);
@@ -67,7 +75,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('removes the Mid-Frame before the WILD frame mounts (down) and the WILD frame before the Mid-Frame (up)', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     const log: string[] = [];
     m.onFrameMount(({ frame }) => log.push(`+${frame.kind}${frame.index}`));
     m.onFrameUnmount(({ frame, reason }) => log.push(`-${frame.kind}${frame.index}:${reason}`));
@@ -82,14 +90,14 @@ describe('FeedFrameManager', () => {
   });
 
   it('keeps the focused Mid-Frame mounted and defers the WILD neighbour', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     await m.focus(2);
     expect(kinds(m)).toEqual(['SAFE', 'MID']);
     expect(indexes(m)).toEqual([1, 2]);
   });
 
   it('advance() moves past a Mid-Frame onto the deferred WILD frame, and retreat() comes back', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     await m.focus(2);
     expect(kinds(m)).toEqual(['SAFE', 'MID']); // WILD 3 held back, nothing below to scroll onto
     await m.advance();
@@ -101,7 +109,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('advance() steps to the last mounted frame (a zero-height Mid-Frame never crosses the midline)', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     await m.focus(1); // window 0,1,2: frame 2 is the Mid-Frame
     expect(indexes(m)).toEqual([0, 1, 2]);
     await m.advance();
@@ -112,7 +120,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('retreat() mirrors advance() and does nothing at the start', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     await m.focus(0);
     await m.retreat();
     expect(m.getFocusIndex()).toBe(0);
@@ -122,7 +130,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('rebuilds the exact same frame when scrolling back', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     await m.focus(0);
     const first = m.getMountedFrames()[0];
     for (let i = 1; i <= 9; i++) await m.focus(i);
@@ -132,7 +140,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('emits onMidFrameReached, including Mid-Frames scrolled past without landing', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     const seen: string[] = [];
     m.onMidFrameReached(({ frame, landed }) => seen.push(`${frame.index}:${landed}`));
     await m.focus(0);
@@ -142,7 +150,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('skips an exhausted kind instead of ending the feed, and never ends on a Mid-Frame', async () => {
-    const m = new FeedFrameManager<Item>({ source: source({ WILD: 0, SAFE: 20 }), frameSize: 5 });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source({ WILD: 0, SAFE: 20 }), frameSize: 5 });
     const created: Frame<Item>[] = [];
     m.on('frameCreated', ({ frame }) => created.push(frame));
     let ended = false;
@@ -156,7 +164,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('lets a later focus() win when calls overlap', async () => {
-    const m = new FeedFrameManager<Item>({ source: source({}, 5) });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source({}, 5) });
     const slow = m.focus(9);
     const fast = m.focus(1);
     await Promise.all([slow, fast]);
@@ -173,7 +181,7 @@ describe('FeedFrameManager', () => {
         return { items: Array.from({ length: limit }, (_, i) => ({ id: `${kind}${i}`, kind })), done: false };
       },
     };
-    const m = new FeedFrameManager<Item>({ source: flaky });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: flaky });
     m.onFrameMount(() => { throw new Error('bad listener'); });
     const errors: unknown[] = [];
     m.on('loadError', ({ error }) => errors.push(error));
@@ -187,7 +195,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('honours markVolatile for any frame', async () => {
-    const m = new FeedFrameManager<Item>({ source: source(), windowBehind: 1, windowAhead: 1 });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source(), windowBehind: 1, windowAhead: 1 });
     await m.focus(4); // SAFE after the first WILD at 3
     expect(kinds(m)).toContain('WILD');
     m.markVolatile('frame-4');
@@ -195,7 +203,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('destroy() unmounts everything and the manager can be focused again', async () => {
-    const m = new FeedFrameManager<Item>({ source: source() });
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
     const reasons: string[] = [];
     m.onFrameUnmount(({ reason }) => reasons.push(reason));
     await m.focus(1);
@@ -207,7 +215,7 @@ describe('FeedFrameManager', () => {
   });
 
   it('validates its window options', () => {
-    expect(() => new FeedFrameManager<Item>({ source: source(), windowBehind: 2, windowAhead: 2 })).toThrow(RangeError);
+    expect(() => new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source(), windowBehind: 2, windowAhead: 2 })).toThrow(RangeError);
   });
 });
 

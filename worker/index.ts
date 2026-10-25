@@ -59,6 +59,7 @@ import { checkPollOptions } from '../shared/poll.ts';
 import { extractTopicsFromText } from './content/topics.ts';
 import { rankPosts, type CandidatePost, type UserRankingContext } from './ranking/engine.ts';
 import { computeDecayedWeight } from './ranking/decay.ts';
+import { RANKING_CONFIG } from './ranking/config.ts';
 
 function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
   return new Response(JSON.stringify(data), {
@@ -323,17 +324,26 @@ async function updateUserTopicSignalsForPost(
     .bind(postId)
     .all<{ topic_id: string }>();
 
-  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
   for (const pt of postTopics.results || []) {
+    // Decay the stored weight to "now" before adding, otherwise old interest comes back at full
+    // strength every time the topic is touched. Clamp so one binge cannot dominate for weeks.
+    const existing = await db
+      .prepare('SELECT weight, updated_at FROM user_topic_signals WHERE user_id = ? AND topic_id = ?')
+      .bind(userId, pt.topic_id)
+      .first<{ weight: number; updated_at: string }>();
+    const current = existing ? computeDecayedWeight(existing.weight, existing.updated_at, nowMs) : 0;
+    const next = Math.max(RANKING_CONFIG.SIGNAL_MIN, Math.min(RANKING_CONFIG.SIGNAL_MAX, current + delta));
     await db
       .prepare(
         `INSERT INTO user_topic_signals (user_id, topic_id, weight, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, topic_id) DO UPDATE SET
-           weight = user_topic_signals.weight + excluded.weight,
+           weight = excluded.weight,
            updated_at = excluded.updated_at`
       )
-      .bind(userId, pt.topic_id, delta, now)
+      .bind(userId, pt.topic_id, next, now)
       .run();
   }
 }
@@ -1948,12 +1958,38 @@ export default {
           .all<{ post_id: string }>();
         const notInterestedPostIds = new Set((notIntRows.results || []).map((f) => f.post_id));
 
+        // 3b. Posts already shown to this viewer recently (they get demoted)
+        const seenSinceIso = new Date(Date.now() - RANKING_CONFIG.SEEN_WINDOW_MS).toISOString();
+        const seenRows = await env.DB.prepare(
+          'SELECT DISTINCT post_id FROM impressions WHERE viewer_id = ? AND shown_at >= ?'
+        )
+          .bind(auth.user.id, seenSinceIso)
+          .all<{ post_id: string }>();
+        const seenPostIds = new Set((seenRows.results || []).map((r) => r.post_id));
+
+        // 3c. Trending topics from the 24h snapshots, scaled to 0..1
+        const trendRows = await env.DB.prepare(
+          `SELECT t.slug, ts.score
+           FROM trend_snapshots ts
+           JOIN topics t ON t.id = ts.topic_id
+           WHERE ts.window = '24h'
+           ORDER BY ts.score DESC
+           LIMIT 20`
+        ).all<{ slug: string; score: number }>();
+        const maxTrend = Math.max(0, ...(trendRows.results || []).map((r) => Number(r.score)));
+        const trendingTopics = new Map<string, number>();
+        for (const r of trendRows.results || []) {
+          if (maxTrend > 0) trendingTopics.set(r.slug, Number(r.score) / maxTrend);
+        }
+
         const rankingContext: UserRankingContext = {
           userId: auth.user.id,
           userClassId: auth.profile.class_id || null,
           followedUserIds,
           notInterestedPostIds,
           userTopicSignals,
+          trendingTopics,
+          seenPostIds,
           nowMs: Date.now(),
         };
 
@@ -1978,7 +2014,7 @@ export default {
           }
         }
 
-        let candidateQuery = `
+        const candidateSql = (extraWhere: string, limit: number): string => `
           SELECT p.id, p.author_id, p.body, p.created_at, p.expires_at, p.status,
                  pr.username AS author_username, pr.display_name AS author_display_name,
                  pr.avatar_media_id AS author_avatar_media_id, pr.class_id AS author_class_id,
@@ -1992,8 +2028,9 @@ export default {
           WHERE p.status = 'active'
             AND p.expires_at > ?
             ${candidateFilter}
+            ${extraWhere}
           ORDER BY p.created_at DESC
-          LIMIT 100
+          LIMIT ${limit}
         `;
 
         // Bind order MUST match the placeholder order in candidateQuery above:
@@ -2011,19 +2048,47 @@ export default {
           candidateParams.push(...blockedIds); // candidateFilter
         }
 
-        const candidateRows = await env.DB.prepare(candidateQuery)
+        type CandidateRow = PostRow & {
+          author_username: string;
+          author_display_name: string;
+          author_avatar_media_id: string | null;
+          author_class_id: string | null;
+          author_class_name: string | null;
+          distinct_engagers: number;
+          impressions_count: number;
+        };
+
+        // Newest 100 posts: the baseline pool.
+        const latestRows = await env.DB.prepare(candidateSql('', 100))
           .bind(...candidateParams)
-          .all<
-            PostRow & {
-              author_username: string;
-              author_display_name: string;
-              author_avatar_media_id: string | null;
-              author_class_id: string | null;
-              author_class_name: string | null;
-              distinct_engagers: number;
-              impressions_count: number;
-            }
-          >();
+          .all<CandidateRow>();
+
+        // Plus posts on the viewer's strongest interests and on trending topics, however old (but
+        // still unexpired), so discovery is not limited to whatever was posted in the last few minutes.
+        const interestSlugs = [...userTopicSignals.entries()]
+          .map(([slug, sig]) => [slug, computeDecayedWeight(sig.weight, sig.updatedAt)] as const)
+          .filter(([, w]) => w > 0.5)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([slug]) => slug);
+        const wantedSlugs = [...new Set([...interestSlugs, ...[...trendingTopics.keys()].slice(0, 5)])];
+        let extraResults: CandidateRow[] = [];
+        if (wantedSlugs.length > 0) {
+          const slugPh = wantedSlugs.map(() => '?').join(',');
+          const extraRows = await env.DB.prepare(
+            candidateSql(
+              `AND p.id IN (SELECT pt.post_id FROM post_topics pt JOIN topics tp ON tp.id = pt.topic_id WHERE tp.slug IN (${slugPh}))`,
+              RANKING_CONFIG.INTEREST_CANDIDATES + RANKING_CONFIG.TREND_CANDIDATES
+            )
+          )
+            .bind(...candidateParams, ...wantedSlugs)
+            .all<CandidateRow>();
+          extraResults = extraRows.results || [];
+        }
+        const latestIds = new Set((latestRows.results || []).map((r) => r.id));
+        const candidateRows = {
+          results: [...(latestRows.results || []), ...extraResults.filter((r) => !latestIds.has(r.id))],
+        };
 
         const postTopicsMap = new Map<string, Array<{ slug: string; confidence: number }>>();
         if (candidateRows.results && candidateRows.results.length > 0) {
