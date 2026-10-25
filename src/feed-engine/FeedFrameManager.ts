@@ -15,6 +15,8 @@ type AnyHandler = (payload: any) => void;
 
 /** Upper bound on layout steps spent looking for the next frame, so a bad layout cannot spin forever. */
 const MAX_LAYOUT_STEPS = 64;
+/** How many empty dropped slots the window may step over when looking for the next content frame. */
+const MAX_STEPPED_OVER_SLOTS = 2;
 
 export interface FeedFrameManagerOptions<T> {
   source: FeedSource<T>;
@@ -107,6 +109,16 @@ export class FeedFrameManager<T> {
 
   getFocusIndex(): number {
     return this.focusIndex;
+  }
+
+  /** A generated frame by index (mounted or not). */
+  getFrame(index: number): Frame<T> | undefined {
+    return this.frames[index];
+  }
+
+  /** How many frames have been generated so far (mounted or not). */
+  getFrameCount(): number {
+    return this.frames.length;
   }
 
   /** Mark a frame as one that must never be mounted beside a WILD frame. MID frames already are. */
@@ -295,22 +307,36 @@ export class FeedFrameManager<T> {
   }
 
   /**
-   * Picks the frames to keep mounted. The focused frame always wins, then neighbours by distance
-   * (the neighbour in the scroll direction wins ties). A candidate that would put a volatile frame
-   * next to a WILD frame is deferred until focus reaches it.
+   * Picks the frames to keep mounted: the focused frame, then up to windowAhead / windowBehind frames on
+   * each side. The neighbour in the scroll direction is chosen first, so it wins any conflict. A candidate
+   * that would put a volatile frame next to a WILD frame is dropped. A dropped frame with no content (a
+   * Mid-Frame slot) is stepped over, so the content frame beyond it stays mounted instead of vanishing
+   * while still on screen; a dropped frame that has content is never stepped over, because that would
+   * leave a hole in the feed.
    */
   private resolveWindow(focused: Frame<T>, direction: ScrollDirection): Frame<T>[] {
     const picked: Frame<T>[] = [focused];
-    const maxDistance = Math.max(this.windowBehind, this.windowAhead);
 
-    for (let d = 1; d <= maxDistance; d++) {
-      const deltas = direction === 'down' ? [d, -d] : [-d, d];
-      for (const delta of deltas) {
-        if (delta > 0 && d > this.windowAhead) continue;
-        if (delta < 0 && d > this.windowBehind) continue;
-        const candidate = this.frames[focused.index + delta];
-        if (candidate && !this.conflicts(candidate, picked)) picked.push(candidate);
+    const take = (step: 1 | -1, limit: number): void => {
+      let taken = 0;
+      for (let d = 1; d <= limit + MAX_STEPPED_OVER_SLOTS && taken < limit; d++) {
+        const candidate = this.frames[focused.index + step * d];
+        if (!candidate) return;
+        if (!this.conflicts(candidate, picked)) {
+          picked.push(candidate);
+          taken++;
+        } else if (candidate.items.length > 0) {
+          return;
+        }
       }
+    };
+
+    if (direction === 'down') {
+      take(1, this.windowAhead);
+      take(-1, this.windowBehind);
+    } else {
+      take(-1, this.windowBehind);
+      take(1, this.windowAhead);
     }
     return picked;
   }

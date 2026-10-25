@@ -80,7 +80,33 @@ describe('Ranked feed pagination', () => {
     expect(seen).toHaveLength(AUTHORS * 3); // nothing dropped
   });
 
-  it('page 0 is unchanged: no cursor and cursor=0 return the same posts', async () => {
+  it('stays exact when the ranking changes between pages (views reported mid-scroll)', async () => {
+    const all = ((await env.DB.prepare('SELECT id FROM posts').all<{ id: string }>()).results || []).map((r) => r.id);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let i = 0; i < 20; i++) {
+      const data = await page(cursor);
+      seen.push(...data.posts.map((p) => p.id));
+      // The viewer "looks at" posts that have not been delivered yet, which demotes them in the next ranking
+      const undelivered = all.filter((id) => !seen.includes(id)).slice(0, 4);
+      if (undelivered.length) {
+        await worker.fetch(
+          new Request('http://localhost:3000/api/impressions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Cookie: viewerCookie },
+            body: JSON.stringify({ impressions: undelivered.map((id, n) => ({ post_id: id, position: n, duration_ms: 2000 })) }),
+          }),
+          env
+        );
+      }
+      cursor = data.next_cursor;
+      if (!cursor) break;
+    }
+    expect(new Set(seen).size).toBe(seen.length); // nothing repeated
+    expect(seen).toHaveLength(AUTHORS * 3); // nothing skipped
+  });
+
+  it('page 0 is unchanged: no cursor and a legacy numeric cursor return the same posts', async () => {
     const a = await page(null);
     const b = await page('0');
     expect(b.posts.map((p) => p.id)).toEqual(a.posts.map((p) => p.id));

@@ -54,15 +54,24 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   const mountedFrames = useMountedFrames(manager);
   const status = useFeedStatus(manager);
   useScrollAnchor(manager, listRef, mountedFrames);
-  const topSentinel = useEdgeSentinel(() => void manager.retreat().catch(() => undefined), mountedFrames);
-  const bottomSentinel = useEdgeSentinel(() => void manager.advance().catch(() => undefined), mountedFrames);
+  const topSentinel = useEdgeSentinel(() => void manager.retreat().catch(() => undefined), mountedFrames, 'up');
+  const bottomSentinel = useEdgeSentinel(() => void manager.advance().catch(() => undefined), mountedFrames, 'down');
 
+  // Blank stand-ins for generated frames outside the window, at their measured height, above and below.
+  // They keep the page the same height, so neither the scroll position nor the end of the page moves
+  // when frames are destroyed or brought back.
   const firstMounted = mountedFrames[0]?.index ?? 0;
+  const lastMounted = mountedFrames[mountedFrames.length - 1]?.index ?? -1;
+  const known = [...heights.values()].filter((h) => h > 0);
+  // Frames that were never measured are estimated, so the page keeps extending ahead of a fast scroll
+  // instead of ending (an empty Mid-Frame slot is zero tall).
+  const estimate = known.length ? known.reduce((a, b) => a + b, 0) / known.length : window.innerHeight * 2;
+  const heightOf = (i: number): number => heights.get(i) ?? (manager.getFrame(i)?.kind === 'MID' ? 0 : estimate);
   let topSpacer = 0;
-  if (firstMounted > 0) {
-    const known = [...heights.values()];
-    const average = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 0;
-    for (let i = 0; i < firstMounted; i++) topSpacer += heights.get(i) ?? average;
+  for (let i = 0; i < firstMounted; i++) topSpacer += heightOf(i);
+  let bottomSpacer = 0;
+  if (mountedFrames.length > 0) {
+    for (let i = lastMounted + 1; i < manager.getFrameCount(); i++) bottomSpacer += heightOf(i);
   }
 
   const firstRun = useRef(true);
@@ -164,7 +173,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
 
       {/* Frames: only the sliding window is in the DOM */}
       <div ref={listRef}>
-        <div aria-hidden="true" data-frame-spacer style={{ height: topSpacer }} />
+        <div aria-hidden="true" data-frame-spacer="top" style={{ height: topSpacer }} />
         <div ref={topSentinel} aria-hidden="true" data-frame-sentinel="top" style={{ height: 1 }} />
         {mountedFrames.map((frame) => (
           <FeedFrame key={frame.id} manager={manager} frame={frame}>
@@ -184,6 +193,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
           </FeedFrame>
         ))}
         <div ref={bottomSentinel} aria-hidden="true" data-frame-sentinel="bottom" style={{ height: 1 }} />
+        <div aria-hidden="true" data-frame-spacer="bottom" style={{ height: bottomSpacer }} />
       </div>
 
       {status.loading && mountedFrames.length > 0 && (

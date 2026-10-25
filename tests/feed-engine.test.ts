@@ -102,10 +102,13 @@ describe('FeedFrameManager', () => {
     expect(kinds(m)).toEqual(['SAFE', 'MID']); // WILD 3 held back, nothing below to scroll onto
     await m.advance();
     expect(m.getFocusIndex()).toBe(3);
-    expect(kinds(m)).toEqual(['WILD', 'SAFE']);
-    await m.retreat();
-    expect(m.getFocusIndex()).toBe(2);
-    expect(kinds(m)).toEqual(['SAFE', 'MID']);
+    // The SAFE frame behind the Mid-Frame stays mounted (the empty slot is stepped over), so what the
+    // viewer was looking at does not vanish when the WILD frame arrives.
+    expect(kinds(m)).toEqual(['SAFE', 'WILD', 'SAFE']);
+    expect(indexes(m)).toEqual([1, 3, 4]);
+    await m.retreat(); // back to the first mounted frame (the SAFE frame behind the empty slot)
+    expect(m.getFocusIndex()).toBe(1);
+    expect(kinds(m)).toEqual(['SAFE', 'SAFE', 'MID']);
   });
 
   it('advance() steps to the last mounted frame (a zero-height Mid-Frame never crosses the midline)', async () => {
@@ -116,7 +119,7 @@ describe('FeedFrameManager', () => {
     expect(m.getFocusIndex()).toBe(2);
     await m.advance(); // already on the last mounted frame: one further, onto WILD 3
     expect(m.getFocusIndex()).toBe(3);
-    expect(kinds(m)).toEqual(['WILD', 'SAFE']);
+    expect(kinds(m)).toEqual(['SAFE', 'WILD', 'SAFE']);
   });
 
   it('retreat() mirrors advance() and does nothing at the start', async () => {
@@ -127,6 +130,17 @@ describe('FeedFrameManager', () => {
     await m.focus(4);
     await m.retreat();
     expect(m.getFocusIndex()).toBe(3);
+  });
+
+  it('steps over an empty Mid-Frame slot but never over a frame that has content', async () => {
+    const m = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
+    await m.focus(3); // WILD: the Mid-Frame behind it is dropped, the SAFE frame before that stays
+    expect(indexes(m)).toEqual([1, 3, 4]);
+    // A volatile frame WITH content cannot be skipped: marking SAFE frame 4 volatile while focused on
+    // frame 5's neighbour must not pull frame 5 across the hole.
+    const n = new FeedFrameManager<Item>({ layout: MODERATED_LAYOUT, source: source() });
+    await n.focus(2); // Mid-Frame focused, WILD 3 dropped and NOT skipped: nothing is mounted beyond it
+    expect(indexes(n)).toEqual([1, 2]);
   });
 
   it('rebuilds the exact same frame when scrolling back', async () => {

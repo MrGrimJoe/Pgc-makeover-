@@ -61,6 +61,7 @@ import { extractTopicsFromText } from './content/topics.ts';
 import { rankPosts, type CandidatePost, type UserRankingContext } from './ranking/engine.ts';
 import { computeDecayedWeight } from './ranking/decay.ts';
 import { RANKING_CONFIG } from './ranking/config.ts';
+import { decodeDeliveredCursor, encodeDeliveredCursor, hashPostId } from './ranking/cursor.ts';
 
 function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
   return new Response(JSON.stringify(data), {
@@ -2128,22 +2129,24 @@ export default {
           impressions_count: Number(r.impressions_count || 0),
         }));
 
-        // Pagination: cursor is the page number. Page N is ranked from the candidates that pages
-        // 0..N-1 did not take, so page 0 is exactly what an unpaginated request returns and every
-        // page gets the same diversity caps and exploration mix. Candidate pool is at most 100 posts.
-        const rawPage = Number.parseInt(url.searchParams.get('cursor') ?? '', 10);
-        const pageIndex = Number.isFinite(rawPage) && rawPage > 0 ? Math.min(rawPage, 50) : 0;
-        let remaining = candidates.filter(
-          (c) => c.status === 'active' && c.expires_at > nowIso && !notInterestedPostIds.has(c.id)
+        // Pagination: the cursor remembers which posts were already delivered, and each page is the best
+        // of what is left. (Recomputing "page N" would shift page boundaries as the ranking moves while
+        // the viewer scrolls, skipping and repeating posts.) Page 0 is the plain ranked top. The pool is
+        // at most about 160 posts.
+        const delivered = decodeDeliveredCursor(url.searchParams.get('cursor'));
+        const remaining = candidates.filter(
+          (c) =>
+            c.status === 'active' &&
+            c.expires_at > nowIso &&
+            !notInterestedPostIds.has(c.id) &&
+            !(delivered && delivered.has(hashPostId(c.id)))
         );
-        let ranked = rankPosts(remaining, rankingContext, limit);
-        for (let page = 0; page < pageIndex; page++) {
-          const taken = new Set(ranked.map((rp) => rp.post.id));
-          remaining = remaining.filter((c) => !taken.has(c.id));
-          ranked = rankPosts(remaining, rankingContext, limit);
-        }
+        const ranked = rankPosts(remaining, rankingContext, limit);
         const takenOnPage = new Set(ranked.map((rp) => rp.post.id));
         const hasMoreRanked = remaining.some((c) => !takenOnPage.has(c.id));
+        const nextCursor = hasMoreRanked
+          ? encodeDeliveredCursor([...(delivered ?? []), ...ranked.map((rp) => hashPostId(rp.post.id))])
+          : null;
         const rankedIds = ranked.map((rp) => rp.post.id);
         const matchedRows = (candidateRows.results || []).filter((r) => rankedIds.includes(r.id));
         const hydrated = await hydratePosts(env.DB, matchedRows, auth.user.id);
@@ -2153,7 +2156,7 @@ export default {
 
         return jsonResponse({
           posts: hydrated,
-          next_cursor: hasMoreRanked ? String(pageIndex + 1) : null,
+          next_cursor: nextCursor,
           has_more: hasMoreRanked,
         });
       }

@@ -597,7 +597,7 @@ The widget has been tested only against a stand-in for Cloudflare's script, not 
 
 ## How the For You feed ranks
 
-Each request ranks a pool of candidates for that viewer. Pages are ranked from what earlier pages did not take, so the feed never repeats and never dead-ends until the pool is used up.
+Each request ranks a pool of candidates for that viewer. The cursor remembers which posts were already delivered and every page is the best of what is left, so the feed never repeats or skips a post (even while views are being reported and the ranking shifts mid-scroll) and never dead-ends until the pool is used up.
 
 **Candidates**: the newest 100 posts, plus up to 100 more on the viewer's strongest interests and on trending topics (however old, as long as they have not expired). Blocked users and "not interested" posts are excluded.
 
@@ -634,6 +634,7 @@ The home feed no longer renders one endless list. It renders **frames**: discret
 | `src/feed-engine/pooledSource.ts` | Sorts one mixed paged feed into `SAFE` / `WILD` pools |
 | `src/feed-engine/layout.ts` | Frame layout (default `SAFE, SAFE, MID, WILD`) |
 | `src/feed-engine/react.ts` | React bindings: mounted frames, focus, scroll anchoring, edge sentinels |
+| `src/feed-engine/scrollDirection.ts` | Which way the viewer is scrolling (the edge sentinels only act in the direction of travel) |
 | `src/feed-engine/types.ts` | Types and the event map |
 | `src/lib/feed-source.ts` | Connects `/api/feed` to the engine and decides `SAFE` vs `WILD` (`classifyPost`) |
 | `src/components/FeedFrame.tsx`, `src/pages/FeedPage.tsx` | The only UI that uses it |
@@ -653,8 +654,8 @@ The home feed no longer renders one endless list. It renders **frames**: discret
 1. At most 3 frames are mounted at any moment.
 2. A volatile frame and a `WILD` frame are **never in the mounted set together**. Before a `WILD` frame mounts, every volatile frame has been unmounted (`pre-wild`). If the focus is on a volatile frame, the `WILD` neighbour is held back instead (`conflict`).
 3. Scrolling down and up share one code path. The scroll direction decides mount order and which neighbour wins a tie.
-4. When the user reaches the end of the mounted frames, `advance()` moves the focus on (and `retreat()` at the top). This keeps the feed moving past a zero-height Mid-Frame and past a `WILD` frame held back behind a focused one. The page wires them to two invisible sentinels.
-5. Frames that leave the window are fully removed. A blank spacer of their measured height stands in above the list, and the scroll position is re-anchored after every change, so nothing jumps.
+4. When the user reaches the end of the mounted frames, `advance()` moves the focus on (and `retreat()` at the top). This keeps the feed moving past a zero-height Mid-Frame and past a `WILD` frame held back behind a focused one. The page wires them to two invisible sentinels that only act in the direction the viewer is scrolling, so scrolling up through a frame can never re-mount what was just removed below it.
+5. Frames that leave the window are fully removed. Blank spacers of their measured height stand in above and below the list (unmeasured frames are estimated), and the scroll position is re-anchored after every change, so the page neither jumps nor hits a wall when frames are destroyed or brought back. When a `WILD` frame arrives, an empty Mid-Frame slot is stepped over, so the content frame behind it stays mounted instead of vanishing while still on screen.
 6. A kind that runs out of posts is skipped rather than ending the feed. The feed never ends on an empty Mid-Frame.
 7. Overlapping `focus()` calls are safe (the latest wins), a failed load can be retried with `retry()`, and a throwing event handler can never break the core.
 
@@ -840,6 +841,8 @@ type AnyHandler = (payload: any) => void;
 
 /** Upper bound on layout steps spent looking for the next frame, so a bad layout cannot spin forever. */
 const MAX_LAYOUT_STEPS = 64;
+/** How many empty dropped slots the window may step over when looking for the next content frame. */
+const MAX_STEPPED_OVER_SLOTS = 2;
 
 export interface FeedFrameManagerOptions<T> {
   source: FeedSource<T>;
@@ -932,6 +935,16 @@ export class FeedFrameManager<T> {
 
   getFocusIndex(): number {
     return this.focusIndex;
+  }
+
+  /** A generated frame by index (mounted or not). */
+  getFrame(index: number): Frame<T> | undefined {
+    return this.frames[index];
+  }
+
+  /** How many frames have been generated so far (mounted or not). */
+  getFrameCount(): number {
+    return this.frames.length;
   }
 
   /** Mark a frame as one that must never be mounted beside a WILD frame. MID frames already are. */
@@ -1120,22 +1133,36 @@ export class FeedFrameManager<T> {
   }
 
   /**
-   * Picks the frames to keep mounted. The focused frame always wins, then neighbours by distance
-   * (the neighbour in the scroll direction wins ties). A candidate that would put a volatile frame
-   * next to a WILD frame is deferred until focus reaches it.
+   * Picks the frames to keep mounted: the focused frame, then up to windowAhead / windowBehind frames on
+   * each side. The neighbour in the scroll direction is chosen first, so it wins any conflict. A candidate
+   * that would put a volatile frame next to a WILD frame is dropped. A dropped frame with no content (a
+   * Mid-Frame slot) is stepped over, so the content frame beyond it stays mounted instead of vanishing
+   * while still on screen; a dropped frame that has content is never stepped over, because that would
+   * leave a hole in the feed.
    */
   private resolveWindow(focused: Frame<T>, direction: ScrollDirection): Frame<T>[] {
     const picked: Frame<T>[] = [focused];
-    const maxDistance = Math.max(this.windowBehind, this.windowAhead);
 
-    for (let d = 1; d <= maxDistance; d++) {
-      const deltas = direction === 'down' ? [d, -d] : [-d, d];
-      for (const delta of deltas) {
-        if (delta > 0 && d > this.windowAhead) continue;
-        if (delta < 0 && d > this.windowBehind) continue;
-        const candidate = this.frames[focused.index + delta];
-        if (candidate && !this.conflicts(candidate, picked)) picked.push(candidate);
+    const take = (step: 1 | -1, limit: number): void => {
+      let taken = 0;
+      for (let d = 1; d <= limit + MAX_STEPPED_OVER_SLOTS && taken < limit; d++) {
+        const candidate = this.frames[focused.index + step * d];
+        if (!candidate) return;
+        if (!this.conflicts(candidate, picked)) {
+          picked.push(candidate);
+          taken++;
+        } else if (candidate.items.length > 0) {
+          return;
+        }
       }
+    };
+
+    if (direction === 'down') {
+      take(1, this.windowAhead);
+      take(-1, this.windowBehind);
+    } else {
+      take(-1, this.windowBehind);
+      take(1, this.windowAhead);
     }
     return picked;
   }
@@ -1196,6 +1223,7 @@ export class FeedFrameManager<T> {
 ```ts
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
 import type { FeedFrameManager } from './FeedFrameManager.ts';
+import { markProgrammaticScroll, sentinelMayAct, type ScrollIntent } from './scrollDirection.ts';
 import type { FeedStatus, Frame } from './types.ts';
 
 /** The frames that should currently be in the React tree (3 at most by default). */
@@ -1229,11 +1257,13 @@ export function useFrameFocus<T>(manager: FeedFrameManager<T>, index: number): R
 }
 
 /**
- * Fires onEnter whenever the returned element is in view, and again after `watch` changes while it
- * still is (a plain observer would only report the first crossing). Use one below the last frame
- * (manager.advance) and one above the first (manager.retreat).
+ * Fires onEnter while the returned element is in view AND the viewer is scrolling toward it (`when`),
+ * and again after `watch` changes while it still is (a plain observer only reports the first crossing).
+ * Put one below the last frame (when="down", manager.advance) and one above the first (when="up",
+ * manager.retreat). The direction check is what stops the two edges from undoing each other: scrolling
+ * up through a frame must not re-mount what was just removed below it.
  */
-export function useEdgeSentinel(onEnter: () => void, watch: unknown): RefObject<HTMLDivElement | null> {
+export function useEdgeSentinel(onEnter: () => void, watch: unknown, when: ScrollIntent): RefObject<HTMLDivElement | null> {
   const ref = useRef<HTMLDivElement>(null);
   const callback = useRef(onEnter);
   callback.current = onEnter;
@@ -1241,11 +1271,11 @@ export function useEdgeSentinel(onEnter: () => void, watch: unknown): RefObject<
     const el = ref.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) callback.current();
+      if (entries.some((e) => e.isIntersecting) && sentinelMayAct(when)) callback.current();
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [watch]);
+  }, [watch, when]);
   return ref;
 }
 
@@ -1296,10 +1326,67 @@ export function useScrollAnchor<T>(
     const previousTop = found ? before.get(found.index) : undefined;
     if (found && previousTop !== undefined) {
       const delta = found.el.getBoundingClientRect().top - previousTop;
-      if (Math.abs(delta) > 0.5) window.scrollBy({ top: delta, behavior: 'instant' });
+      if (Math.abs(delta) > 0.5) {
+        markProgrammaticScroll();
+        window.scrollBy({ top: delta, behavior: 'instant' });
+      }
     }
     tops.current = measureTops(container);
   }, [mounted, manager, containerRef]);
+}
+```
+
+#### `src/feed-engine/scrollDirection.ts`
+
+```ts
+/**
+ * Which way the viewer is scrolling, read from real scroll events. Scrolls the app performs itself
+ * (keeping the page still while frames change) are ignored, so they never flip the direction.
+ */
+export type ScrollIntent = 'up' | 'down';
+
+let attached = false;
+let lastY = 0;
+let direction: ScrollIntent | null = null;
+let ignoreUntil = 0;
+
+function onScroll(): void {
+  const y = window.scrollY;
+  const dy = y - lastY;
+  lastY = y;
+  if (Math.abs(dy) >= 1 && performance.now() >= ignoreUntil) direction = dy > 0 ? 'down' : 'up';
+}
+
+function attach(): void {
+  if (attached || typeof window === 'undefined') return;
+  attached = true;
+  lastY = window.scrollY;
+  window.addEventListener('scroll', onScroll, { passive: true });
+}
+
+/** null until the viewer has scrolled at all. */
+export function getScrollDirection(): ScrollIntent | null {
+  attach();
+  return direction;
+}
+
+/** Call right before scrolling the page programmatically so that scroll is not mistaken for the viewer's. */
+export function markProgrammaticScroll(ms = 150): void {
+  attach();
+  ignoreUntil = performance.now() + ms;
+}
+
+/** Whether an edge sentinel may act: it must match the viewer's direction ("down" may also act before any scroll). */
+export function sentinelMayAct(when: ScrollIntent): boolean {
+  const current = getScrollDirection();
+  return current === null ? when === 'down' : current === when;
+}
+
+/** Test helper. */
+export function resetScrollDirection(): void {
+  direction = null;
+  ignoreUntil = 0;
+  lastY = typeof window === 'undefined' ? 0 : window.scrollY;
 }
 ```
 

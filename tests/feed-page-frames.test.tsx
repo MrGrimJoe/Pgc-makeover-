@@ -5,6 +5,7 @@ import { mount, flush, type Mounted } from './_ui.tsx';
 import { FeedPage } from '../src/pages/FeedPage.tsx';
 import type { PostItem } from '../shared/schema.ts';
 import { MODERATED_LAYOUT } from '../src/feed-engine/index.ts';
+import { getScrollDirection, resetScrollDirection } from '../src/feed-engine/scrollDirection.ts';
 
 const post = (n: number, moderation?: 'SAFE' | 'WILD'): PostItem => ({
   id: `post-${n}`,
@@ -63,8 +64,17 @@ async function scrollToFrame(c: HTMLElement, index: number) {
   await flush();
 }
 
+/** jsdom has no scrolling, so move window.scrollY and fire the scroll event the way a browser would. */
+let scrollPos = 1000;
+function nudgeScroll(dir: 'up' | 'down') {
+  scrollPos += dir === 'down' ? 20 : -20;
+  Object.defineProperty(window, 'scrollY', { value: scrollPos, configurable: true });
+  window.dispatchEvent(new Event('scroll'));
+}
+
 /** The user scrolled past the last (bottom) or above the first (top) mounted frame. */
 async function scrollPast(c: HTMLElement, edge: 'top' | 'bottom') {
+  nudgeScroll(edge === 'bottom' ? 'down' : 'up'); // sentinels only act in the direction of travel
   const el = c.querySelector<HTMLElement>(`[data-frame-sentinel="${edge}"]`);
   if (!el) throw new Error(`no ${edge} sentinel`);
   await act(async () => { observed.get(el)?.(); });
@@ -72,11 +82,44 @@ async function scrollPast(c: HTMLElement, edge: 'top' | 'bottom') {
 }
 
 describe('FeedPage frame architecture', () => {
+  it('ignores the bottom sentinel while the viewer scrolls up, and the top sentinel while they scroll down', async () => {
+    observed.clear();
+    vi.stubGlobal('IntersectionObserver', FakeIO);
+    installFeedApi();
+    const mm = await mount(<FeedPage currentUserId="u1" onNavigateToCompose={() => {}} onViewAuthorProfile={() => {}} frameLayout={MODERATED_LAYOUT} />);
+    await flush();
+    await flush();
+    scrollPos = 1000;
+    Object.defineProperty(window, 'scrollY', { value: scrollPos, configurable: true });
+    resetScrollDirection();
+    getScrollDirection();
+    await scrollToFrame(mm.container, 1);
+    await scrollToFrame(mm.container, 2); // Mid-Frame focused, WILD held back
+    const before = frameEls(mm.container).map((e) => e.dataset.frameKind);
+    // scrolling UP with the bottom sentinel in view must not advance onto the WILD frame
+    nudgeScroll('up');
+    const bottom = mm.container.querySelector<HTMLElement>('[data-frame-sentinel="bottom"]')!;
+    await act(async () => { observed.get(bottom)?.(); });
+    await flush();
+    expect(frameEls(mm.container).map((e) => e.dataset.frameKind)).toEqual(before);
+    // scrolling DOWN does
+    nudgeScroll('down');
+    await act(async () => { observed.get(bottom)?.(); });
+    await flush();
+    expect(frameEls(mm.container).map((e) => e.dataset.frameKind)).toContain('WILD');
+    mm.unmount();
+    vi.unstubAllGlobals();
+  });
+
   let m: Mounted;
 
   beforeEach(() => {
     observed.clear();
     vi.stubGlobal('IntersectionObserver', FakeIO);
+    scrollPos = 1000;
+    Object.defineProperty(window, 'scrollY', { value: scrollPos, configurable: true });
+    resetScrollDirection();
+    getScrollDirection(); // attach the listener
   });
   afterEach(() => {
     m?.unmount();
@@ -117,7 +160,7 @@ describe('FeedPage frame architecture', () => {
     expect(frameEls(m.container).map((e) => e.dataset.frameKind)).toEqual(['SAFE', 'MID']);
 
     await scrollPast(m.container, 'bottom'); // user scrolled past the Mid-Frame
-    expect(frameEls(m.container).map((e) => e.dataset.frameKind)).toEqual(['WILD', 'SAFE']);
+    expect(frameEls(m.container).map((e) => e.dataset.frameKind)).toEqual(['SAFE', 'WILD', 'SAFE']);
     expect(m.container.querySelector('[data-frame-kind="MID"]')).toBeNull();
 
     await scrollPast(m.container, 'top'); // and back up: the WILD frame goes before the Mid-Frame returns
@@ -129,13 +172,14 @@ describe('FeedPage frame architecture', () => {
   it('keeps the page height steady with a spacer standing in for destroyed frames', async () => {
     installFeedApi();
     await render();
-    const spacer = () => Number((m.container.querySelector<HTMLElement>('[data-frame-spacer]')?.style.height ?? '0px').replace('px', ''));
+    const spacer = () => Number((m.container.querySelector<HTMLElement>('[data-frame-spacer="top"]')?.style.height ?? '0px').replace('px', ''));
     expect(spacer()).toBe(0);
     for (const i of [1, 2]) await scrollToFrame(m.container, i);
     await scrollPast(m.container, 'bottom');
     // jsdom has no layout (heights are 0), so assert the spacer is wired to the first mounted frame
-    expect(frameIndexes(m.container)[0]).toBe(3);
-    expect(m.container.querySelector('[data-frame-spacer]')).not.toBeNull();
+    expect(frameIndexes(m.container)[0]).toBe(1); // frame 0 left the window; frame 1 stays behind the WILD frame
+    expect(m.container.querySelector('[data-frame-spacer="top"]')).not.toBeNull();
+    expect(m.container.querySelector('[data-frame-spacer="bottom"]')).not.toBeNull(); // mirrors the top one
   });
 
   it('keeps like state when a frame is destroyed and rebuilt', async () => {

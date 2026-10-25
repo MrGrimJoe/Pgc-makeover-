@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
 import type { FeedFrameManager } from './FeedFrameManager.ts';
+import { markProgrammaticScroll, sentinelMayAct, type ScrollIntent } from './scrollDirection.ts';
 import type { FeedStatus, Frame } from './types.ts';
 
 /** The frames that should currently be in the React tree (3 at most by default). */
@@ -33,11 +34,13 @@ export function useFrameFocus<T>(manager: FeedFrameManager<T>, index: number): R
 }
 
 /**
- * Fires onEnter whenever the returned element is in view, and again after `watch` changes while it
- * still is (a plain observer would only report the first crossing). Use one below the last frame
- * (manager.advance) and one above the first (manager.retreat).
+ * Fires onEnter while the returned element is in view AND the viewer is scrolling toward it (`when`),
+ * and again after `watch` changes while it still is (a plain observer only reports the first crossing).
+ * Put one below the last frame (when="down", manager.advance) and one above the first (when="up",
+ * manager.retreat). The direction check is what stops the two edges from undoing each other: scrolling
+ * up through a frame must not re-mount what was just removed below it.
  */
-export function useEdgeSentinel(onEnter: () => void, watch: unknown): RefObject<HTMLDivElement | null> {
+export function useEdgeSentinel(onEnter: () => void, watch: unknown, when: ScrollIntent): RefObject<HTMLDivElement | null> {
   const ref = useRef<HTMLDivElement>(null);
   const callback = useRef(onEnter);
   callback.current = onEnter;
@@ -45,11 +48,11 @@ export function useEdgeSentinel(onEnter: () => void, watch: unknown): RefObject<
     const el = ref.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) callback.current();
+      if (entries.some((e) => e.isIntersecting) && sentinelMayAct(when)) callback.current();
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [watch]);
+  }, [watch, when]);
   return ref;
 }
 
@@ -100,7 +103,10 @@ export function useScrollAnchor<T>(
     const previousTop = found ? before.get(found.index) : undefined;
     if (found && previousTop !== undefined) {
       const delta = found.el.getBoundingClientRect().top - previousTop;
-      if (Math.abs(delta) > 0.5) window.scrollBy({ top: delta, behavior: 'instant' });
+      if (Math.abs(delta) > 0.5) {
+        markProgrammaticScroll();
+        window.scrollBy({ top: delta, behavior: 'instant' });
+      }
     }
     tops.current = measureTops(container);
   }, [mounted, manager, containerRef]);
