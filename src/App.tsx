@@ -246,6 +246,7 @@ export default function App() {
           {activeTab === 'feed' && currentUser && (
             <FeedPage
               currentUserId={currentUser.user.id}
+              localFirst
               onNavigateToCompose={() => setActiveTab('post')}
               onViewAuthorProfile={handleViewAuthorProfile}
             />

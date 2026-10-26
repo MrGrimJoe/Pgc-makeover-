@@ -216,6 +216,22 @@ describe('offline', () => {
     b.manager.destroy();
   });
 
+  it('online, after the person has seen everything the server has, a reload still shows posts (not an empty feed)', async () => {
+    server.posts = Array.from({ length: 30 }, (_, i) => makePost(i + 1));
+    const a = setup();
+    attachHistoryTracking(a.manager, a.cache);
+    for (let i = 0; i < 4; i++) await a.manager.focus(i);
+    await vi.waitFor(async () => expect((await a.cache.getStats()).viewed).toBe(30));
+    a.manager.destroy();
+
+    // reload with the network up: the server has nothing the person has not seen
+    const b = setup();
+    await b.manager.focus(0);
+    expect(b.manager.getFrame(0)!.items.length).toBeGreaterThan(0);
+    expect(b.manager.getStatus().error).toBeNull();
+    b.manager.destroy();
+  });
+
   it('shows the normal error (with Try again) when offline and nothing is stored', async () => {
     online = false;
     const { manager } = setup();

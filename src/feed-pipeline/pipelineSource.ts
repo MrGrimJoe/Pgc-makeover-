@@ -93,8 +93,10 @@ export function createPipelineFeedSource(options: PipelineSourceOptions): Pipeli
 
       let items = pools[kind].splice(0, limit);
       const unreachable = failure !== null || !cache.isOnline();
-      if (items.length === 0 && unreachable) {
-        items = (await loadHistory())[kind].splice(0, limit); // nothing unseen left: show what was seen before
+      // Nothing unseen left (the network is down, or the person has seen everything the server has): show what
+      // was seen before rather than an empty feed.
+      if (items.length === 0 && (unreachable || !(await cache.hasMore()))) {
+        items = (await loadHistory())[kind].splice(0, limit);
         if (items.length === 0 && failure !== null) throw failure; // nothing stored at all: let the page show "Try again"
       }
       for (const post of items) served.set(post.id, post);

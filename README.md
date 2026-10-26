@@ -1400,7 +1400,7 @@ export function resetScrollDirection(): void {
 
 This is the data pipeline behind the frame feed: the server packages posts into tagged batches, the phone keeps them in IndexedDB, remembers what was viewed, and ranks them locally before the frame engine groups them into SAFE and WILD frames. It contains **no advertising or monetization code of any kind**; that stays entirely separate from this pipeline.
 
-It sits next to the frame engine in the section above and does not change it (`src/feed-engine/` is untouched). The existing `GET /api/feed` is untouched too. The pipeline is **off by default**: `FeedPage` uses it only when given `localFirst` (see "Turning it on").
+It sits next to the frame engine in the section above and does not change it (`src/feed-engine/` is untouched). The existing `GET /api/feed` is untouched too. `FeedPage` uses the pipeline only when given `localFirst`; **`App` turns it on for the home feed**, and any other use of `FeedPage` stays on the plain API (see "Turning it on"). When the person has already seen everything the server has, the feed shows what they saw before instead of an empty page.
 
 ### Where everything lives
 
