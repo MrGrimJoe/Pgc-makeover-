@@ -63,17 +63,8 @@ import { rankPosts, type CandidatePost, type UserRankingContext } from './rankin
 import { computeDecayedWeight } from './ranking/decay.ts';
 import { RANKING_CONFIG } from './ranking/config.ts';
 import { recordImpressions } from './impressions.ts';
+import { jsonResponse } from './http.ts';
 import { decodeDeliveredCursor, encodeDeliveredCursor, hashPostId } from './ranking/cursor.ts';
-
-function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-    },
-  });
-}
 
 /**
  * Constant-time string comparison for secrets to prevent timing attacks.
@@ -140,6 +131,12 @@ function decodeCursor(cursorStr: string): { createdAt: string; id: string } | nu
 /**
  * Gets all user IDs blocked with the given user in either direction.
  */
+/**
+ * SQL for "everyone blocked by, or blocking, this viewer", for use as `x NOT IN ${BLOCKED_SUBQUERY}`. It takes the
+ * viewer's id twice. Use it instead of binding the whole block list: D1 allows only 100 bound parameters per query.
+ */
+const BLOCKED_SUBQUERY = '(SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)';
+
 async function getBlockedUserIds(db: D1Database, userId: string): Promise<string[]> {
   try {
     const rows = await db.prepare(
@@ -210,21 +207,20 @@ async function hydratePosts(
 
   const blockedIds = await getBlockedUserIds(db, currentUserId);
   const hasBlocked = blockedIds.length > 0;
-  const blockedPh = hasBlocked ? blockedIds.map(() => '?').join(',') : '';
 
   // 2. Batched like counts (excluding blocked users)
   const likeCountsQuery = hasBlocked
     ? `SELECT post_id, COUNT(*) as count
        FROM post_reactions
        WHERE type = 'like' AND post_id IN (${placeholders})
-         AND user_id NOT IN (${blockedPh})
+         AND user_id NOT IN ${BLOCKED_SUBQUERY}
        GROUP BY post_id`
     : `SELECT post_id, COUNT(*) as count
        FROM post_reactions
        WHERE type = 'like' AND post_id IN (${placeholders})
        GROUP BY post_id`;
 
-  const likeCountsParams = hasBlocked ? [...postIds, ...blockedIds] : postIds;
+  const likeCountsParams = hasBlocked ? [...postIds, currentUserId, currentUserId] : postIds;
   const likeCountsRows = await db
     .prepare(likeCountsQuery)
     .bind(...likeCountsParams)
@@ -252,14 +248,14 @@ async function hydratePosts(
     ? `SELECT post_id, COUNT(*) as count
        FROM comments
        WHERE post_id IN (${placeholders})
-         AND author_id NOT IN (${blockedPh})
+         AND author_id NOT IN ${BLOCKED_SUBQUERY}
        GROUP BY post_id`
     : `SELECT post_id, COUNT(*) as count
        FROM comments
        WHERE post_id IN (${placeholders})
        GROUP BY post_id`;
 
-  const commentCountsParams = hasBlocked ? [...postIds, ...blockedIds] : postIds;
+  const commentCountsParams = hasBlocked ? [...postIds, currentUserId, currentUserId] : postIds;
   const commentCountsRows = await db
     .prepare(commentCountsQuery)
     .bind(...commentCountsParams)
@@ -1997,16 +1993,18 @@ export default {
         // 4. Candidate posts from active pool
         const blockedIds = await getBlockedUserIds(env.DB, auth.user.id);
         const hasBlocked = blockedIds.length > 0;
-        const blockedPh = hasBlocked ? blockedIds.map(() => '?').join(',') : '';
-
+        // D1 allows only 100 bound parameters per query, and the block list used to be bound three times, so
+        // someone with about 33 blocks got a broken feed. The database looks the list up itself instead:
+        // each exclusion costs two parameters (the viewer's id) however many people are blocked.
+        const blockedSub = BLOCKED_SUBQUERY;
         const candidateFilter = hasBlocked
-          ? ` AND p.author_id NOT IN (${blockedPh})`
+          ? ` AND p.author_id NOT IN ${blockedSub}`
           : '';
         const engagersExclude = hasBlocked
-          ? ` AND user_id NOT IN (${blockedPh})`
+          ? ` AND user_id NOT IN ${blockedSub}`
           : '';
         const commentsExclude = hasBlocked
-          ? ` AND author_id NOT IN (${blockedPh})`
+          ? ` AND author_id NOT IN ${blockedSub}`
           : '';
 
         if (hasBlocked) {
@@ -2035,18 +2033,18 @@ export default {
         `;
 
         // Bind order MUST match the placeholder order in candidateQuery above:
-        //   1. engagersExclude (blocked ids)  - post_reactions subquery in SELECT
-        //   2. commentsExclude (blocked ids)  - comments subquery in SELECT
-        //   3. p.expires_at > ?               - nowIso
-        //   4. candidateFilter (blocked ids)  - WHERE author filter
+        //   1. engagersExclude (viewer id twice) - post_reactions subquery in SELECT
+        //   2. commentsExclude (viewer id twice) - comments subquery in SELECT
+        //   3. p.expires_at > ?                  - nowIso
+        //   4. candidateFilter (viewer id twice) - WHERE author filter
         const candidateParams: unknown[] = [];
         if (hasBlocked) {
-          candidateParams.push(...blockedIds); // engagersExclude
-          candidateParams.push(...blockedIds); // commentsExclude
+          candidateParams.push(auth.user.id, auth.user.id); // engagersExclude
+          candidateParams.push(auth.user.id, auth.user.id); // commentsExclude
         }
         candidateParams.push(nowIso); // expires_at
         if (hasBlocked) {
-          candidateParams.push(...blockedIds); // candidateFilter
+          candidateParams.push(auth.user.id, auth.user.id); // candidateFilter
         }
 
         type CandidateRow = PostRow & {
@@ -2094,20 +2092,24 @@ export default {
         const postTopicsMap = new Map<string, Array<{ slug: string; confidence: number }>>();
         if (candidateRows.results && candidateRows.results.length > 0) {
           const cIds = candidateRows.results.map((r) => r.id);
-          const ph = cIds.map(() => '?').join(',');
-          const tRows = await env.DB.prepare(
-            `SELECT pt.post_id, t.slug, pt.confidence
-             FROM post_topics pt
-             JOIN topics t ON t.id = pt.topic_id
-             WHERE pt.post_id IN (${ph})`
-          )
-            .bind(...cIds)
-            .all<{ post_id: string; slug: string; confidence: number }>();
+          // The pool can hold about 160 posts; D1 takes at most 100 bound parameters per query, so ask in chunks.
+          for (let i = 0; i < cIds.length; i += 90) {
+            const chunk = cIds.slice(i, i + 90);
+            const ph = chunk.map(() => '?').join(',');
+            const tRows = await env.DB.prepare(
+              `SELECT pt.post_id, t.slug, pt.confidence
+               FROM post_topics pt
+               JOIN topics t ON t.id = pt.topic_id
+               WHERE pt.post_id IN (${ph})`
+            )
+              .bind(...chunk)
+              .all<{ post_id: string; slug: string; confidence: number }>();
 
-          for (const tr of tRows.results || []) {
-            const list = postTopicsMap.get(tr.post_id) || [];
-            list.push({ slug: tr.slug, confidence: tr.confidence });
-            postTopicsMap.set(tr.post_id, list);
+            for (const tr of tRows.results || []) {
+              const list = postTopicsMap.get(tr.post_id) || [];
+              list.push({ slug: tr.slug, confidence: tr.confidence });
+              postTopicsMap.set(tr.post_id, list);
+            }
           }
         }
 

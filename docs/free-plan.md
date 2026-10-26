@@ -16,7 +16,7 @@ Limits checked against Cloudflare's docs on 2026-10-26. Check again before launc
 1. A route must not loop over rows and run queries inside the loop. Use `IN (...)`, multi-row `VALUES`, or one `db.batch`.
 2. Never `COUNT(*)` a table that grows per view or per request. Keep a counter column instead (see migration 016).
 3. A new filter needs an index that starts with the filtered column. Check with `EXPLAIN QUERY PLAN`; "SCAN" on a big table is a bug.
-4. Bound parameters: at most 100 per query. Anything that takes a list from the user needs a cap.
+4. Bound parameters: at most 100 per query. Anything that takes a list from the user needs a cap. Never bind the whole block list or a whole candidate pool: use `BLOCKED_SUBQUERY` in `worker/index.ts` (it takes the viewer's id twice) and ask for post ids in chunks of 90. `tests/ranked-feed-many-blocks.test.ts` runs the feed on a database that enforces the limit.
 5. Do not compress in the Worker. Cloudflare compresses responses at the edge, and Worker CPU is only 10 ms.
 6. Hashed build files are cached for a year (`public/_headers`). New unhashed static files need their own rule.
 

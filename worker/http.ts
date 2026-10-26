@@ -5,6 +5,10 @@ export function jsonResponse(data: unknown, status = 200, headers: HeadersInit =
     status,
     headers: {
       'Content-Type': 'application/json',
+      // _headers only covers static files; these answers come from the Worker. They are personal to the
+      // signed-in viewer, so nothing may store them, and the browser must not guess another type.
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
       ...headers,
     },
   });
