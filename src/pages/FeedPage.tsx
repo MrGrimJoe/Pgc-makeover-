@@ -3,8 +3,9 @@ import type { PostItem } from '../../shared/schema.ts';
 import { PostCard } from '../components/PostCard.tsx';
 import { FeedFrame } from '../components/FeedFrame.tsx';
 import { TrackedPost } from '../components/TrackedPost.tsx';
-import { ImpressionTracker, sendImpressions } from '../lib/impressions.ts';
-import { FeedFrameManager, type FrameLayout } from '../feed-engine/index.ts';
+import { ImpressionTracker, sendImpressions, type ImpressionReport } from '../lib/impressions.ts';
+import { FeedFrameManager, type FeedSource, type FrameLayout } from '../feed-engine/index.ts';
+import { createFeedPipeline } from '../feed-pipeline/index.ts';
 import { useEdgeSentinel, useFeedStatus, useMountedFrames, useScrollAnchor } from '../feed-engine/react.ts';
 import { createApiFeedSource, type FeedMode } from '../lib/feed-source.ts';
 
@@ -14,6 +15,11 @@ interface FeedPageProps {
   onViewAuthorProfile: (username: string) => void;
   /** Frame layout. Defaults to one continuous run of SAFE frames. */
   frameLayout?: FrameLayout;
+  /**
+   * Local-first feed (see the [PIPELINE] section of the README): batches come from /api/v1/feed/*, are kept in
+   * IndexedDB, and are ranked on this phone. Default false: the page behaves exactly as before.
+   */
+  localFirst?: boolean;
 }
 
 /** Posts per content frame. */
@@ -26,6 +32,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   onNavigateToCompose,
   onViewAuthorProfile,
   frameLayout,
+  localFirst = false,
 }) => {
   const [feedMode, setFeedMode] = useState<FeedMode>('for_you');
   const [deleted, setDeleted] = useState<ReadonlySet<string>>(() => new Set());
@@ -33,12 +40,26 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   const engagement = useRef(new Map<string, Engagement>());
   const listRef = useRef<HTMLDivElement>(null);
   // Reports how long each post is on screen so For You learns from what the viewer actually looks at.
-  const [tracker] = useState(() => new ImpressionTracker(sendImpressions));
+  const pipeline = useMemo(
+    () => (localFirst ? createFeedPipeline({ userId: currentUserId, mode: feedMode }) : null),
+    [localFirst, currentUserId, feedMode],
+  );
+  useEffect(() => {
+    if (!pipeline) return;
+    const stopWatching = pipeline.cache.watchConnectivity(); // catch up when the connection comes back
+    return () => {
+      stopWatching();
+      void pipeline.dispose();
+    };
+  }, [pipeline]);
+  const sendRef = useRef<(batch: ImpressionReport[]) => void | Promise<void>>(sendImpressions);
+  sendRef.current = pipeline ? pipeline.impressionSender() : sendImpressions;
+  const [tracker] = useState(() => new ImpressionTracker((batch) => sendRef.current(batch)));
   useEffect(() => () => tracker.dispose(), [tracker]);
 
   const { manager, heights } = useMemo(() => {
     const m = new FeedFrameManager<PostItem>({
-      source: createApiFeedSource(feedMode),
+      source: pipeline ? (pipeline.source as FeedSource<PostItem>) : createApiFeedSource(feedMode),
       layout: frameLayout,
       frameSize: FEED_FRAME_SIZE,
     });
@@ -50,7 +71,8 @@ export const FeedPage: React.FC<FeedPageProps> = ({
       if (el) measured.set(frame.index, el.getBoundingClientRect().height);
     });
     return { manager: m, heights: measured };
-  }, [feedMode, frameLayout]);
+  }, [feedMode, frameLayout, pipeline]);
+  useEffect(() => pipeline?.attach(manager), [pipeline, manager]); // frames that take focus become history
   const mountedFrames = useMountedFrames(manager);
   const status = useFeedStatus(manager);
   useScrollAnchor(manager, listRef, mountedFrames);
@@ -86,9 +108,22 @@ export const FeedPage: React.FC<FeedPageProps> = ({
     setDeleted((prev) => new Set(prev).add(deletedId));
   }, []);
 
-  const handleEngagementChange = useCallback((postId: string, state: Engagement) => {
-    engagement.current.set(postId, state);
-  }, []);
+  const handleEngagementChange = useCallback(
+    (postId: string, state: Engagement) => {
+      const post = pipeline?.source.getPost(postId);
+      const before = engagement.current.get(postId) ?? post;
+      if (pipeline && post && before) {
+        if (state.has_liked && !before.has_liked) pipeline.personalization.recordInteraction(post, 'like');
+        if (state.comments_count > before.comments_count) pipeline.personalization.recordInteraction(post, 'comment');
+      }
+      engagement.current.set(postId, state);
+    },
+    [pipeline],
+  );
+  const handleTopicClick = useCallback(
+    (slug: string) => pipeline?.personalization.recordTagClick(slug),
+    [pipeline],
+  );
 
   const error = status.error ? (status.error instanceof Error ? status.error.message : 'Failed to load posts') : null;
   const loading = mountedFrames.length === 0 && !status.ended && !error;
@@ -187,6 +222,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
                     onPostDeleted={handlePostDeleted}
                     onViewAuthorProfile={onViewAuthorProfile}
                     onEngagementChange={handleEngagementChange}
+                    onTopicClick={pipeline ? handleTopicClick : undefined}
                   />
                 </TrackedPost>
               ))}

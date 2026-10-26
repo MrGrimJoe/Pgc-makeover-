@@ -13,6 +13,7 @@ import { useLayout } from './lib/layout.ts';
 import { SignInPage, type SignInNotice } from './pages/SignInPage.tsx';
 import { OnboardingPage } from './pages/OnboardingPage.tsx';
 import { FeedPage } from './pages/FeedPage.tsx';
+import { forgetFeedDataFor } from './feed-pipeline/index.ts';
 import { SearchPage } from './pages/SearchPage.tsx';
 import { PostComposerPage } from './pages/PostComposerPage.tsx';
 import { ProfileEditPage } from './pages/ProfileEditPage.tsx';
@@ -137,6 +138,8 @@ export default function App() {
     } catch {
       // Ignore network errors on logout
     } finally {
+      // Cached posts, history and learned preferences must not stay on the phone for the next person
+      if (currentUser) await forgetFeedDataFor(currentUser.user.id);
       setCurrentUser(null);
       setActiveTab('signin');
     }

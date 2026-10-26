@@ -27,8 +27,12 @@ export {
 export {
   attachHistoryTracking,
   classifyPipelinePost,
+  createFeedPipeline,
   createLocalImpressionSender,
   createPipelineFeedSource,
+  forgetFeedDataFor,
+  type FeedPipeline,
+  type FeedPipelineOptions,
   type LocalImpressionSenderOptions,
   type PipelineFeedSource,
   type PipelineSourceOptions,

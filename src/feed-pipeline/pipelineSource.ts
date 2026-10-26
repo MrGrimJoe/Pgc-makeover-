@@ -7,9 +7,10 @@
  */
 import type { PipelinePost } from '../../shared/feed-pipeline.ts';
 import type { FeedFrameManager, FeedSource, ModerationState } from '../feed-engine/index.ts';
+import type { PipelineMode } from '../../shared/feed-pipeline.ts';
 import { sendImpressions, type ImpressionReport } from '../lib/impressions.ts';
-import type { FeedCacheManager } from './FeedCacheManager.ts';
-import type { LocalPersonalization } from './LocalPersonalization.ts';
+import { FeedCacheManager, type FeedCacheOptions } from './FeedCacheManager.ts';
+import { LocalPersonalization, type LocalPersonalizationOptions } from './LocalPersonalization.ts';
 
 /** SAFE or WILD, straight from the server's tag. */
 export function classifyPipelinePost(post: PipelinePost): ModerationState {
@@ -109,8 +110,8 @@ export function createPipelineFeedSource(options: PipelineSourceOptions): Pipeli
  * Builds the history as the person scrolls: every frame that takes focus has its posts marked viewed in
  * IndexedDB. Returns the unsubscribe function.
  */
-export function attachHistoryTracking(
-  manager: Pick<FeedFrameManager<PipelinePost>, 'on'>,
+export function attachHistoryTracking<T extends { id: string }>(
+  manager: Pick<FeedFrameManager<T>, 'on'>,
   cache: Pick<FeedCacheManager, 'markViewed'>,
 ): () => void {
   return manager.on('frameFocus', ({ frame }) => {
@@ -141,4 +142,53 @@ export function createLocalImpressionSender(options: LocalImpressionSenderOption
     void cache.recordDwell(batch.map((r) => ({ id: r.post_id, dwellMs: r.duration_ms }))).catch(() => undefined);
     await Promise.resolve(upstream(batch)).catch(() => undefined);
   };
+}
+
+export interface FeedPipelineOptions {
+  userId: string;
+  mode: PipelineMode;
+  cache?: Partial<Omit<FeedCacheOptions, 'userId' | 'mode'>>;
+  personalization?: Partial<Omit<LocalPersonalizationOptions, 'userId'>>;
+}
+
+export interface FeedPipeline {
+  cache: FeedCacheManager;
+  personalization: LocalPersonalization;
+  source: PipelineFeedSource;
+  /** Track history on a FeedFrameManager built with `source`. Returns the unsubscribe function. */
+  attach<T extends { id: string }>(manager: Pick<FeedFrameManager<T>, 'on'>): () => void;
+  /** `send` for an ImpressionTracker. */
+  impressionSender(upstream?: LocalImpressionSenderOptions['upstream']): (batch: ImpressionReport[]) => Promise<void>;
+  /** Closes the database connection. Does not delete anything. */
+  dispose(): Promise<void>;
+}
+
+/** Everything one signed-in person needs for one feed mode, wired together. */
+export function createFeedPipeline(options: FeedPipelineOptions): FeedPipeline {
+  const cache = new FeedCacheManager({ userId: options.userId, mode: options.mode, ...options.cache });
+  const personalization = new LocalPersonalization({ userId: options.userId, ...options.personalization });
+  const source = createPipelineFeedSource({ cache, personalization });
+  return {
+    cache,
+    personalization,
+    source,
+    attach: (manager) => attachHistoryTracking(manager, cache),
+    impressionSender: (upstream) => createLocalImpressionSender({ personalization, cache, getPost: source.getPost, upstream }),
+    dispose: () => cache.destroy(),
+  };
+}
+
+/**
+ * Sign-out: forgets this person's cached posts, history and learned preferences on this phone (both feed modes).
+ * Best effort; never throws.
+ */
+export async function forgetFeedDataFor(userId: string): Promise<void> {
+  try {
+    const cache = new FeedCacheManager({ userId, mode: 'for_you' });
+    await cache.clear();
+    await cache.destroy();
+  } catch {
+    /* nothing stored, or storage unavailable */
+  }
+  new LocalPersonalization({ userId }).reset();
 }
