@@ -295,7 +295,7 @@ Before opening the platform to real students, verify all production hardening cr
 - [ ] **Verify `wrangler.toml` configuration**:
   - `database_id` is set to the real provisioned D1 UUID (not `placeholder-d1-id`).
   - `ENVIRONMENT = "production"` under `[vars]`.
-- [ ] **Replace the placeholder stickers and GIFs** with the real ones (see "Stickers and GIFs" above). `npm run build` warns until `public/stickers/placeholder/` is gone.
+- [x] **Placeholder stickers and GIFs replaced** with the real packs (Memes and Reactions, see "Stickers and GIFs" above).
 - [ ] **Replace the placeholder app icons** in `public/icons/` (see "Install as an app (PWA)").
 - [ ] **Run Prelaunch Check**:
   Execute the prelaunch verification gate and verify it passes:
@@ -359,16 +359,17 @@ After deploying, check on the real site: Chrome DevTools, Application, Manifest 
 
 ## Stickers and GIFs
 
-> ### TODO BEFORE LAUNCH: replace the placeholder stickers
-> The app ships with **stand-in stickers and GIFs** so the whole feature works today: `public/stickers/placeholder/` (8 stickers numbered 1 to 8 and 4 GIFs, each drawn with the word PLACEHOLDER). The pack is called **"Placeholders (replace me)"** in the picker on purpose, so it cannot be forgotten. `npm run build` also prints a `WARNING: A PLACEHOLDER pack is still in the catalog` line until they are gone.
+> ### What ships now
+> Two real packs, 50 items each, built from the "ultra shrunk" bundle (all 128 x 128, about 350 KB in total):
+> - `public/stickers/memes/` (**Memes**, order 10): 50 still stickers (PNG), `01_LOL_sticker.png` to `50_DONE_sticker.png`.
+> - `public/stickers/reactions/` (**Reactions**, order 20): 50 animated WebP loops with the same 50 names (`01_LOL_reaction.webp` and so on). They are animated, so they appear in the GIFs tab.
 >
-> **To replace them with the real art:**
-> 1. Make a folder per pack: `public/stickers/<pack-id>/` (lowercase letters, digits and dashes, for example `cats`). Put a `pack.json` in it: `{ "name": "Cats", "order": 1 }` (lower `order` shows first). Optional `"alts": { "happy-cat.webp": "A happy cat" }` gives screen-reader text; otherwise the file name is used.
-> 2. Drop the images in. **Stickers:** 512 x 512, transparent WebP (or PNG), at most 300 KB each. **GIFs:** animated GIF or animated WebP, at most 3 MB each (keep them far smaller; every student downloads them). Keep the **whole** `public/stickers` folder under about 8 MB (the build warns above that).
-> 3. Delete `public/stickers/placeholder/` (and its `pack.json`).
-> 4. Run `npm run build:stickers`, then commit `shared/stickers.ts` and `public/stickers/numbering.json` together with the images. `npm run build` does this for you, and a test fails if the committed files are out of date.
+> The old placeholder pack was deleted and removed from `numbering.json` before launch (nothing real had used it), so no retired placeholder numbers ship. Numbers in the two packs are permanent from the first deploy: never rename or reorder files, only add new ones.
 >
-> The placeholder numbers are then retired. Any test message that used one shows an "Unavailable" tile instead of breaking. Nothing else needs to change.
+> **To add a pack or more stickers:**
+> 1. Make a folder per pack: `public/stickers/<pack-id>/` (lowercase letters, digits and dashes, for example `cats`). Put a `pack.json` in it: `{ "name": "Cats", "order": 30 }` (lower `order` shows first). Optional `"alts": { "happy-cat.webp": "A happy cat" }` gives screen-reader text; otherwise the file name is used.
+> 2. Drop the images in. **Stickers:** transparent WebP or PNG, at most 300 KB each (512 x 512 is the recommended size; the current ones are 128 x 128 to stay tiny). **GIFs:** animated GIF or animated WebP, at most 3 MB each (keep them far smaller; every student downloads them). Keep the **whole** `public/stickers` folder under about 8 MB (the build warns above that).
+> 3. Run `npm run build:stickers`, then commit `shared/stickers.ts` and `public/stickers/numbering.json` together with the images. `npm run build` does this for you, and a test fails if the committed files are out of date.
 
 **How it works.** A sticker or GIF is referred to by a **key**, never a URL: `app:<pack>/<number>` for a bundled one, `usr:<mediaId>` for one a student uploaded. Messages, posts and comments store only the key and the screen looks it up. Using a bundled sticker writes **nothing to R2** (only the key is stored in D1); the images are static files cached for a year. Uploaded ones are stored in R2 like any media and counted in the person's quota. The server rejects any other key shape, unknown bundled numbers, retired numbers and uploads the sender cannot read.
 

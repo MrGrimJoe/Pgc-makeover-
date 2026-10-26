@@ -10,14 +10,16 @@ const enc = (s: string) => [...s].map((c) => c.charCodeAt(0));
 const WEBP = (n: number) => new Uint8Array([...enc('RIFF'), 8, 0, 0, 0, ...enc('WEBP'), n, 0]);
 const PNG = (n: number) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, n, 1]);
 
-const pack = STICKER_PACKS[0]!;
+// stills and GIFs live in separate packs (Memes, Reactions)
+const pack = STICKER_PACKS.find((p) => p.items.some((i) => i.kind === 'sticker'))!;
+const loopPack = STICKER_PACKS.find((p) => p.items.some((i) => i.kind === 'gif'))!;
 const still = pack.items.find((i) => i.kind === 'sticker')!;
-const loop = pack.items.find((i) => i.kind === 'gif')!;
+const loop = loopPack.items.find((i) => i.kind === 'gif')!;
 const KEY = appKey(pack.id, still.number);
 
 describe('sticker keys (pure)', () => {
   it('accepts exactly the two forms and nothing else', () => {
-    expect(parseStickerKey('app:placeholder/3')).toEqual({ kind: 'app', pack: 'placeholder', number: 3 });
+    expect(parseStickerKey('app:memes/3')).toEqual({ kind: 'app', pack: 'memes', number: 3 });
     expect(parseStickerKey('usr:med_abc123')).toEqual({ kind: 'usr', mediaId: 'med_abc123' });
     for (const bad of ['', 'app:', 'app:x/0', 'app:x/01', 'app:X/1', 'app:../1', 'app:x/1/2', 'app:x/1 ', 'usr:abc', 'usr:med_', 'usr:med_A', 'http://x', 'app:x/9999999', 'a'.repeat(61), 5, null, undefined, {}]) {
       expect(parseStickerKey(bad as unknown), String(bad)).toBeNull();
@@ -33,7 +35,7 @@ describe('sticker keys (pure)', () => {
   it('builds a versioned static URL and knows the kind', () => {
     expect(bundledUrl(pack, still)).toBe(`/stickers/${pack.id}/${still.file}?v=${still.v}`);
     expect(bundledKind(KEY)).toBe('sticker');
-    expect(bundledKind(appKey(pack.id, loop.number))).toBe('gif');
+    expect(bundledKind(appKey(loopPack.id, loop.number))).toBe('gif');
     expect(bundledKind('app:placeholder/99999')).toBeNull();
   });
 });
@@ -91,9 +93,9 @@ describe('sticker keys in messages, posts and comments', () => {
       expect(list.json.messages[0].sticker_key).toBe(KEY);
       const convs = await call(env, 'GET', '/api/conversations', { cookie: bob });
       expect(convs.json.conversations[0].last_message).toMatchObject({ sticker_key: KEY, media_kind: 'sticker' });
-      const p = (await post(alice, { body: 'p', sticker_key: appKey(pack.id, loop.number) })).json;
+      const p = (await post(alice, { body: 'p', sticker_key: appKey(loopPack.id, loop.number) })).json;
       const one = await call(env, 'GET', `/api/posts/${p.id}`, { cookie: bob });
-      expect(one.json.sticker_key).toBe(appKey(pack.id, loop.number));
+      expect(one.json.sticker_key).toBe(appKey(loopPack.id, loop.number));
       const feed = await call(env, 'GET', '/api/feed?tab=following', { cookie: bob }).catch(() => null);
       void feed;
       await comment(alice, { body: 'hi', sticker_key: KEY });

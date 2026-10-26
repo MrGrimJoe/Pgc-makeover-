@@ -17,11 +17,13 @@ let m: Mounted | null = null;
 const restores: Array<() => void> = [];
 afterEach(() => { m?.unmount(); m = null; restores.splice(0).forEach((r) => r()); document.body.innerHTML = ''; localStorage.clear(); });
 
-const pack = STICKER_PACKS[0]!;
+// stills and GIFs live in separate packs (Memes, Reactions)
+const pack = STICKER_PACKS.find((p) => p.items.some((i) => i.kind === 'sticker'))!;
+const loopPack = STICKER_PACKS.find((p) => p.items.some((i) => i.kind === 'gif'))!;
 const still = pack.items.find((i) => i.kind === 'sticker')!;
-const loop = pack.items.find((i) => i.kind === 'gif')!;
+const loop = loopPack.items.find((i) => i.kind === 'gif')!;
 const STILL_KEY = appKey(pack.id, still.number);
-const LOOP_KEY = appKey(pack.id, loop.number);
+const LOOP_KEY = appKey(loopPack.id, loop.number);
 
 describe('recent stickers (device only)', () => {
   it('puts the newest first, removes duplicates, caps the list, and ignores uploaded keys', () => {
@@ -79,7 +81,7 @@ describe('StickerView', () => {
 
   it('bundled GIFs autoplay, and wait behind a play button with reduced motion', async () => {
     m = await mount(<StickerView stickerKey={LOOP_KEY} />);
-    expect(m.container.querySelector('img')!.getAttribute('src')).toBe(bundledUrl(pack, loop));
+    expect(m.container.querySelector('img')!.getAttribute('src')).toBe(bundledUrl(loopPack, loop));
     m.unmount();
     restores.push(stubMatchMedia((q) => q.includes('prefers-reduced-motion')));
     m = await mount(<StickerView stickerKey={LOOP_KEY} />);
@@ -93,7 +95,7 @@ describe('PickerPanel', () => {
   const library = { 'GET /api/stickers/library': () => json({ items: [{ media_id: 'med_mine', kind: 'sticker', mime_type: 'image/webp', width: 512, height: 512 }, { media_id: 'med_loop', kind: 'gif', mime_type: 'image/gif', width: 100, height: 100 }] }) };
   beforeEach(() => { const net = installFetch(library); restores.push(net.restore); });
 
-  it('has Stickers and GIFs tabs, Mine, and a chip for each bundled pack (the placeholder pack is named as such)', async () => {
+  it('has Stickers and GIFs tabs, Mine, and a chip for each bundled pack ', async () => {
     m = await mount(<PickerPanel userId="u1" onPick={() => undefined} onAddFiles={() => undefined} />);
     await flush();
     expect(byText(m.container, '[role="tab"]', 'Stickers')?.getAttribute('aria-selected')).toBe('true');
@@ -121,7 +123,7 @@ describe('PickerPanel', () => {
     await click(byText(m.container, '[role="radio"]', 'Mine'));
     await click(byLabel(m.container, 'Send GIF'));
     expect(onPick).toHaveBeenCalledWith('usr:med_loop', 'gif');
-    await click(byText(m.container, '[role="radio"]', pack.name));
+    await click(byText(m.container, '[role="radio"]', loopPack.name));
     await click(byLabel(m.container, `Send ${loop.alt}`));
     expect(onPick).toHaveBeenLastCalledWith(LOOP_KEY, 'gif');
   });
@@ -144,7 +146,7 @@ describe('PickerPanel', () => {
     restores.push(stubMatchMedia((q) => q.includes('prefers-reduced-motion')));
     m = await mount(<PickerPanel userId="u1" initialTab="gifs" onPick={() => undefined} onAddFiles={() => undefined} />);
     await flush();
-    await click(byText(m.container, '[role="radio"]', pack.name));
+    await click(byText(m.container, '[role="radio"]', loopPack.name));
     expect(m.container.querySelector(`button[aria-label="Send ${loop.alt}"] img`)).toBeNull();
     expect(m.container.querySelector(`button[aria-label="Send ${loop.alt}"]`)?.textContent).toBe('GIF');
   });

@@ -22,7 +22,7 @@ Base commit: `ba1d936`. Patches are cumulative from that base.
   - Fix: dark-mode `--danger` was 2.9:1.
 
 - **Phase 4: stickers and GIFs** (`phase-4-stickers.patch`, applies on top of the Phase 3 patch)
-  - Bundled catalog: `public/stickers/<pack>/`, `scripts/build-stickers.ts`, permanent append-only `numbering.json`, generated `shared/stickers.ts`, 8 MB budget warning, **placeholder pack** (README, "Stickers and GIFs": replace before launch).
+  - Bundled catalog: `public/stickers/<pack>/`, `scripts/build-stickers.ts`, permanent append-only `numbering.json`, generated `shared/stickers.ts`, 8 MB budget warning, real packs **Memes** (50 stills) and **Reactions** (50 animated loops), 128 x 128, replacing the placeholder pack (README, "Stickers and GIFs").
   - Keys `app:<pack>/<number>` and `usr:<mediaId>` validated on the server; migrations 008 and 009; `comment_media`; evidence snapshots for posts and comments.
   - `StickerView`, picker (Stickers/GIFs, Recent on device only, Mine, packs, Manage), stickers in chats, posts and comments, Report on comments, post composer compresses photos and takes photos or one sticker.
 

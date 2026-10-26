@@ -1,67 +1,512 @@
 {
   "version": 1,
   "packs": {
-    "placeholder": {
-      "next": 13,
+    "memes": {
+      "next": 51,
       "items": {
         "1": {
-          "file": "placeholder-1.webp",
-          "sha256": "11f5fc6c59f3c4731fd722d4a715d38487e5ae7d3120aab9060590fa776e79cc",
+          "file": "01_LOL_sticker.png",
+          "sha256": "efc4cd10b2aaf9bc66b3a52ec5bd55223556635307f01d52ad3963788bc65961",
           "retired": false
         },
         "2": {
-          "file": "placeholder-2.webp",
-          "sha256": "afaecfe3568dc8cf7e8b79e52e2934596f6737af401811b5589cd59648b6c6c3",
+          "file": "02_OMG_sticker.png",
+          "sha256": "12d23aa84be2c332725c2270150769701885046c8cfa42323effdd51d6d91c56",
           "retired": false
         },
         "3": {
-          "file": "placeholder-3.webp",
-          "sha256": "557ccfcc6bb1c9ebb70e03c21282e2871e94af3f2ddc1ba876476f7c76486d17",
+          "file": "03_SMH_sticker.png",
+          "sha256": "26343018a429953716a8826fa42cf5e5d575d4ecd612b29e78cf3f4afd9b1834",
           "retired": false
         },
         "4": {
-          "file": "placeholder-4.webp",
-          "sha256": "474c4690054cc0d61402ce82621f04dd9dfdc0fd698252af1f67f737c0adff3b",
+          "file": "04_WTF_sticker.png",
+          "sha256": "2929da4901d5b2d132e37cb25ef1cdeb6f529c6f9179f459830d895a265a80ce",
           "retired": false
         },
         "5": {
-          "file": "placeholder-5.webp",
-          "sha256": "8793697592cbbd52e85d5d6b0f6df66b65e3ea1596f9779043575e6daec796f7",
+          "file": "05_WIN_sticker.png",
+          "sha256": "0087f10cf54cc5be6848827eecbb796c3eaea3e8d4545c82f4fb7c656e95ec55",
           "retired": false
         },
         "6": {
-          "file": "placeholder-6.webp",
-          "sha256": "4a9e4548dc8534f1e43b6228f4a59039fd73dd49af77286d702f55f2462aa77f",
+          "file": "06_FAIL_sticker.png",
+          "sha256": "0eb45a9ec37d3cf53954ea50dd1d42d7c0824ee39ae8286b17769252a1dfda1f",
           "retired": false
         },
         "7": {
-          "file": "placeholder-7.webp",
-          "sha256": "4b8b86aca9b9b38e9230524ed63b370184c081faf571e2f4af26d6b30b8f4738",
+          "file": "07_SAD_sticker.png",
+          "sha256": "2a2a64cf7a4f07feb4605e675c34313ab287b62f1a02e3c34d25def9c24ff4f4",
           "retired": false
         },
         "8": {
-          "file": "placeholder-8.webp",
-          "sha256": "1d4fd00fcc171af7ad7d30f5554885d0e0305ddcb15698d06c7d173e905aa98d",
+          "file": "08_HAPPY_sticker.png",
+          "sha256": "954f722ff7530b3395aa57f4cc54ece632f461d41e21112b88496bffbe43c992",
           "retired": false
         },
         "9": {
-          "file": "placeholder-gif-1.gif",
-          "sha256": "c56fd40f19ec10449ecf98ee29a4d408ec1b318473112950f454d67a76faaab6",
+          "file": "09_ANGRY_sticker.png",
+          "sha256": "bd7a87bc859df28b0262ed696640d1c0ebd2ec5c1bda8a140f5bf2fbb0811373",
           "retired": false
         },
         "10": {
-          "file": "placeholder-gif-2.gif",
-          "sha256": "22cc3e269c3626f6c6d5a036856fa0323070a94ed1a9a58318cd24d79483639e",
+          "file": "10_WOW_sticker.png",
+          "sha256": "91663fc27641daecdaf6c87c56c0b047998fa7ec1a798ad347962a34536df6c8",
           "retired": false
         },
         "11": {
-          "file": "placeholder-gif-3.gif",
-          "sha256": "61b18e53e0157fc98549b87d004ab556352150e4cf5e4a63bcb3a0419bc9d2bb",
+          "file": "11_YES_sticker.png",
+          "sha256": "79a1a73f5a8f6b368675edc95426924acd88c5046d182a84eebe2e5871fc5f9d",
           "retired": false
         },
         "12": {
-          "file": "placeholder-gif-4.gif",
-          "sha256": "1366b790576bca8d1bc2feabf18587f14602f7c106b2eb8cd29a24a97df9cadc",
+          "file": "12_NO_sticker.png",
+          "sha256": "98771eb424ae8161f88176b57e2a3f8805244b16161fcc0382842905ab4b369f",
+          "retired": false
+        },
+        "13": {
+          "file": "13_WHY_sticker.png",
+          "sha256": "fb1facc1c1485ba2aa031d733cd1bfa01245011ffa655a2af95cbf5f6a09db96",
+          "retired": false
+        },
+        "14": {
+          "file": "14_LOVE_sticker.png",
+          "sha256": "ca7f671364a5d7998091f4726124fb006e0cc6907140606b3fbff40fc7e9d8bb",
+          "retired": false
+        },
+        "15": {
+          "file": "15_COOL_sticker.png",
+          "sha256": "0117d7bc96afc0ac6141b64073767d32472b18e30411ad69ff68c937e0b318de",
+          "retired": false
+        },
+        "16": {
+          "file": "16_BYE_sticker.png",
+          "sha256": "dfcb9303676bf9414b359ab53f25bdae0cf3e3652a47cd519ee4b9d95e6b7219",
+          "retired": false
+        },
+        "17": {
+          "file": "17_HEY_sticker.png",
+          "sha256": "ec6ec78bb76c918d6f43add42b555f25e16fdb36a81a66f49201a35279fd084e",
+          "retired": false
+        },
+        "18": {
+          "file": "18_OOF_sticker.png",
+          "sha256": "4a50d8466e7f0c197f6aaf0b8ec122cb6e7fb2ad2a69577d1a678151149e6967",
+          "retired": false
+        },
+        "19": {
+          "file": "19_CHILL_sticker.png",
+          "sha256": "4b0a2d9f36c97813697960bb7edd6a637e61d66827e358af9caa134060448885",
+          "retired": false
+        },
+        "20": {
+          "file": "20_SUS_sticker.png",
+          "sha256": "800ced1076a5baa16d429a66c73a20422a1a8bb599759ce077b12d6ae2e14d75",
+          "retired": false
+        },
+        "21": {
+          "file": "21_BRB_sticker.png",
+          "sha256": "2983cb8d9bcb4ea022a5827930ec5c57da10ba385fed2775bc9e8d44060e3630",
+          "retired": false
+        },
+        "22": {
+          "file": "22_TY_sticker.png",
+          "sha256": "b946821cb35ca88499e9052f460efee232605d799be33ce5d5fe069b3d08cc91",
+          "retired": false
+        },
+        "23": {
+          "file": "23_NP_sticker.png",
+          "sha256": "64a73957adc335c85e3ea7469c49cce8face0261895e03c99ef269716c72ee59",
+          "retired": false
+        },
+        "24": {
+          "file": "24_IDK_sticker.png",
+          "sha256": "e17b414a0557f241e2c6377f4772c74c37811c6edfccf8317d236871f4d45f60",
+          "retired": false
+        },
+        "25": {
+          "file": "25_IDC_sticker.png",
+          "sha256": "63d9c2ea81d3530ab09fa28f7132dd46247985e67885b45a3ddb9a4abd74cf61",
+          "retired": false
+        },
+        "26": {
+          "file": "26_GG_sticker.png",
+          "sha256": "b8eea29740586a83080d6a3eeaa16bd1edeeacad073b1544e03f7a6dd8f6f5eb",
+          "retired": false
+        },
+        "27": {
+          "file": "27_DUDE_sticker.png",
+          "sha256": "02453b7bee92f3d302de22006fcec7d3bc80684c8e949d2a261137d9c34b934b",
+          "retired": false
+        },
+        "28": {
+          "file": "28_PLEASE_sticker.png",
+          "sha256": "4d840da1cfca67d8d651d7dbcfd3cd58a1129b5691d50f090513dd6c642e2987",
+          "retired": false
+        },
+        "29": {
+          "file": "29_SORRY_sticker.png",
+          "sha256": "69ad2de619959a2d280a90095f1e91680fc9fb066a673ac0856b681678e3e87b",
+          "retired": false
+        },
+        "30": {
+          "file": "30_SWEET_sticker.png",
+          "sha256": "cd66d1ce754559ce8e41c6a81c58baa42172fd0812035c9fecbaf05deb2c8b96",
+          "retired": false
+        },
+        "31": {
+          "file": "31_SHOCK_sticker.png",
+          "sha256": "d7ec80e9df65d987ecc71725985de9bc8a9de18155e8552a0d428ffda889d46b",
+          "retired": false
+        },
+        "32": {
+          "file": "32_TIRED_sticker.png",
+          "sha256": "1645e40ca90e856baac3eb879ab344d74ca0ed98ad6c123d71e17db5ab6c1d9f",
+          "retired": false
+        },
+        "33": {
+          "file": "33_BORED_sticker.png",
+          "sha256": "96609ae66a59f41160d3440070074809c1cc9eb18628d956d1d3d8cf23a48773",
+          "retired": false
+        },
+        "34": {
+          "file": "34_SCAM_sticker.png",
+          "sha256": "57f47af64cfb56cf501df208779be4d03ea8047b0536283d0a4765e51917bd2a",
+          "retired": false
+        },
+        "35": {
+          "file": "35_HYPE_sticker.png",
+          "sha256": "0318d94cf6d7608bb0adb42037b65e7199a4ab61f5d7c8b95f0b36950a9d28de",
+          "retired": false
+        },
+        "36": {
+          "file": "36_FIRE_sticker.png",
+          "sha256": "35d205f3279dac046124e8e984412b62c549dfd0c135577c5290cf5af47e54bc",
+          "retired": false
+        },
+        "37": {
+          "file": "37_100_sticker.png",
+          "sha256": "67492a8f0463720843b19e21d48109684c25ec0e930260bc438412f165834aae",
+          "retired": false
+        },
+        "38": {
+          "file": "38_GOAT_sticker.png",
+          "sha256": "e5a845ccbbcd8514dec3f678db66ee5d54659b0af0dfe3d5a5200df041977775",
+          "retired": false
+        },
+        "39": {
+          "file": "39_MIND_BLOWN_sticker.png",
+          "sha256": "117099bd2948a783b68c9795bf63fdec1f6e22d47fdddf8e8dbbbcc0461f0a50",
+          "retired": false
+        },
+        "40": {
+          "file": "40_CONFUSED_sticker.png",
+          "sha256": "9ac5c467531f338cd0fd0e9a56d1d4119bc2647ad41eda9b336a12af38cb1262",
+          "retired": false
+        },
+        "41": {
+          "file": "41_LAUGH_sticker.png",
+          "sha256": "ce0b1e8e0ca78f7542e695cf176ed6056fd562f9029c016e3dbe99aa11eb4010",
+          "retired": false
+        },
+        "42": {
+          "file": "42_CRY_sticker.png",
+          "sha256": "40d4cec00d55ae24f7b6a35316d4c799a0764dbcdc1cc3da921797df9a012f55",
+          "retired": false
+        },
+        "43": {
+          "file": "43_WINK_sticker.png",
+          "sha256": "3e389cba820fb419dfe8d08e6f00e79e7efae4447cc5a2ea983f85cbd6b1d8ed",
+          "retired": false
+        },
+        "44": {
+          "file": "44_THINK_sticker.png",
+          "sha256": "774d257f201f0fff67441d7ce23e49cc9d4ee924f18bd135c0b1326c384a7053",
+          "retired": false
+        },
+        "45": {
+          "file": "45_SLEEP_sticker.png",
+          "sha256": "830d637d765d9b00073419a466467eb5eecf03f7209f30235aa854b1d4d11a20",
+          "retired": false
+        },
+        "46": {
+          "file": "46_CELEBRATE_sticker.png",
+          "sha256": "73beb72d948bc151ba8b73e2a09bed45ecaccd648028b376f51487c6c133437b",
+          "retired": false
+        },
+        "47": {
+          "file": "47_PARTY_sticker.png",
+          "sha256": "822a25589b98bfcc1afaa2e496e53f42900ec428aba5260630100b51d2144c00",
+          "retired": false
+        },
+        "48": {
+          "file": "48_DANCE_sticker.png",
+          "sha256": "23b711515385711890e191577d82c38cb4c372b46ed6f55eef2ac1b3e7570967",
+          "retired": false
+        },
+        "49": {
+          "file": "49_WORK_sticker.png",
+          "sha256": "716547838621f93ba4e5577e1f163e306a8af78e71778f62ddc3bda78b5135f8",
+          "retired": false
+        },
+        "50": {
+          "file": "50_DONE_sticker.png",
+          "sha256": "f29a1e8857d3b3db9b63eb1c2fa7ab8cba4572937cbb7d4271fad65115ea051b",
+          "retired": false
+        }
+      }
+    },
+    "reactions": {
+      "next": 51,
+      "items": {
+        "1": {
+          "file": "01_LOL_reaction.webp",
+          "sha256": "078c18753e103f080145f8fa092c1712c4b98d6839eb9ad508b078dfd9a54e8d",
+          "retired": false
+        },
+        "2": {
+          "file": "02_OMG_reaction.webp",
+          "sha256": "25010fa5081c86ef09c520c6007154f13c1a884b9b202a1862e12005aa649ba4",
+          "retired": false
+        },
+        "3": {
+          "file": "03_SMH_reaction.webp",
+          "sha256": "fca13e7b52dc1bc0b09b22e67fbfd91605c53b2efe3a1e1ba5227e80d6c71d52",
+          "retired": false
+        },
+        "4": {
+          "file": "04_WTF_reaction.webp",
+          "sha256": "24fa4fb1d4e29c4aa1299029f7e521c6adc3f10ed2a0d367b6ccc86edd995167",
+          "retired": false
+        },
+        "5": {
+          "file": "05_WIN_reaction.webp",
+          "sha256": "95aedc1c9ee8158c7180c50e7f58b2651965103eb042abada44443b6f1b7e8a0",
+          "retired": false
+        },
+        "6": {
+          "file": "06_FAIL_reaction.webp",
+          "sha256": "fc5f34ab3bd0e7d7712a3c8472161b236ae12db0cfd6493fb033e4f804e5d97c",
+          "retired": false
+        },
+        "7": {
+          "file": "07_SAD_reaction.webp",
+          "sha256": "be158b0b62044f308735cad3a7326bde581a1ca5c7b298e5fb19bf4b88be94ed",
+          "retired": false
+        },
+        "8": {
+          "file": "08_HAPPY_reaction.webp",
+          "sha256": "2c857a859eb82bbbcee058be12c7e513bc7fc4c7e987a00ca821eb5b23debbe5",
+          "retired": false
+        },
+        "9": {
+          "file": "09_ANGRY_reaction.webp",
+          "sha256": "b0030941dd8ee5c81a13a7487dbd60cc4c5fc65ec5ec90bdf7688bfb77488698",
+          "retired": false
+        },
+        "10": {
+          "file": "10_WOW_reaction.webp",
+          "sha256": "9a08604428191c36c6d3c7eb91c8752afcfb59edcc140606a5956e7c82793de9",
+          "retired": false
+        },
+        "11": {
+          "file": "11_YES_reaction.webp",
+          "sha256": "287c2128b69b14d09995497698f647cac4e58428118e9729bbcb19e488ce2306",
+          "retired": false
+        },
+        "12": {
+          "file": "12_NO_reaction.webp",
+          "sha256": "a6ac5fd11306436dc5841e8fbb48619242d6c18e7fba99fea3a8adda8e3a08a4",
+          "retired": false
+        },
+        "13": {
+          "file": "13_WHY_reaction.webp",
+          "sha256": "a0dfe43cf4f108fbdc1a9c094ed6b0fdb2a154cf809ea0e8077cf19aa75ce7cf",
+          "retired": false
+        },
+        "14": {
+          "file": "14_LOVE_reaction.webp",
+          "sha256": "e770bc22eb2f5f691c923a2aa299dbba3c1c13006a4f3752a31f7476005e4208",
+          "retired": false
+        },
+        "15": {
+          "file": "15_COOL_reaction.webp",
+          "sha256": "ad16e1e002f801145595f3b5c0d976db3c66c9f394474b9ba837f5d9cbc66248",
+          "retired": false
+        },
+        "16": {
+          "file": "16_BYE_reaction.webp",
+          "sha256": "330696cf745c2ebd738230a409824198ea7e3da7803be6a2c5c0f6cddea909d9",
+          "retired": false
+        },
+        "17": {
+          "file": "17_HEY_reaction.webp",
+          "sha256": "4716b1ab5f67fde755cfd959ff298e92cf74d82ec074c360ccc96b77edc29307",
+          "retired": false
+        },
+        "18": {
+          "file": "18_OOF_reaction.webp",
+          "sha256": "2695fc9e8e7c12df911fb16e5ff9a9f763886a1b891d81a72fa0174bf0f25cd0",
+          "retired": false
+        },
+        "19": {
+          "file": "19_CHILL_reaction.webp",
+          "sha256": "4c33978dced79562dc6771c1a90ba3333221f53994df548c179cce8cd4f54054",
+          "retired": false
+        },
+        "20": {
+          "file": "20_SUS_reaction.webp",
+          "sha256": "363d87fd215cf21da7e6faf17ab44922e9c3daaf4e5b4d034c6ce0684987b33c",
+          "retired": false
+        },
+        "21": {
+          "file": "21_BRB_reaction.webp",
+          "sha256": "e661483c48d44c2219ec4c6dfd097e3dac1a28060ab92a37660adf7ffcdcf5a9",
+          "retired": false
+        },
+        "22": {
+          "file": "22_TY_reaction.webp",
+          "sha256": "e08d4a064ddec4d276744b52a2b4e567350d6c4b9d92cb5cfc3da399ee391a9f",
+          "retired": false
+        },
+        "23": {
+          "file": "23_NP_reaction.webp",
+          "sha256": "7edc95bf154ef94e983e7181219a97cffa29154ba1fd2d1418a3a17148bb9a71",
+          "retired": false
+        },
+        "24": {
+          "file": "24_IDK_reaction.webp",
+          "sha256": "71adf958611f20cf57b5a5d03d70f79b1fac0c7c3398ea43c7ecc4937dc893d1",
+          "retired": false
+        },
+        "25": {
+          "file": "25_IDC_reaction.webp",
+          "sha256": "4b1f670b7d8fe9657b59237dce6f600aad5f451ad84c03b6707d9b294f1ce436",
+          "retired": false
+        },
+        "26": {
+          "file": "26_GG_reaction.webp",
+          "sha256": "20440a91660af5f7abc636c238c9ae582c02bd55a7f64312441cc7f20b6e8200",
+          "retired": false
+        },
+        "27": {
+          "file": "27_DUDE_reaction.webp",
+          "sha256": "31815975d8a2b64f46b77e6fa808c3df73dcfdec2cf7f2fc3691f140ea8e389f",
+          "retired": false
+        },
+        "28": {
+          "file": "28_PLEASE_reaction.webp",
+          "sha256": "fb93c339214abdcbca2b2cc610715f7c071df75ebc25445986acc36422aa1f2a",
+          "retired": false
+        },
+        "29": {
+          "file": "29_SORRY_reaction.webp",
+          "sha256": "409bc0254a34c2b951bdd8618894bf68f15075b49f21583e2ea3a498fe89bbf4",
+          "retired": false
+        },
+        "30": {
+          "file": "30_SWEET_reaction.webp",
+          "sha256": "345e1296c1534eb81ada48dffd90673c79cdeb017f3e2273d1b4003f3bcf42aa",
+          "retired": false
+        },
+        "31": {
+          "file": "31_SHOCK_reaction.webp",
+          "sha256": "013fb3e9c80480bd47e6b923acc61705a4d249edfc39cf4afdf582ea9f3a298a",
+          "retired": false
+        },
+        "32": {
+          "file": "32_TIRED_reaction.webp",
+          "sha256": "e463e6ebdc84c49bb433039313533a4edab7635f55f3062d57ba3dc710be274e",
+          "retired": false
+        },
+        "33": {
+          "file": "33_BORED_reaction.webp",
+          "sha256": "79becb430670275d177b11b010cbab77193c97c33fd0244ab869db79e1ae4d5f",
+          "retired": false
+        },
+        "34": {
+          "file": "34_SCAM_reaction.webp",
+          "sha256": "37244c6ad81f18e12243fae86c32c29ee3822b2bd1c2c68a70833e25491fc335",
+          "retired": false
+        },
+        "35": {
+          "file": "35_HYPE_reaction.webp",
+          "sha256": "9c89c1b80fd42cb90065762cb4f2312cd41884ac1bb6b787efb3e451069c67d0",
+          "retired": false
+        },
+        "36": {
+          "file": "36_FIRE_reaction.webp",
+          "sha256": "e0ab6004bcc9cf0a9b3751dfec20cc9a35beacf090086d83d3306ce514dd07d9",
+          "retired": false
+        },
+        "37": {
+          "file": "37_100_reaction.webp",
+          "sha256": "5f204e7db95a9835ddd4d757f37fc97896367563163d4434e07759d6d1ae570b",
+          "retired": false
+        },
+        "38": {
+          "file": "38_GOAT_reaction.webp",
+          "sha256": "a057d0a762862a824c4b3bf00b71bf487018fe947b7db9532e8c551b6ffb4fd2",
+          "retired": false
+        },
+        "39": {
+          "file": "39_MIND_BLOWN_reaction.webp",
+          "sha256": "b62048c85e2b6240fbf0ac4fc7880fe6acdd60d1959a4195c59c6c05070eae4b",
+          "retired": false
+        },
+        "40": {
+          "file": "40_CONFUSED_reaction.webp",
+          "sha256": "dbc5ed653cb6b0971a0453d54ff7b05ed699990f7f27dc8a74e37f839c764ba8",
+          "retired": false
+        },
+        "41": {
+          "file": "41_LAUGH_reaction.webp",
+          "sha256": "908176cf2260054dd5e770723322c9ec96c59009c8db2ef5dab67dbe337a83d6",
+          "retired": false
+        },
+        "42": {
+          "file": "42_CRY_reaction.webp",
+          "sha256": "d73d47611ed13271c355198ed449a24a1055af8d91685628f472128a23d7c58c",
+          "retired": false
+        },
+        "43": {
+          "file": "43_WINK_reaction.webp",
+          "sha256": "588cedffd01bcccfa9cb998499a163a53f003d29e9a1d7b094774b549e1643f5",
+          "retired": false
+        },
+        "44": {
+          "file": "44_THINK_reaction.webp",
+          "sha256": "f93cc1f171ea472911c21a332a585d979dffe192a91b9485a2dd036b8610b6bb",
+          "retired": false
+        },
+        "45": {
+          "file": "45_SLEEP_reaction.webp",
+          "sha256": "416e7c9e1793bb2cf45113e891129199fe1aa976ce49a686613c482fa9dc7ba6",
+          "retired": false
+        },
+        "46": {
+          "file": "46_CELEBRATE_reaction.webp",
+          "sha256": "ada8b5586b890c4b05744cceeacf89573778308c3ac34b2bfdd959e3c4ae8824",
+          "retired": false
+        },
+        "47": {
+          "file": "47_PARTY_reaction.webp",
+          "sha256": "6fdc44491ace73acb1f97eff0a97ad0bad3140ea043520a84bbf7535c7a30e9b",
+          "retired": false
+        },
+        "48": {
+          "file": "48_DANCE_reaction.webp",
+          "sha256": "56697a18be67e4eb9c2888c5f4e667c550910330046f09c296faa2a1ea03ca99",
+          "retired": false
+        },
+        "49": {
+          "file": "49_WORK_reaction.webp",
+          "sha256": "de027fb3374a1fd9aa224fdb220659912bb33c866b43acc8a808fedb883801f1",
+          "retired": false
+        },
+        "50": {
+          "file": "50_DONE_reaction.webp",
+          "sha256": "b27c8b3994f99f12528fc79fb98363750a5b190978cc024c6ad36abd8df38f09",
           "retired": false
         }
       }

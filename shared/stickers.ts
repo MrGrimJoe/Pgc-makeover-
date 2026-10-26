@@ -23,118 +23,919 @@ export interface StickerPack {
 
 export const STICKER_PACKS: readonly StickerPack[] = [
   {
-    "id": "placeholder",
-    "name": "Placeholders (replace me)",
-    "order": 100,
-    "placeholder": true,
+    "id": "memes",
+    "name": "Memes",
+    "order": 10,
+    "placeholder": false,
     "items": [
       {
         "number": 1,
-        "file": "placeholder-1.webp",
+        "file": "01_LOL_sticker.png",
         "kind": "sticker",
-        "width": 512,
-        "height": 512,
-        "alt": "placeholder 1",
-        "v": "11f5fc6c"
+        "width": 128,
+        "height": 128,
+        "alt": "LOL",
+        "v": "efc4cd10"
       },
       {
         "number": 2,
-        "file": "placeholder-2.webp",
+        "file": "02_OMG_sticker.png",
         "kind": "sticker",
-        "width": 512,
-        "height": 512,
-        "alt": "placeholder 2",
-        "v": "afaecfe3"
+        "width": 128,
+        "height": 128,
+        "alt": "OMG",
+        "v": "12d23aa8"
       },
       {
         "number": 3,
-        "file": "placeholder-3.webp",
+        "file": "03_SMH_sticker.png",
         "kind": "sticker",
-        "width": 512,
-        "height": 512,
-        "alt": "placeholder 3",
-        "v": "557ccfcc"
+        "width": 128,
+        "height": 128,
+        "alt": "SMH",
+        "v": "26343018"
       },
       {
         "number": 4,
-        "file": "placeholder-4.webp",
+        "file": "04_WTF_sticker.png",
         "kind": "sticker",
-        "width": 512,
-        "height": 512,
-        "alt": "placeholder 4",
-        "v": "474c4690"
+        "width": 128,
+        "height": 128,
+        "alt": "WTF",
+        "v": "2929da49"
       },
       {
         "number": 5,
-        "file": "placeholder-5.webp",
+        "file": "05_WIN_sticker.png",
         "kind": "sticker",
-        "width": 512,
-        "height": 512,
-        "alt": "placeholder 5",
-        "v": "87936975"
+        "width": 128,
+        "height": 128,
+        "alt": "Win",
+        "v": "0087f10c"
       },
       {
         "number": 6,
-        "file": "placeholder-6.webp",
+        "file": "06_FAIL_sticker.png",
         "kind": "sticker",
-        "width": 512,
-        "height": 512,
-        "alt": "placeholder 6",
-        "v": "4a9e4548"
+        "width": 128,
+        "height": 128,
+        "alt": "Fail",
+        "v": "0eb45a9e"
       },
       {
         "number": 7,
-        "file": "placeholder-7.webp",
+        "file": "07_SAD_sticker.png",
         "kind": "sticker",
-        "width": 512,
-        "height": 512,
-        "alt": "placeholder 7",
-        "v": "4b8b86ac"
+        "width": 128,
+        "height": 128,
+        "alt": "Sad",
+        "v": "2a2a64cf"
       },
       {
         "number": 8,
-        "file": "placeholder-8.webp",
+        "file": "08_HAPPY_sticker.png",
         "kind": "sticker",
-        "width": 512,
-        "height": 512,
-        "alt": "placeholder 8",
-        "v": "1d4fd00f"
+        "width": 128,
+        "height": 128,
+        "alt": "Happy",
+        "v": "954f722f"
       },
       {
         "number": 9,
-        "file": "placeholder-gif-1.gif",
-        "kind": "gif",
-        "width": 200,
-        "height": 200,
-        "alt": "placeholder gif 1",
-        "v": "c56fd40f"
+        "file": "09_ANGRY_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Angry",
+        "v": "bd7a87bc"
       },
       {
         "number": 10,
-        "file": "placeholder-gif-2.gif",
-        "kind": "gif",
-        "width": 200,
-        "height": 200,
-        "alt": "placeholder gif 2",
-        "v": "22cc3e26"
+        "file": "10_WOW_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Wow",
+        "v": "91663fc2"
       },
       {
         "number": 11,
-        "file": "placeholder-gif-3.gif",
-        "kind": "gif",
-        "width": 200,
-        "height": 200,
-        "alt": "placeholder gif 3",
-        "v": "61b18e53"
+        "file": "11_YES_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Yes",
+        "v": "79a1a73f"
       },
       {
         "number": 12,
-        "file": "placeholder-gif-4.gif",
+        "file": "12_NO_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "No",
+        "v": "98771eb4"
+      },
+      {
+        "number": 13,
+        "file": "13_WHY_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Why",
+        "v": "fb1facc1"
+      },
+      {
+        "number": 14,
+        "file": "14_LOVE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Love",
+        "v": "ca7f6713"
+      },
+      {
+        "number": 15,
+        "file": "15_COOL_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Cool",
+        "v": "0117d7bc"
+      },
+      {
+        "number": 16,
+        "file": "16_BYE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Bye",
+        "v": "dfcb9303"
+      },
+      {
+        "number": 17,
+        "file": "17_HEY_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Hey",
+        "v": "ec6ec78b"
+      },
+      {
+        "number": 18,
+        "file": "18_OOF_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "OOF",
+        "v": "4a50d846"
+      },
+      {
+        "number": 19,
+        "file": "19_CHILL_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Chill",
+        "v": "4b0a2d9f"
+      },
+      {
+        "number": 20,
+        "file": "20_SUS_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Sus",
+        "v": "800ced10"
+      },
+      {
+        "number": 21,
+        "file": "21_BRB_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "BRB",
+        "v": "2983cb8d"
+      },
+      {
+        "number": 22,
+        "file": "22_TY_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "TY",
+        "v": "b946821c"
+      },
+      {
+        "number": 23,
+        "file": "23_NP_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "NP",
+        "v": "64a73957"
+      },
+      {
+        "number": 24,
+        "file": "24_IDK_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "IDK",
+        "v": "e17b414a"
+      },
+      {
+        "number": 25,
+        "file": "25_IDC_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "IDC",
+        "v": "63d9c2ea"
+      },
+      {
+        "number": 26,
+        "file": "26_GG_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Gg",
+        "v": "b8eea297"
+      },
+      {
+        "number": 27,
+        "file": "27_DUDE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Dude",
+        "v": "02453b7b"
+      },
+      {
+        "number": 28,
+        "file": "28_PLEASE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Please",
+        "v": "4d840da1"
+      },
+      {
+        "number": 29,
+        "file": "29_SORRY_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Sorry",
+        "v": "69ad2de6"
+      },
+      {
+        "number": 30,
+        "file": "30_SWEET_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Sweet",
+        "v": "cd66d1ce"
+      },
+      {
+        "number": 31,
+        "file": "31_SHOCK_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Shock",
+        "v": "d7ec80e9"
+      },
+      {
+        "number": 32,
+        "file": "32_TIRED_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Tired",
+        "v": "1645e40c"
+      },
+      {
+        "number": 33,
+        "file": "33_BORED_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Bored",
+        "v": "96609ae6"
+      },
+      {
+        "number": 34,
+        "file": "34_SCAM_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Scam",
+        "v": "57f47af6"
+      },
+      {
+        "number": 35,
+        "file": "35_HYPE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Hype",
+        "v": "0318d94c"
+      },
+      {
+        "number": 36,
+        "file": "36_FIRE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Fire",
+        "v": "35d205f3"
+      },
+      {
+        "number": 37,
+        "file": "37_100_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "100",
+        "v": "67492a8f"
+      },
+      {
+        "number": 38,
+        "file": "38_GOAT_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "GOAT",
+        "v": "e5a845cc"
+      },
+      {
+        "number": 39,
+        "file": "39_MIND_BLOWN_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Mind_blown",
+        "v": "117099bd"
+      },
+      {
+        "number": 40,
+        "file": "40_CONFUSED_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Confused",
+        "v": "9ac5c467"
+      },
+      {
+        "number": 41,
+        "file": "41_LAUGH_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Laugh",
+        "v": "ce0b1e8e"
+      },
+      {
+        "number": 42,
+        "file": "42_CRY_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Cry",
+        "v": "40d4cec0"
+      },
+      {
+        "number": 43,
+        "file": "43_WINK_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Wink",
+        "v": "3e389cba"
+      },
+      {
+        "number": 44,
+        "file": "44_THINK_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Think",
+        "v": "774d257f"
+      },
+      {
+        "number": 45,
+        "file": "45_SLEEP_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Sleep",
+        "v": "830d637d"
+      },
+      {
+        "number": 46,
+        "file": "46_CELEBRATE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Celebrate",
+        "v": "73beb72d"
+      },
+      {
+        "number": 47,
+        "file": "47_PARTY_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Party",
+        "v": "822a2558"
+      },
+      {
+        "number": 48,
+        "file": "48_DANCE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Dance",
+        "v": "23b71151"
+      },
+      {
+        "number": 49,
+        "file": "49_WORK_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Work",
+        "v": "71654783"
+      },
+      {
+        "number": 50,
+        "file": "50_DONE_sticker.png",
+        "kind": "sticker",
+        "width": 128,
+        "height": 128,
+        "alt": "Done",
+        "v": "f29a1e88"
+      }
+    ],
+    "retired": []
+  },
+  {
+    "id": "reactions",
+    "name": "Reactions",
+    "order": 20,
+    "placeholder": false,
+    "items": [
+      {
+        "number": 1,
+        "file": "01_LOL_reaction.webp",
         "kind": "gif",
-        "width": 200,
-        "height": 200,
-        "alt": "placeholder gif 4",
-        "v": "1366b790"
+        "width": 128,
+        "height": 128,
+        "alt": "LOL",
+        "v": "078c1875"
+      },
+      {
+        "number": 2,
+        "file": "02_OMG_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "OMG",
+        "v": "25010fa5"
+      },
+      {
+        "number": 3,
+        "file": "03_SMH_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "SMH",
+        "v": "fca13e7b"
+      },
+      {
+        "number": 4,
+        "file": "04_WTF_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "WTF",
+        "v": "24fa4fb1"
+      },
+      {
+        "number": 5,
+        "file": "05_WIN_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Win",
+        "v": "95aedc1c"
+      },
+      {
+        "number": 6,
+        "file": "06_FAIL_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Fail",
+        "v": "fc5f34ab"
+      },
+      {
+        "number": 7,
+        "file": "07_SAD_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Sad",
+        "v": "be158b0b"
+      },
+      {
+        "number": 8,
+        "file": "08_HAPPY_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Happy",
+        "v": "2c857a85"
+      },
+      {
+        "number": 9,
+        "file": "09_ANGRY_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Angry",
+        "v": "b0030941"
+      },
+      {
+        "number": 10,
+        "file": "10_WOW_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Wow",
+        "v": "9a086044"
+      },
+      {
+        "number": 11,
+        "file": "11_YES_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Yes",
+        "v": "287c2128"
+      },
+      {
+        "number": 12,
+        "file": "12_NO_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "No",
+        "v": "a6ac5fd1"
+      },
+      {
+        "number": 13,
+        "file": "13_WHY_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Why",
+        "v": "a0dfe43c"
+      },
+      {
+        "number": 14,
+        "file": "14_LOVE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Love",
+        "v": "e770bc22"
+      },
+      {
+        "number": 15,
+        "file": "15_COOL_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Cool",
+        "v": "ad16e1e0"
+      },
+      {
+        "number": 16,
+        "file": "16_BYE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Bye",
+        "v": "330696cf"
+      },
+      {
+        "number": 17,
+        "file": "17_HEY_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Hey",
+        "v": "4716b1ab"
+      },
+      {
+        "number": 18,
+        "file": "18_OOF_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "OOF",
+        "v": "2695fc9e"
+      },
+      {
+        "number": 19,
+        "file": "19_CHILL_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Chill",
+        "v": "4c33978d"
+      },
+      {
+        "number": 20,
+        "file": "20_SUS_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Sus",
+        "v": "363d87fd"
+      },
+      {
+        "number": 21,
+        "file": "21_BRB_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "BRB",
+        "v": "e661483c"
+      },
+      {
+        "number": 22,
+        "file": "22_TY_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "TY",
+        "v": "e08d4a06"
+      },
+      {
+        "number": 23,
+        "file": "23_NP_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "NP",
+        "v": "7edc95bf"
+      },
+      {
+        "number": 24,
+        "file": "24_IDK_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "IDK",
+        "v": "71adf958"
+      },
+      {
+        "number": 25,
+        "file": "25_IDC_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "IDC",
+        "v": "4b1f670b"
+      },
+      {
+        "number": 26,
+        "file": "26_GG_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Gg",
+        "v": "20440a91"
+      },
+      {
+        "number": 27,
+        "file": "27_DUDE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Dude",
+        "v": "31815975"
+      },
+      {
+        "number": 28,
+        "file": "28_PLEASE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Please",
+        "v": "fb93c339"
+      },
+      {
+        "number": 29,
+        "file": "29_SORRY_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Sorry",
+        "v": "409bc025"
+      },
+      {
+        "number": 30,
+        "file": "30_SWEET_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Sweet",
+        "v": "345e1296"
+      },
+      {
+        "number": 31,
+        "file": "31_SHOCK_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Shock",
+        "v": "013fb3e9"
+      },
+      {
+        "number": 32,
+        "file": "32_TIRED_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Tired",
+        "v": "e463e6eb"
+      },
+      {
+        "number": 33,
+        "file": "33_BORED_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Bored",
+        "v": "79becb43"
+      },
+      {
+        "number": 34,
+        "file": "34_SCAM_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Scam",
+        "v": "37244c6a"
+      },
+      {
+        "number": 35,
+        "file": "35_HYPE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Hype",
+        "v": "9c89c1b8"
+      },
+      {
+        "number": 36,
+        "file": "36_FIRE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Fire",
+        "v": "e0ab6004"
+      },
+      {
+        "number": 37,
+        "file": "37_100_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "100",
+        "v": "5f204e7d"
+      },
+      {
+        "number": 38,
+        "file": "38_GOAT_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "GOAT",
+        "v": "a057d0a7"
+      },
+      {
+        "number": 39,
+        "file": "39_MIND_BLOWN_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Mind_blown",
+        "v": "b62048c8"
+      },
+      {
+        "number": 40,
+        "file": "40_CONFUSED_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Confused",
+        "v": "dbc5ed65"
+      },
+      {
+        "number": 41,
+        "file": "41_LAUGH_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Laugh",
+        "v": "908176cf"
+      },
+      {
+        "number": 42,
+        "file": "42_CRY_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Cry",
+        "v": "d73d4761"
+      },
+      {
+        "number": 43,
+        "file": "43_WINK_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Wink",
+        "v": "588cedff"
+      },
+      {
+        "number": 44,
+        "file": "44_THINK_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Think",
+        "v": "f93cc1f1"
+      },
+      {
+        "number": 45,
+        "file": "45_SLEEP_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Sleep",
+        "v": "416e7c9e"
+      },
+      {
+        "number": 46,
+        "file": "46_CELEBRATE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Celebrate",
+        "v": "ada8b558"
+      },
+      {
+        "number": 47,
+        "file": "47_PARTY_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Party",
+        "v": "6fdc4449"
+      },
+      {
+        "number": 48,
+        "file": "48_DANCE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Dance",
+        "v": "56697a18"
+      },
+      {
+        "number": 49,
+        "file": "49_WORK_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Work",
+        "v": "de027fb3"
+      },
+      {
+        "number": 50,
+        "file": "50_DONE_reaction.webp",
+        "kind": "gif",
+        "width": 128,
+        "height": 128,
+        "alt": "Done",
+        "v": "b27c8b39"
       }
     ],
     "retired": []
