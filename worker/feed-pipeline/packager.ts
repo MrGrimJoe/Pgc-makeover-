@@ -17,6 +17,8 @@ import { trendingScore } from './trending.ts';
 
 const MAX_TAGS = 12;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/;
+/** Ids in this app are plain ASCII (pst_..., usr_...). Anything else is not a cursor this module made. */
+const ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
 
 // ---------------------------------------------------------------- cursor: (created_at, id), base64url, no Buffer
 
@@ -46,7 +48,7 @@ export function decodePipelineCursor(raw: string): PipelineCursor | null {
   if (raw.length === 0 || raw.length > 200) return null;
   try {
     const [createdAt, id, ...rest] = fromBase64Url(raw).split('|');
-    if (rest.length > 0 || !createdAt || !id || id.length > 100 || !ISO_RE.test(createdAt)) return null;
+    if (rest.length > 0 || !createdAt || !id || !ID_RE.test(id) || !ISO_RE.test(createdAt)) return null;
     return { createdAt, id };
   } catch {
     return null;

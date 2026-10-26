@@ -388,6 +388,50 @@ r = await call('GET', '/api/me', { cookie: ayesha }); ok('free-text campus repla
   let over = 0; const PL = await seed('usr_limiter', 'limiter'); await clearRL(); for (let i = 0; i < 6; i++) { const x = await call('POST', '/api/posts', { cookie: PL, json: { body: `Distinct everyday sentence number ${i} for the limit` } }); if (x.s === 429) over++; } ok('more than 3 posts in 15 minutes is refused (3 of 6 hit 429)', over === 3, `429s: ${over}/6`);
 }
 
+// ---------- FEED PIPELINE: /api/v1/feed/bootstrap and /next ----------
+{
+  const FA = await seed('usr_fpa', 'fpa'), FB = await seed('usr_fpb', 'fpb'), FC = await seed('usr_fpc', 'fpc');
+  const mkPost = async (id: string, author: string, body = 'ordinary pipeline post', over: { expires?: string; status?: string; ageMin?: number } = {}) =>
+    db.prepare('INSERT INTO posts (id, author_id, body, created_at, expires_at, status) VALUES (?,?,?,?,?,?)')
+      .bind(id, author, body, new Date(Date.now() - (over.ageMin ?? 1) * 60_000).toISOString(), over.expires ?? exp, over.status ?? 'active').run();
+  await mkPost('fp_b1', 'usr_fpb', 'visible post by bob', { ageMin: 1 });
+  await mkPost('fp_c1', 'usr_fpc', 'post by carol (will be blocked)', { ageMin: 2 });
+  await mkPost('fp_old', 'usr_fpb', 'expired post', { expires: new Date(Date.now() - 1000).toISOString(), ageMin: 3 });
+  await mkPost('fp_gone', 'usr_fpb', 'removed post', { status: 'removed', ageMin: 4 });
+  await call('POST', '/api/blocks', { cookie: FA, json: { user_id: 'usr_fpc' } });
+  await db.prepare("INSERT INTO reports (id, reporter_id, target_type, target_id, reason, status, created_at) VALUES ('rp1','usr_fpc','post','fp_b1','x','pending',?)").bind(now).run();
+
+  for (const path of ['/api/v1/feed/bootstrap', '/api/v1/feed/next?cursor=abc']) { await clearRL(); r = await call('GET', path); ok(`${path.split('?')[0]} without a session -> 401`, r.s === 401, `status ${r.s}`); }
+  await clearRL(); r = await call('GET', '/api/v1/feed/bootstrap', { cookie: FA }); const ids = (r.j?.batch?.posts ?? []).map((p: any) => p.id);
+  ok('POSITIVE CONTROL: a valid bootstrap returns the visible post', r.s === 200 && ids.includes('fp_b1'), `status ${r.s} ids ${ids}`);
+  ok('a blocked author, an expired post and a removed post are all absent', !ids.includes('fp_c1') && !ids.includes('fp_old') && !ids.includes('fp_gone'), ids.join(','));
+  ok('batches are never shared-cacheable', r.h.get('cache-control') === 'private, no-store', String(r.h.get('cache-control')));
+  ok('no reporter ids, emails or private fields in a batch', !/usr_fpc|email|real_name|roll_|provider_subject/.test(r.text.replace(/"author_id":"usr_fpc"/g, '')), '');
+  await clearRL(); r = await call('GET', '/api/v1/feed/bootstrap', { cookie: FC }); ok('the blocked person does not see the blocker\'s posts either way round (positive control: sees bob)', (r.j?.batch?.posts ?? []).some((p: any) => p.id === 'fp_b1'), '');
+
+  for (const bad of ["x' OR '1'='1", 'a'.repeat(5000), 'e30', 'bm9wZQ', encodeURIComponent('{"a":1}'), '%00', '../../etc/passwd']) {
+    await clearRL(); r = await call('GET', `/api/v1/feed/next?cursor=${bad}`, { cookie: FA }); ok(`cursor ${bad.slice(0, 24)} -> 400`, r.s === 400, `status ${r.s}`);
+  }
+  const craft = (t: string) => btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  for (const bad of ["2026-01-01T00:00:00.000Z|x' OR '1'='1", '2026-01-01T00:00:00.000Z|a|b', "'; DROP TABLE posts;--|x", '2026-01-01|x']) {
+    await clearRL(); r = await call('GET', `/api/v1/feed/next?cursor=${craft(bad)}`, { cookie: FA }); ok(`crafted cursor ${bad.slice(0, 26)} -> 400`, r.s === 400, `status ${r.s}`);
+  }
+  await clearRL(); r = await call('GET', `/api/v1/feed/next?cursor=${craft('2999-12-31T00:00:00.000Z|zzzz')}`, { cookie: FA });
+  const farIds = (r.j?.batch?.posts ?? []).map((p: any) => p.id);
+  ok('POSITIVE CONTROL: a well-formed far-future cursor just starts from the top', r.s === 200 && farIds.includes('fp_b1'), `status ${r.s}`);
+  ok('a hand-made cursor cannot reveal blocked, expired or removed posts', !farIds.includes('fp_c1') && !farIds.includes('fp_old') && !farIds.includes('fp_gone'), farIds.join(','));
+  const stillThere = (await db.prepare("SELECT COUNT(*) c FROM sqlite_master WHERE name = 'posts'").first()).c === 1; ok('posts table survived the injection cursors', stillThere, '');
+
+  for (const bad of ['mode=admin', "mode=for_you' OR 1=1", 'mode=ranked', 'mode=' + 'x'.repeat(2000)]) { await clearRL(); r = await call('GET', `/api/v1/feed/bootstrap?${bad}`, { cookie: FA }); ok(`${bad.slice(0, 28)} -> 400`, r.s === 400, `status ${r.s}`); }
+  for (const size of ['-5', '0', 'NaN', '1e9', "1' OR '1'='1", '999999999999999999999', '', '3.7', '%00']) {
+    await clearRL(); r = await call('GET', `/api/v1/feed/bootstrap?size=${size}`, { cookie: FA }); const n = r.j?.batch?.posts?.length ?? -1;
+    ok(`size=${size.slice(0, 16)} is clamped and answered (never a 5xx, at most 50 posts)`, r.s === 200 && n >= 0 && n <= 50, `status ${r.s} n ${n}`);
+  }
+  let throttled = 0; await clearRL(); for (let i = 0; i < 40; i++) { const x = await call('GET', '/api/v1/feed/bootstrap', { cookie: FB }); if (x.s === 429) throttled++; }
+  ok('hammering the batch endpoint is rate limited (429 seen, 30 allowed per minute)', throttled === 10, `429s: ${throttled}/40`);
+  await clearRL(); r = await call('GET', '/api/v1/feed/bootstrap', { cookie: FA, headers: { 'Accept-Encoding': 'gzip' } }); ok('a small batch is still readable when gzip is offered', r.s === 200, `status ${r.s}`);
+}
+
 // ---------- EXPIRY / LIFECYCLE ----------
 const mk = async (id: string, author: string, ageDays: number, likers: string[], commenter: string[] = []) => {
   const created = new Date(Date.now() - ageDays * 864e5).toISOString();

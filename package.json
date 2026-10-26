@@ -27,7 +27,8 @@
     "pretest": "node scripts/check-node.mjs",
     "pretype-check": "node scripts/check-node.mjs",
     "predev": "node scripts/copy-ocr-assets.mjs",
-    "e2e:signup": "tsx scripts/e2e-signup.mts"
+    "e2e:signup": "tsx scripts/e2e-signup.mts",
+    "e2e:feed": "tsx scripts/e2e-pipeline.mts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

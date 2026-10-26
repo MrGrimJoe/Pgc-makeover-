@@ -74,9 +74,13 @@ describe('trending score', () => {
 });
 
 describe('cursor', () => {
-  it('round-trips, including non-ASCII ids', () => {
-    const c = encodePipelineCursor('2026-10-25T11:00:00.000Z', 'pst_é1');
-    expect(decodePipelineCursor(c)).toEqual({ createdAt: '2026-10-25T11:00:00.000Z', id: 'pst_é1' });
+  it('round-trips a normal post id', () => {
+    const c = encodePipelineCursor('2026-10-25T11:00:00.000Z', 'pst_a1-B2');
+    expect(decodePipelineCursor(c)).toEqual({ createdAt: '2026-10-25T11:00:00.000Z', id: 'pst_a1-B2' });
+  });
+
+  it.each(["x' OR '1'='1", 'a b', 'é', 'a/b', 'a'.repeat(101)])('refuses an id that is not plain ASCII: %s', (id) => {
+    expect(decodePipelineCursor(encodePipelineCursor('2026-10-25T11:00:00.000Z', id))).toBeNull();
   });
 
   it.each(['', '!!!', 'bm9wZQ', encodePipelineCursor('not-a-date', 'x'), 'a'.repeat(300)])('rejects %s', (bad) => {
