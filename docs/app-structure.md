@@ -27,6 +27,7 @@ This is the contract for where each feature lives. Navigation: bottom tabs Home,
 Built so far: the bundled campus list and picker; media foundation (kinds, caps, quotas, library, forwarding); Settings page; the chat (conversation list with profile pictures and previews, chat header with Block and Report, background, composer, attach sheet, preview, viewer).
 
 Where the code lives:
+- Feed pipeline (opt-in `FeedPage localFirst`): `worker/feed-pipeline/` (server batches), `src/feed-pipeline/` (IndexedDB cache, history, local ranking); see the README section `[PIPELINE]`.
 - `src/pages/MessagesPage.tsx` (small shell), `src/components/chat/` (`ConversationList`, `ChatScreen`, `Composer`, `MessageBubble`, `AttachSheet`, `MediaPreview`, `MediaViewer`, `ForwardPicker`, `PickerPanel`, `ChatBackground`, `AnimatedMedia`), `src/lib/keyboard.ts` (`useKeyboardInset`).
 - `src/pages/SettingsPage.tsx`. Settings is reached from the gear on your own profile; it is not a bottom tab (the Profile tab stays highlighted).
 

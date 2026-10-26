@@ -481,6 +481,8 @@ Built on top of `2971c1d`. Each change is its own commit.
 | `GET` | `/api/classes` | Session or ticket | Returns list of available classes |
 | `GET` | `/api/people/suggested` | **Yes** | Classmates, then campus mates; excludes yourself, followed and blocked people |
 | `GET` | `/api/feed` | **Yes** | Chronological or ranked discovery feed with cursor pagination |
+| `GET` | `/api/v1/feed/bootstrap?mode=for_you\|following&size=30..50` | **Yes** | Feed pipeline: newest batch of SAFE and WILD tagged posts with `meta` (`isWild`, `safetyScore`, `likesCount`, `tags`, `timestamp`, `trendingScore`), gzip when accepted, private no-store, 30 per minute. See the [PIPELINE] section |
+| `GET` | `/api/v1/feed/next?mode=&cursor=&size=` | **Yes** | Feed pipeline: the next older batch after an opaque cursor (`400` for an invalid or missing cursor) |
 | `POST` | `/api/posts` | **Yes** | Creates post with #hashtag and keyword topic extraction (rate-limited). Optional `poll: { options: [2 to 6 strings, 1 to 60 characters each] }`, exclusive with photos and stickers |
 | `GET` | `/api/posts/:id` | **Yes** | Retrieves single post with media, likes, comments, topics |
 | `DELETE` | `/api/posts/:id` | **Yes** | Author-only deletion of post and R2 media |
@@ -1389,6 +1391,1904 @@ export function resetScrollDirection(): void {
   lastY = typeof window === 'undefined' ? 0 : window.scrollY;
 }
 ```
+
+---
+
+## [PIPELINE] Server API, IndexedDB Caching & Personalization Engine
+
+> WARNING: Do NOT modify or edit this section unless explicitly requested.
+
+This is the data pipeline behind the frame feed: the server packages posts into tagged batches, the phone keeps them in IndexedDB, remembers what was viewed, and ranks them locally before the frame engine groups them into SAFE and WILD frames. It contains **no advertising or monetization code of any kind**; that stays entirely separate from this pipeline.
+
+It sits next to the frame engine in the section above and does not change it (`src/feed-engine/` is untouched). The existing `GET /api/feed` is untouched too. The pipeline is **off by default**: `FeedPage` uses it only when given `localFirst` (see "Turning it on").
+
+### Where everything lives
+
+| File | Job |
+|---|---|
+| `shared/feed-pipeline.ts` | The contract: `PipelinePost`, `PipelineMeta`, `FeedBatchResponse`, size limits, `isFeedBatchResponse` |
+| `worker/feed-pipeline/controller.ts` | The two routes: auth, rate limit, query, tag, package, compress |
+| `worker/feed-pipeline/packager.ts` | Pure steps: cursor, tagging a page of posts, building the batch envelope |
+| `worker/feed-pipeline/safety.ts` | SAFE / WILD scoring |
+| `worker/feed-pipeline/trending.ts` | Per-post trending score |
+| `worker/feed-pipeline/compress.ts` | gzip JSON response with the right headers |
+| `src/feed-pipeline/FeedCacheManager.ts` | IndexedDB cache, history, pre-fetch, offline (uses `idb`) |
+| `src/feed-pipeline/LocalPersonalization.ts` | On-phone scoring and re-ranking |
+| `src/feed-pipeline/pipelineSource.ts` | Glue to the frame engine: `createFeedPipeline`, `createPipelineFeedSource`, history tracking, impression sender, sign-out cleanup |
+
+```
+server                                         phone
+------                                         -----
+GET /api/v1/feed/bootstrap | /next             FeedCacheManager  --(IndexedDB "pgc-feed-cache")
+  query newest posts (blocks, expiry,            bulk write, viewed history, pre-fetch, offline
+  not-interested applied)                              |
+  hydrate  -> tag (SAFE/WILD, trending)                v
+  batch of 30-50, gzip                         LocalPersonalization.rank(pool)   (no network)
+                                                       |
+                                                       v
+                                               createPipelineFeedSource -> FeedFrameManager (SAFE / WILD / MID frames)
+```
+
+### Server API
+
+The routes are `/api/v1/feed/bootstrap` and `/api/v1/feed/next` (not `/v1/...`): the Worker only receives `/api/*` (`run_worker_first` in `wrangler.toml`), and these routes need the same session, rate limit and error handling as every other API route.
+
+| Request | Meaning |
+|---|---|
+| `GET /api/v1/feed/bootstrap?mode=for_you&size=40` | The newest batch. Call it when the feed opens |
+| `GET /api/v1/feed/next?mode=for_you&size=40&cursor=<opaque>` | The next older batch. Send `nextCursor` back unchanged |
+
+- `mode`: `for_you` (everyone) or `following` (yourself and people you follow). Anything else is `400`. `size` is clamped to **30..50** (default 40). `next` without a valid cursor is `400`.
+- Signed in only (`401`). **30 requests per minute** per person (`429` with `Retry-After`).
+- Order is newest first with a `(created_at, id)` cursor, so batches never repeat or skip a post, even when posts share a timestamp. The server does not rank; ranking happens on the phone.
+- Left out: posts by people the viewer blocked or who blocked the viewer, expired posts, removed posts, and posts the viewer marked "not interested".
+- Response (abridged):
+
+```json
+{
+  "version": 1,
+  "mode": "for_you",
+  "kind": "bootstrap",
+  "batch": {
+    "id": "b_mh1x2k_3f9a1c2e",
+    "generatedAt": 1792929600000,
+    "counts": { "safe": 38, "wild": 2 },
+    "hasMore": true,
+    "nextCursor": "MjAyNi0xMC0yNVQxMTo0MDowMC4wMDBafHBzdF8wMzk",
+    "posts": [
+      {
+        "id": "pst_01", "author_username": "ali", "body": "...", "created_at": "...", "expires_at": "...",
+        "likes_count": 4, "has_liked": false, "comments_count": 1, "media": [],
+        "moderation": "SAFE",
+        "meta": { "isWild": false, "safetyScore": 1, "likesCount": 4, "tags": ["exams"], "timestamp": 1792926000000, "trendingScore": 0.62 }
+      }
+    ]
+  },
+  "trending": { "exams": 1, "sports": 0.4 },
+  "config": { "batchSize": 40, "lowWaterMark": 15 }
+}
+```
+
+Every post is a normal `PostItem` (so existing cards render it) plus `moderation` and `meta`:
+
+| Field | Meaning |
+|---|---|
+| `meta.isWild` / `moderation` | `true` / `'WILD'` when `safetyScore < 0.7`, otherwise `false` / `'SAFE'` |
+| `meta.safetyScore` | 0 to 1, 1 = no concerns. Starts at 1; each **distinct reporter** whose report an admin has not dismissed costs 0.25 (max 0.8); each point of the existing spam check costs 0.12 (max 0.5). One report keeps a post SAFE, two make it WILD; a post at the spam-refusal threshold is WILD |
+| `meta.likesCount` | Same number as `likes_count` |
+| `meta.tags` | Topic slugs, lowercase, at most 12 |
+| `meta.timestamp` | `created_at` in epoch milliseconds |
+| `meta.trendingScore` | 0 to 1: half "how hot are its topics" (24 hour topic trends, hottest = 1), half "how fast is it gaining likes and comments for its age" |
+
+`trending` (topic slug to 0..1) rides along with every batch so the phone can weigh trends without asking again.
+
+The server only **tags**; it never hides a WILD post. What happens to WILD posts is the frame layout's decision. With the default layout (SAFE only) WILD posts are never mounted, so with `localFirst` on, reported and spam-like posts stay out of the default feed; with `MODERATED_LAYOUT` they appear only in WILD frames.
+
+Compression and caching: the body is gzip-compressed when the request has `Accept-Encoding: gzip` and the JSON is at least 1 KB (browsers decompress transparently; a 28 post batch went from 21,780 to 3,022 bytes). `X-Uncompressed-Bytes` reports the original size. Batches are per person, so every response is `Cache-Control: private, no-store` with `Vary: Accept-Encoding`. Cursors are strict: a valid ISO date plus a plain `[A-Za-z0-9_-]` id, anything else is `400`.
+
+### Phone: FeedCacheManager (IndexedDB)
+
+One instance per signed-in person and feed mode. Database `pgc-feed-cache` (version 1): store `posts` (key `userId|mode|postId`, indexes by person+mode and by person) and store `meta` (cursor, `hasMore`, last view number, last bootstrap time, trending weights).
+
+| Method | What it does |
+|---|---|
+| `start()` | A warm cache is used at once (and refreshed in the background if older than 5 minutes). A cold cache asks the server. Offline it falls back to what is stored and throws `FeedUnavailableError` only when there is nothing at all |
+| `bootstrap()` / `loadMore()` | Fetch the newest / next older batch and bulk-write it in one transaction. A post that arrives again keeps its viewed state |
+| `prefetchIfLow(unseen?)` | Background fetch of the next batch when fewer than 15 unseen posts are stored. One at a time, never throws, does nothing offline, waits 15 s after a failure |
+| `watchConnectivity()` | Catches up when the browser's `online` event fires |
+| `markViewed(ids)` | Marks posts viewed; the first view fixes their place (1, 2, 3 ...) in the history |
+| `recordDwell([{id, dwellMs}])` | Adds measured on-screen time without counting another view |
+| `getPool()` | Unseen, unexpired posts, newest first: what local ranking starts from |
+| `getHistory({limit, beforeSeq})` | Viewed posts, latest first |
+| `getHistoryFrames({frameSize, frames, beforeSeq})` | History grouped into frames for scrolling back up, nearest first, each in the order it was shown. **Reads only IndexedDB** |
+| `readOffline()` | Unseen posts, history and trending weights in one read |
+| `purgeExpired()` / `clear()` | Delete expired posts / everything for this person (all modes) |
+| `getStats()` | Counts, whether the backend is `indexeddb` or `memory`, `hasMore`, last bootstrap time |
+
+Behaviour worth knowing:
+
+- **History and scrolling up.** While a page is open the frame engine already keeps every frame in memory, so scrolling up inside a session needs nothing from the network. IndexedDB history covers what memory cannot: a reload, a closed tab, no connection. `attachHistoryTracking` marks a frame's posts viewed when the frame takes focus.
+- **Offline.** `createPipelineFeedSource` serves unseen cached posts first; when none are left and the network is unavailable it serves history so the feed is never blank. If nothing is stored it throws, and the page shows its normal error with "Try again".
+- **Posts are temporary here too.** Expired posts are never stored, are hidden the moment they expire, and are deleted by `purgeExpired()` (run at every `start()`).
+- **One phone, several people.** Everything is keyed by person; `clear()` removes one person's data and leaves the others. `App` calls `forgetFeedDataFor(userId)` on sign-out, which also removes that person's learned preferences.
+- **Limits.** At most 400 stored posts per person and mode; only viewed (history) posts are evicted, oldest first, never unseen ones.
+- **Failure.** If IndexedDB is missing or any operation fails (some private modes, a full disk), the manager switches to an in-memory store for the rest of the session instead of breaking the feed.
+- **Two tabs** share the database; the last write wins, which can lose a viewed flag. Acceptable for a feed cache.
+
+### Phone: LocalPersonalization
+
+Scores and re-ranks the cached pool using only what this person did on this phone plus the batch's trending weights. It runs on every frame, needs no network, and is deterministic (ties go to the newer post, then the id).
+
+```
+score = 0.40 preference + 0.25 trending + 0.20 recency + 0.15 engagement   (minus 0.5 for a post already seen)
+```
+
+| Part | How it is computed |
+|---|---|
+| preference | Learned weight per tag. Sum of the best three matching tags plus the single worst, squashed with `tanh(x / 6)`, so one disliked tag pulls a post down |
+| trending | The larger of the server's `trendingScore` and the hottest matching topic in the latest `trending` map |
+| recency | 1 for brand new, 0 at 7 days |
+| engagement | `log(1 + likes) / log(31)`, capped at 1 |
+
+Signals (kept per person in `localStorage` under `pgc:feed-prefs:v1:<userId>`, at most 200 tags, half-life 14 days, each weight clamped to -10..25): tag tap +1.5; a view of 3 s or longer +0.1 rising to +0.6 at 15 s (shorter views teach nothing); like +1; comment +3; more like this +3; show less -3; not interested -4. After scoring, a light pass stops one author filling several slots in a row.
+
+### Turning it on
+
+`FeedPage` has an opt-in prop. Nothing changes until it is passed:
+
+```tsx
+// src/App.tsx
+<FeedPage currentUserId={currentUser.user.id} localFirst onNavigateToCompose={...} onViewAuthorProfile={...} />
+```
+
+With `localFirst`, `FeedPage` builds a pipeline for the current person and feed mode, uses its source instead of `createApiFeedSource`, tracks history on frame focus, feeds on-screen time to local preferences, records likes, comments and `#tag` taps, and catches up when the connection returns. The same wiring by hand:
+
+```tsx
+import { createFeedPipeline } from './feed-pipeline/index.ts';
+
+const pipeline = createFeedPipeline({ userId, mode: 'for_you' });          // 'for_you' | 'following'
+const manager = new FeedFrameManager<PostItem>({
+  source: pipeline.source,                                                 // instead of createApiFeedSource(mode)
+  layout: MODERATED_LAYOUT,                                                // optional: also show WILD frames
+});
+const stopHistory = pipeline.attach(manager);                              // frames that take focus become history
+const stopOnline = pipeline.cache.watchConnectivity();                     // catch up when back online
+const tracker = new ImpressionTracker(pipeline.impressionSender());        // local learning, then POST /api/impressions
+
+pipeline.personalization.recordTagClick('exams');                          // from a #tag tap
+pipeline.personalization.recordInteraction(post, 'like');                  // 'comment' | 'more_like_this' | 'show_less' | 'not_interested'
+
+// when the page goes away
+stopHistory(); stopOnline(); tracker.dispose(); await pipeline.dispose();
+
+// on sign-out (App already does this)
+await forgetFeedDataFor(userId);
+```
+
+Scrolling back up beyond what is in memory (after a reload) reads from the phone:
+
+```ts
+const frames = await pipeline.cache.getHistoryFrames({ frameSize: 8, frames: 3 });
+const older = await pipeline.cache.getHistoryFrames({ frameSize: 8, beforeSeq: frames.at(-1)!.firstSeq });
+```
+
+### Tuning
+
+| Knob | Where | Default |
+|---|---|---|
+| Batch size range | `BATCH_SIZE_MIN` / `MAX` / `DEFAULT` in `shared/feed-pipeline.ts` | 30 / 50 / 40 |
+| Low-water mark | `LOW_WATER_MARK`, or `lowWaterMark` on `FeedCacheManager` | 15 |
+| WILD line, report and spam penalties | `worker/feed-pipeline/safety.ts` | 0.7, 0.25 each, 0.12 per point |
+| Request limit | `BATCH_RATE_LIMIT` in the controller | 30 per minute |
+| Cache freshness, stored posts, retry wait | `freshMs`, `maxRecords`, `retryBackoffMs` | 5 min, 400, 15 s |
+| Score weights, half-life, signal steps | `DEFAULT_PERSONALIZATION` | see above |
+
+### Verifying it
+
+- `npx vitest run tests/feed-pipeline-*.test.ts tests/feed-cache-manager.test.ts tests/local-personalization.test.ts tests/feed-page-pipeline.test.tsx` (server routes, tagging, paging, compression, rate limit; IndexedDB cache, history, offline, pre-fetch, expiry, isolation; ranking; the frame engine and `FeedPage` driven through the pipeline).
+- `npm run attack` includes a feed pipeline section (hostile cursors, modes and sizes, blocks, hidden posts with positive controls, private headers, rate limit).
+- `npm run e2e:feed` runs the pipeline in a **real Chromium** against the real endpoint and the browser's own IndexedDB: cold start, history, reload, fully offline, sign-out cleanup. Setup is in the header of `scripts/e2e-pipeline.mts` (needs `npm run dev`, `npm install --no-save playwright`, optionally `CHROMIUM_PATH`).
+
+### Known limits
+
+- `FeedPage` does not draw a "previous" section above the first frame after a reload; the data is available through `getHistoryFrames` but there is no UI for it yet.
+- Preferences are learned only on this phone and are not synced between devices.
+- Viewed state is per feed mode: a post seen in For you is still unseen in Following.
+- The server does not rank, so a hot older post only reaches the phone when its batch is fetched; the phone re-ranks within what it holds.
+- Tested with a fake IndexedDB in unit tests and with real Chromium in `e2e:feed`; not yet on a real phone, Safari or Firefox.
+
+### Source
+
+Snapshots of the files above. If they ever differ from the files in the repository, the files are the truth.
+
+#### `shared/feed-pipeline.ts`
+
+```ts
+/**
+ * Feed pipeline contract: what the server packages (worker/feed-pipeline) and what the phone caches
+ * (src/feed-pipeline). Nothing here knows about monetization.
+ */
+import type { PostItem } from './schema.ts';
+
+export const FEED_PIPELINE_VERSION = 1;
+
+/** Posts per batch. The server clamps any requested size into this range. */
+export const BATCH_SIZE_MIN = 30;
+export const BATCH_SIZE_MAX = 50;
+export const BATCH_SIZE_DEFAULT = 40;
+
+/** The client asks the server for the next batch when fewer than this many unseen posts are cached. */
+export const LOW_WATER_MARK = 15;
+
+export type PipelineMode = 'for_you' | 'following';
+
+/** Metadata the server attaches to every packaged post. */
+export interface PipelineMeta {
+  /** True when the post is in the WILD pool (reported or spam-like). SAFE otherwise. */
+  isWild: boolean;
+  /** 0..1, where 1 means no concerns. `isWild` is `safetyScore < WILD_THRESHOLD` (see worker/feed-pipeline/safety.ts). */
+  safetyScore: number;
+  /** Likes from people the viewer has not blocked (same number as `likes_count`). */
+  likesCount: number;
+  /** Topic slugs, lowercase, at most 12. */
+  tags: string[];
+  /** `created_at` as epoch milliseconds. */
+  timestamp: number;
+  /** 0..1: how hot the post's topics are right now blended with how fast it is gaining likes and comments. */
+  trendingScore: number;
+}
+
+/**
+ * A normal PostItem (so existing cards render it unchanged) plus the pipeline metadata. `moderation` is always
+ * set, so `classifyPost` in src/lib/feed-source.ts also understands it.
+ */
+export type PipelinePost = PostItem & {
+  moderation: 'SAFE' | 'WILD';
+  meta: PipelineMeta;
+};
+
+export interface FeedBatch {
+  id: string;
+  /** Epoch milliseconds on the server. */
+  generatedAt: number;
+  posts: PipelinePost[];
+  counts: { safe: number; wild: number };
+  /** Opaque. Send it back to `/next` unchanged. Null when there is nothing older. */
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface FeedBatchResponse {
+  version: typeof FEED_PIPELINE_VERSION;
+  mode: PipelineMode;
+  kind: 'bootstrap' | 'next';
+  batch: FeedBatch;
+  /** Hot topic slug -> 0..1 (24 hour window). Lets the phone weigh trends locally without asking again. */
+  trending: Record<string, number>;
+  config: { batchSize: number; lowWaterMark: number };
+}
+
+export function parsePipelineMode(raw: string | null): PipelineMode | null {
+  if (raw === null || raw === '') return 'for_you';
+  return raw === 'for_you' || raw === 'following' ? raw : null;
+}
+
+export function clampBatchSize(raw: string | null | undefined): number {
+  if (raw === null || raw === undefined || raw.trim() === '') return BATCH_SIZE_DEFAULT;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return BATCH_SIZE_DEFAULT;
+  return Math.min(BATCH_SIZE_MAX, Math.max(BATCH_SIZE_MIN, n));
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+function isMeta(v: unknown): v is PipelineMeta {
+  return (
+    isObj(v) &&
+    typeof v.isWild === 'boolean' &&
+    typeof v.safetyScore === 'number' &&
+    typeof v.likesCount === 'number' &&
+    Array.isArray(v.tags) &&
+    v.tags.every((t) => typeof t === 'string') &&
+    typeof v.timestamp === 'number' &&
+    typeof v.trendingScore === 'number'
+  );
+}
+
+/** Cheap structural check, so a broken or foreign response is never written to the phone's cache. */
+export function isFeedBatchResponse(x: unknown): x is FeedBatchResponse {
+  if (!isObj(x) || x.version !== FEED_PIPELINE_VERSION) return false;
+  if (x.mode !== 'for_you' && x.mode !== 'following') return false;
+  if (x.kind !== 'bootstrap' && x.kind !== 'next') return false;
+  if (!isObj(x.trending) || !isObj(x.config) || !isObj(x.batch)) return false;
+  const b = x.batch;
+  if (typeof b.id !== 'string' || !Array.isArray(b.posts) || typeof b.hasMore !== 'boolean') return false;
+  if (b.nextCursor !== null && typeof b.nextCursor !== 'string') return false;
+  return b.posts.every(
+    (p) => isObj(p) && typeof p.id === 'string' && typeof p.expires_at === 'string' && isMeta(p.meta),
+  );
+}
+```
+
+#### `worker/feed-pipeline/safety.ts`
+
+```ts
+/**
+ * SAFE / WILD tagging for the feed pipeline.
+ *
+ * There is no classifier. A post's safety score starts at 1 and loses points for two things the app already
+ * knows: how many different people reported it (dismissed reports do not count) and how spam-like its text is
+ * (the same rule-based check that gates posting). Below WILD_THRESHOLD the post goes in the WILD pool.
+ * The server never hides a WILD post: it only tags it, and the client's frame layout decides what to do.
+ */
+export const WILD_THRESHOLD = 0.7;
+/** Each distinct reporter costs this much, up to REPORT_PENALTY_CAP in total. One report alone stays SAFE. */
+export const REPORT_PENALTY_EACH = 0.25;
+export const REPORT_PENALTY_CAP = 0.8;
+/** Each point from assessSpam costs this much, up to SPAM_PENALTY_CAP. A post at the spam threshold (3) is WILD. */
+export const SPAM_PENALTY_PER_POINT = 0.12;
+export const SPAM_PENALTY_CAP = 0.5;
+
+export interface SafetyInputs {
+  /** Distinct people with a report on this post that an admin has not dismissed. */
+  reporters: number;
+  /** Score from assessSpam(post.body). */
+  spamScore: number;
+}
+
+export interface SafetyVerdict {
+  safetyScore: number;
+  isWild: boolean;
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+export function scoreSafety({ reporters, spamScore }: SafetyInputs): SafetyVerdict {
+  const reportPenalty = Math.min(REPORT_PENALTY_CAP, Math.max(0, reporters) * REPORT_PENALTY_EACH);
+  const spamPenalty = Math.min(SPAM_PENALTY_CAP, Math.max(0, spamScore) * SPAM_PENALTY_PER_POINT);
+  const safetyScore = round2(Math.min(1, Math.max(0, 1 - reportPenalty - spamPenalty)));
+  return { safetyScore, isWild: safetyScore < WILD_THRESHOLD };
+}
+```
+
+#### `worker/feed-pipeline/trending.ts`
+
+```ts
+/**
+ * Trending score for one post: half "are its topics hot right now" (the 24 hour topic trends the cron job
+ * already computes), half "is it gaining likes and comments quickly for its age".
+ */
+const HOUR_MS = 3_600_000;
+
+/** 0..1. Fresh posts with a few likes and comments score high; old posts need far more to keep up. */
+export function engagementVelocity(likes: number, comments: number, ageMs: number): number {
+  const hours = Math.max(0, ageMs) / HOUR_MS;
+  const raw = (Math.max(0, likes) + 2 * Math.max(0, comments)) / Math.pow(hours + 2, 1.2);
+  return 1 - Math.exp(-raw / 2);
+}
+
+/** `topicTrends` maps topic slug -> 0..1. */
+export function trendingScore(
+  tags: readonly string[],
+  topicTrends: ReadonlyMap<string, number>,
+  likes: number,
+  comments: number,
+  ageMs: number,
+): number {
+  let topic = 0;
+  for (const t of tags) topic = Math.max(topic, topicTrends.get(t) ?? 0);
+  const score = 0.5 * Math.min(1, topic) + 0.5 * engagementVelocity(likes, comments, ageMs);
+  return Math.round(Math.min(1, Math.max(0, score)) * 100) / 100;
+}
+```
+
+#### `worker/feed-pipeline/compress.ts`
+
+```ts
+/**
+ * JSON response, gzip-compressed when the caller accepts it and the body is big enough to be worth it.
+ * Browsers decompress transparently, so `fetch(...).json()` on the phone needs no extra code.
+ * Batches are per viewer, so they are never shareable: `Cache-Control: private, no-store`.
+ */
+export const COMPRESS_MIN_BYTES = 1024;
+
+export async function compressedJson(
+  request: Request,
+  data: unknown,
+  status = 200,
+  minBytes = COMPRESS_MIN_BYTES,
+): Promise<Response> {
+  const bytes = new TextEncoder().encode(JSON.stringify(data));
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'private, no-store',
+    Vary: 'Accept-Encoding',
+    'X-Uncompressed-Bytes': String(bytes.byteLength),
+  };
+  const accepts = /\bgzip\b/i.test(request.headers.get('Accept-Encoding') ?? '');
+  if (!accepts || bytes.byteLength < minBytes || typeof CompressionStream === 'undefined') {
+    return new Response(bytes, { status, headers });
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+  const gz = new Uint8Array(await new Response(stream).arrayBuffer());
+  headers['Content-Encoding'] = 'gzip';
+  headers['Content-Length'] = String(gz.byteLength);
+  return new Response(gz, { status, headers });
+}
+```
+
+#### `worker/feed-pipeline/packager.ts`
+
+```ts
+/**
+ * Pure packaging steps (no database): cursors, tagging a page of posts, and building the batch envelope.
+ * The controller does the querying; everything here is easy to test on its own.
+ */
+import { assessSpam } from '../content/spam.ts';
+import {
+  FEED_PIPELINE_VERSION,
+  LOW_WATER_MARK,
+  type FeedBatch,
+  type FeedBatchResponse,
+  type PipelineMode,
+  type PipelinePost,
+} from '../../shared/feed-pipeline.ts';
+import type { PostItem } from '../../shared/schema.ts';
+import { scoreSafety } from './safety.ts';
+import { trendingScore } from './trending.ts';
+
+const MAX_TAGS = 12;
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/;
+/** Ids in this app are plain ASCII (pst_..., usr_...). Anything else is not a cursor this module made. */
+const ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
+
+// ---------------------------------------------------------------- cursor: (created_at, id), base64url, no Buffer
+
+function toBase64Url(text: string): string {
+  let bin = '';
+  for (const b of new TextEncoder().encode(text)) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(s: string): string {
+  const padded = s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '=');
+  const bin = atob(padded);
+  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+}
+
+export interface PipelineCursor {
+  createdAt: string;
+  id: string;
+}
+
+export function encodePipelineCursor(createdAt: string, id: string): string {
+  return toBase64Url(`${createdAt}|${id}`);
+}
+
+/** Null for anything that is not a cursor this module produced. */
+export function decodePipelineCursor(raw: string): PipelineCursor | null {
+  if (raw.length === 0 || raw.length > 200) return null;
+  try {
+    const [createdAt, id, ...rest] = fromBase64Url(raw).split('|');
+    if (rest.length > 0 || !createdAt || !id || !ID_RE.test(id) || !ISO_RE.test(createdAt)) return null;
+    return { createdAt, id };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------- tagging
+
+export interface TagContext {
+  nowMs: number;
+  /** post id -> distinct reporters (non-dismissed reports). Missing means none. */
+  reporters: ReadonlyMap<string, number>;
+  /** topic slug -> 0..1 */
+  topicTrends: ReadonlyMap<string, number>;
+}
+
+/** Adds `moderation` and `meta` to each hydrated post. Order is kept. */
+export function tagPosts(posts: readonly PostItem[], ctx: TagContext): PipelinePost[] {
+  return posts.map((post) => {
+    const tags = [...new Set((post.topics ?? []).map((t) => t.slug.toLowerCase()))].slice(0, MAX_TAGS);
+    const timestamp = Date.parse(post.created_at);
+    const ageMs = Number.isFinite(timestamp) ? ctx.nowMs - timestamp : 0;
+    const { safetyScore, isWild } = scoreSafety({
+      reporters: ctx.reporters.get(post.id) ?? 0,
+      spamScore: assessSpam(post.body).score,
+    });
+    const { _debug: _ignored, ...rest } = post;
+    return {
+      ...rest,
+      moderation: isWild ? 'WILD' : 'SAFE',
+      meta: {
+        isWild,
+        safetyScore,
+        likesCount: post.likes_count,
+        tags,
+        timestamp: Number.isFinite(timestamp) ? timestamp : ctx.nowMs,
+        trendingScore: trendingScore(tags, ctx.topicTrends, post.likes_count, post.comments_count, ageMs),
+      },
+    };
+  });
+}
+
+// ---------------------------------------------------------------- envelope
+
+export interface BuildBatchInput {
+  kind: 'bootstrap' | 'next';
+  mode: PipelineMode;
+  posts: PipelinePost[];
+  hasMore: boolean;
+  batchSize: number;
+  topicTrends: ReadonlyMap<string, number>;
+  nowMs: number;
+}
+
+export function buildBatchResponse(input: BuildBatchInput): FeedBatchResponse {
+  const { posts, hasMore } = input;
+  const last = posts[posts.length - 1];
+  const wild = posts.filter((p) => p.meta.isWild).length;
+  const batch: FeedBatch = {
+    id: `b_${input.nowMs.toString(36)}_${crypto.randomUUID().slice(0, 8)}`,
+    generatedAt: input.nowMs,
+    posts,
+    counts: { safe: posts.length - wild, wild },
+    nextCursor: hasMore && last ? encodePipelineCursor(last.created_at, last.id) : null,
+    hasMore: hasMore && !!last,
+  };
+  return {
+    version: FEED_PIPELINE_VERSION,
+    mode: input.mode,
+    kind: input.kind,
+    batch,
+    trending: Object.fromEntries(input.topicTrends),
+    config: { batchSize: input.batchSize, lowWaterMark: LOW_WATER_MARK },
+  };
+}
+```
+
+#### `worker/feed-pipeline/controller.ts`
+
+```ts
+/**
+ * Server-side packaging API for the frame feed.
+ *
+ *   GET /api/v1/feed/bootstrap?mode=for_you|following&size=30..50
+ *   GET /api/v1/feed/next?mode=...&cursor=<opaque>&size=30..50
+ *
+ * Each call returns ONE batch (30 to 50 posts, newest first) holding a pool of SAFE and WILD tagged posts,
+ * gzip-compressed when the caller accepts it. The server does not rank: ranking happens on the phone
+ * (src/feed-pipeline/LocalPersonalization.ts) so it can use what the viewer just did without a round trip.
+ * No monetization of any kind lives here.
+ *
+ * `hydratePosts` and `getBlockedUserIds` are passed in (worker/index.ts owns them), which keeps this module
+ * free of an import cycle and lets tests stub them.
+ */
+import type { D1Database } from '@cloudflare/workers-types';
+import type { Env, PostRow } from '../types.ts';
+import type { PostItem } from '../../shared/schema.ts';
+import { authenticateRequest } from '../auth.ts';
+import { jsonResponse } from '../http.ts';
+import { checkRateLimit } from '../rate-limit.ts';
+import { clampBatchSize, parsePipelineMode, type PipelineMode } from '../../shared/feed-pipeline.ts';
+import { buildBatchResponse, decodePipelineCursor, tagPosts, type PipelineCursor } from './packager.ts';
+import { compressedJson } from './compress.ts';
+
+export type PostQueryRow = PostRow & {
+  author_username: string;
+  author_display_name: string;
+  author_avatar_media_id: string | null;
+  author_class_name: string | null;
+};
+
+export interface PipelineDeps {
+  hydratePosts: (db: D1Database, rows: PostQueryRow[], currentUserId: string) => Promise<PostItem[]>;
+  getBlockedUserIds: (db: D1Database, userId: string) => Promise<string[]>;
+}
+
+/** 30 batch requests a minute is far more than scrolling needs (one batch is 30+ posts). */
+export const BATCH_RATE_LIMIT = { max: 30, windowMs: 60_000 };
+const ROUTE = /^\/api\/v1\/feed\/(bootstrap|next)$/;
+
+/** The newest unexpired posts the viewer may see, one page after `cursor`. Asks for size + 1 to learn `hasMore`. */
+async function queryPage(
+  db: D1Database,
+  deps: PipelineDeps,
+  userId: string,
+  mode: PipelineMode,
+  cursor: PipelineCursor | null,
+  limit: number,
+  nowIso: string,
+): Promise<PostQueryRow[]> {
+  const blocked = await deps.getBlockedUserIds(db, userId);
+  const params: unknown[] = [nowIso];
+  let where = "p.status = 'active' AND p.expires_at > ?";
+  if (blocked.length > 0) {
+    where += ` AND p.author_id NOT IN (${blocked.map(() => '?').join(',')})`;
+    params.push(...blocked);
+  }
+  where += " AND p.id NOT IN (SELECT post_id FROM feedback WHERE user_id = ? AND type = 'not_interested')";
+  params.push(userId);
+  if (mode === 'following') {
+    where += ' AND (p.author_id = ? OR p.author_id IN (SELECT followed_id FROM follows WHERE follower_id = ?))';
+    params.push(userId, userId);
+  }
+  if (cursor) {
+    where += ' AND (p.created_at < ? OR (p.created_at = ? AND p.id < ?))';
+    params.push(cursor.createdAt, cursor.createdAt, cursor.id);
+  }
+  params.push(limit + 1);
+  const res = await db
+    .prepare(
+      `SELECT p.id, p.author_id, p.body, p.created_at, p.expires_at, p.status,
+              pr.username AS author_username, pr.display_name AS author_display_name,
+              pr.avatar_media_id AS author_avatar_media_id, c.name AS author_class_name
+       FROM posts p
+       JOIN profiles pr ON pr.user_id = p.author_id
+       LEFT JOIN classes c ON c.id = pr.class_id
+       WHERE ${where}
+       ORDER BY p.created_at DESC, p.id DESC
+       LIMIT ?`,
+    )
+    .bind(...params)
+    .all<PostQueryRow>();
+  return res.results || [];
+}
+
+/** Distinct people who reported each post and whose report an admin has not dismissed. */
+async function reporterCounts(db: D1Database, postIds: readonly string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (postIds.length === 0) return out;
+  const res = await db
+    .prepare(
+      `SELECT target_id, COUNT(DISTINCT reporter_id) AS n
+       FROM reports
+       WHERE target_type = 'post' AND status != 'dismissed' AND target_id IN (${postIds.map(() => '?').join(',')})
+       GROUP BY target_id`,
+    )
+    .bind(...postIds)
+    .all<{ target_id: string; n: number }>();
+  for (const r of res.results || []) out.set(r.target_id, Number(r.n));
+  return out;
+}
+
+/** The hottest 24 hour topics, scaled so the hottest is 1. */
+async function topicTrends(db: D1Database): Promise<Map<string, number>> {
+  const res = await db
+    .prepare(
+      `SELECT t.slug, ts.score
+       FROM trend_snapshots ts JOIN topics t ON t.id = ts.topic_id
+       WHERE ts.window = '24h'
+       ORDER BY ts.score DESC
+       LIMIT 20`,
+    )
+    .all<{ slug: string; score: number }>();
+  const rows = res.results || [];
+  const max = Math.max(0, ...rows.map((r) => Number(r.score)));
+  const out = new Map<string, number>();
+  if (max > 0) for (const r of rows) out.set(r.slug.toLowerCase(), Math.round((Number(r.score) / max) * 100) / 100);
+  return out;
+}
+
+/** Returns a Response for the two pipeline routes, or null when the request is not one of them. */
+export async function handleFeedPipelineRoutes(
+  request: Request,
+  env: Env,
+  pathname: string,
+  deps: PipelineDeps,
+): Promise<Response | null> {
+  const match = ROUTE.exec(pathname);
+  if (!match || request.method !== 'GET') return null;
+  const kind = match[1] as 'bootstrap' | 'next';
+
+  const auth = await authenticateRequest(request, env.DB);
+  if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+
+  const rate = await checkRateLimit(env.DB, `feedbatch:${auth.user.id}`, BATCH_RATE_LIMIT.max, BATCH_RATE_LIMIT.windowMs);
+  if (!rate.allowed) {
+    return jsonResponse({ error: 'Too many feed requests. Try again shortly.' }, 429, {
+      'Retry-After': String(rate.retryAfterSeconds),
+    });
+  }
+
+  const params = new URL(request.url).searchParams;
+  const mode = parsePipelineMode(params.get('mode'));
+  if (!mode) return jsonResponse({ error: "mode must be 'for_you' or 'following'" }, 400);
+  const size = clampBatchSize(params.get('size'));
+
+  let cursor: PipelineCursor | null = null;
+  if (kind === 'next') {
+    const raw = params.get('cursor');
+    if (!raw) return jsonResponse({ error: 'cursor is required' }, 400);
+    cursor = decodePipelineCursor(raw);
+    if (!cursor) return jsonResponse({ error: 'Invalid cursor' }, 400);
+  }
+
+  const nowMs = Date.now();
+  const rows = await queryPage(env.DB, deps, auth.user.id, mode, cursor, size, new Date(nowMs).toISOString());
+  const hasMore = rows.length > size;
+  const pageRows = hasMore ? rows.slice(0, size) : rows;
+
+  const [hydrated, reporters, trends] = await Promise.all([
+    deps.hydratePosts(env.DB, pageRows, auth.user.id),
+    reporterCounts(env.DB, pageRows.map((r) => r.id)),
+    topicTrends(env.DB),
+  ]);
+  const posts = tagPosts(hydrated, { nowMs, reporters, topicTrends: trends });
+  const body = buildBatchResponse({ kind, mode, posts, hasMore, batchSize: size, topicTrends: trends, nowMs });
+  return compressedJson(request, body);
+}
+```
+
+#### `src/feed-pipeline/FeedCacheManager.ts`
+
+```ts
+/**
+ * Local feed cache and history for one signed-in person and one feed mode, kept in IndexedDB on the phone.
+ *
+ *  - bulk-writes the batches the server packages (/api/v1/feed/bootstrap and /next);
+ *  - remembers which posts were viewed, in the order they were first viewed, so scrolling back up (and the next
+ *    visit) reads history from the phone with no network call;
+ *  - pre-fetches the next batch in the background when the unseen stock runs low;
+ *  - keeps working with no connection by reading what is already stored;
+ *  - forgets posts the moment they expire, and everything for a person on sign-out (`clear()`).
+ *
+ * It knows nothing about ranking or frames. If IndexedDB is missing or fails (some private modes), it falls back to
+ * memory for the rest of the session instead of breaking the feed.
+ */
+import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import {
+  BATCH_SIZE_DEFAULT,
+  LOW_WATER_MARK,
+  isFeedBatchResponse,
+  type FeedBatchResponse,
+  type PipelineMode,
+  type PipelinePost,
+} from '../../shared/feed-pipeline.ts';
+
+export const FEED_DB_NAME = 'pgc-feed-cache';
+const DB_VERSION = 1;
+const FALLBACK_TTL_MS = 14 * 24 * 3_600_000;
+
+export interface CachedPostRecord {
+  /** `${userId}|${mode}|${postId}` */
+  key: string;
+  userId: string;
+  mode: PipelineMode;
+  postId: string;
+  post: PipelinePost;
+  batchId: string;
+  fetchedAt: number;
+  expiresAtMs: number;
+  /** Order of first view (1, 2, 3 ...). Null until the post has been viewed. */
+  viewSeq: number | null;
+  viewedAt: number | null;
+  viewCount: number;
+  dwellMs: number;
+}
+
+export interface ScopeMeta {
+  /** `${userId}|${mode}` */
+  key: string;
+  userId: string;
+  mode: PipelineMode;
+  nextCursor: string | null;
+  /** True until the server says there is nothing older. */
+  hasMore: boolean;
+  /** Last view sequence number handed out. */
+  seq: number;
+  bootstrappedAt: number | null;
+  /** Hot topics from the latest batch, for local ranking. */
+  trending: Record<string, number>;
+}
+
+export interface BatchFetchParams {
+  mode: PipelineMode;
+  cursor: string | null;
+  size: number;
+}
+export type BatchFetcher = (kind: 'bootstrap' | 'next', params: BatchFetchParams) => Promise<FeedBatchResponse>;
+
+export class FeedHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = 'FeedHttpError';
+  }
+}
+
+/** No connection (or the server could not be reached) and nothing usable is stored on this phone. */
+export class FeedUnavailableError extends Error {
+  constructor(message = 'You are offline and no posts are saved on this phone yet.') {
+    super(message);
+    this.name = 'FeedUnavailableError';
+  }
+}
+
+/** The real fetcher. The browser decompresses the gzip body before `.json()` sees it. */
+export const httpBatchFetcher: BatchFetcher = async (kind, { mode, cursor, size }) => {
+  const params = new URLSearchParams({ mode, size: String(size) });
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`/api/v1/feed/${kind}?${params.toString()}`, {
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new FeedHttpError(res.status, data.error || 'Failed to load posts');
+  }
+  const data: unknown = await res.json();
+  if (!isFeedBatchResponse(data)) throw new Error('Unexpected feed response');
+  return data;
+};
+
+// ------------------------------------------------------------------------------------------------ storage backends
+
+interface Backend {
+  readonly kind: 'indexeddb' | 'memory';
+  readScope(userId: string, mode: PipelineMode): Promise<CachedPostRecord[]>;
+  readUser(userId: string): Promise<CachedPostRecord[]>;
+  putRecords(records: CachedPostRecord[]): Promise<void>;
+  deleteRecords(keys: string[]): Promise<void>;
+  getMeta(key: string): Promise<ScopeMeta | undefined>;
+  putMeta(meta: ScopeMeta): Promise<void>;
+  deleteUser(userId: string): Promise<void>;
+  close(): void;
+}
+
+interface FeedDB extends DBSchema {
+  posts: {
+    key: string;
+    value: CachedPostRecord;
+    indexes: { byScope: [string, string]; byUser: string };
+  };
+  meta: { key: string; value: ScopeMeta };
+}
+
+class IdbBackend implements Backend {
+  readonly kind = 'indexeddb' as const;
+  constructor(private readonly db: IDBPDatabase<FeedDB>) {}
+
+  static async open(name: string, onLost: () => void): Promise<IdbBackend> {
+    const db = await openDB<FeedDB>(name, DB_VERSION, {
+      upgrade(d) {
+        const posts = d.createObjectStore('posts', { keyPath: 'key' });
+        posts.createIndex('byScope', ['userId', 'mode']);
+        posts.createIndex('byUser', 'userId');
+        d.createObjectStore('meta', { keyPath: 'key' });
+      },
+      blocking() {
+        // another tab wants to upgrade the database: let it
+        onLost();
+      },
+      terminated: onLost,
+    });
+    return new IdbBackend(db);
+  }
+
+  readScope(userId: string, mode: PipelineMode) {
+    return this.db.getAllFromIndex('posts', 'byScope', [userId, mode]);
+  }
+  readUser(userId: string) {
+    return this.db.getAllFromIndex('posts', 'byUser', userId);
+  }
+  async putRecords(records: CachedPostRecord[]) {
+    const tx = this.db.transaction('posts', 'readwrite');
+    await Promise.all([...records.map((r) => tx.store.put(r)), tx.done]);
+  }
+  async deleteRecords(keys: string[]) {
+    const tx = this.db.transaction('posts', 'readwrite');
+    await Promise.all([...keys.map((k) => tx.store.delete(k)), tx.done]);
+  }
+  getMeta(key: string) {
+    return this.db.get('meta', key);
+  }
+  async putMeta(meta: ScopeMeta) {
+    await this.db.put('meta', meta);
+  }
+  async deleteUser(userId: string) {
+    const tx = this.db.transaction(['posts', 'meta'], 'readwrite');
+    const keys = await tx.objectStore('posts').index('byUser').getAllKeys(userId);
+    await Promise.all([
+      ...keys.map((k) => tx.objectStore('posts').delete(k)),
+      tx.objectStore('meta').delete(`${userId}|for_you`),
+      tx.objectStore('meta').delete(`${userId}|following`),
+      tx.done,
+    ]);
+  }
+  close() {
+    this.db.close();
+  }
+}
+
+class MemoryBackend implements Backend {
+  readonly kind = 'memory' as const;
+  private posts = new Map<string, CachedPostRecord>();
+  private metas = new Map<string, ScopeMeta>();
+
+  async readScope(userId: string, mode: PipelineMode) {
+    return [...this.posts.values()].filter((r) => r.userId === userId && r.mode === mode).map((r) => structuredClone(r));
+  }
+  async readUser(userId: string) {
+    return [...this.posts.values()].filter((r) => r.userId === userId).map((r) => structuredClone(r));
+  }
+  async putRecords(records: CachedPostRecord[]) {
+    for (const r of records) this.posts.set(r.key, structuredClone(r));
+  }
+  async deleteRecords(keys: string[]) {
+    for (const k of keys) this.posts.delete(k);
+  }
+  async getMeta(key: string) {
+    const m = this.metas.get(key);
+    return m ? structuredClone(m) : undefined;
+  }
+  async putMeta(meta: ScopeMeta) {
+    this.metas.set(meta.key, structuredClone(meta));
+  }
+  async deleteUser(userId: string) {
+    for (const [k, r] of this.posts) if (r.userId === userId) this.posts.delete(k);
+    for (const [k, m] of this.metas) if (m.userId === userId) this.metas.delete(k);
+  }
+  close() {
+    /* nothing to release */
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ the manager
+
+export interface FeedCacheOptions {
+  userId: string;
+  mode: PipelineMode;
+  fetchBatch?: BatchFetcher;
+  /** Posts to ask for per batch (the server clamps to 30..50). */
+  batchSize?: number;
+  /** Pre-fetch when fewer than this many unseen posts are left. */
+  lowWaterMark?: number;
+  /** A cache bootstrapped this recently is used as it is, with no server call at start. Default 5 minutes. */
+  freshMs?: number;
+  /** Cap on stored posts per mode. Only viewed (history) posts are evicted, oldest first. Default 400. */
+  maxRecords?: number;
+  /** After a failed background fetch, wait this long before trying again. Default 15 s. */
+  retryBackoffMs?: number;
+  dbName?: string;
+  isOnline?: () => boolean;
+  now?: () => number;
+  /** 'memory' skips IndexedDB entirely (tests, unsupported browsers). */
+  storage?: 'auto' | 'memory';
+}
+
+export interface StartResult {
+  source: 'network' | 'cache';
+  /** True when the cache is older than `freshMs` or the server could not be reached. */
+  stale: boolean;
+}
+
+export interface HistoryEntry {
+  post: PipelinePost;
+  viewSeq: number;
+  viewedAt: number;
+}
+
+export interface HistoryFrame {
+  /** In the order they were originally shown. */
+  items: PipelinePost[];
+  firstSeq: number;
+  lastSeq: number;
+}
+
+export interface CacheStats {
+  unviewed: number;
+  viewed: number;
+  total: number;
+  backend: 'indexeddb' | 'memory';
+  hasMore: boolean;
+  bootstrappedAt: number | null;
+}
+
+export class FeedCacheManager {
+  readonly userId: string;
+  readonly mode: PipelineMode;
+
+  private readonly fetcher: BatchFetcher;
+  private readonly batchSize: number;
+  private readonly lowWater: number;
+  private readonly freshMs: number;
+  private readonly maxRecords: number;
+  private readonly backoffMs: number;
+  private readonly dbName: string;
+  private readonly onlineFn: () => boolean;
+  private readonly nowFn: () => number;
+  private readonly forceMemory: boolean;
+
+  private backendPromise: Promise<Backend> | null = null;
+  private tail: Promise<unknown> = Promise.resolve();
+  private net: Promise<number> | null = null;
+  private prefetching: Promise<boolean> | null = null;
+  private lastFailureAt = -Infinity;
+  private dataVersion = 0;
+
+  constructor(options: FeedCacheOptions) {
+    this.userId = options.userId;
+    this.mode = options.mode;
+    this.fetcher = options.fetchBatch ?? httpBatchFetcher;
+    this.batchSize = options.batchSize ?? BATCH_SIZE_DEFAULT;
+    this.lowWater = options.lowWaterMark ?? LOW_WATER_MARK;
+    this.freshMs = options.freshMs ?? 5 * 60_000;
+    this.maxRecords = options.maxRecords ?? 400;
+    this.backoffMs = options.retryBackoffMs ?? 15_000;
+    this.dbName = options.dbName ?? FEED_DB_NAME;
+    this.onlineFn = options.isOnline ?? (() => typeof navigator === 'undefined' || navigator.onLine !== false);
+    this.nowFn = options.now ?? (() => Date.now());
+    this.forceMemory = options.storage === 'memory';
+  }
+
+  /** Goes up every time a batch is written. A ranking built from the cache is out of date when this changes. */
+  get version(): number {
+    return this.dataVersion;
+  }
+
+  // ---------------------------------------------------------------- plumbing
+
+  private openBackend(): Promise<Backend> {
+    if (!this.backendPromise) {
+      this.backendPromise = (async (): Promise<Backend> => {
+        if (this.forceMemory || typeof indexedDB === 'undefined') return new MemoryBackend();
+        try {
+          return await IdbBackend.open(this.dbName, () => this.degrade());
+        } catch {
+          return new MemoryBackend();
+        }
+      })();
+    }
+    return this.backendPromise;
+  }
+
+  private degrade(): void {
+    this.backendPromise = Promise.resolve(new MemoryBackend());
+  }
+
+  /** Runs `op` on the backend. If IndexedDB itself fails, continues on memory so the feed keeps working. */
+  private async run<T>(op: (b: Backend) => Promise<T>): Promise<T> {
+    const backend = await this.openBackend();
+    try {
+      return await op(backend);
+    } catch (error) {
+      if (backend.kind === 'memory') throw error;
+      this.degrade();
+      return op(await this.openBackend());
+    }
+  }
+
+  /** One storage change at a time, so a read-modify-write can never interleave with another. */
+  private serial<T>(fn: () => Promise<T>): Promise<T> {
+    const result = this.tail.catch(() => undefined).then(fn);
+    this.tail = result.catch(() => undefined);
+    return result;
+  }
+
+  private metaKey(): string {
+    return `${this.userId}|${this.mode}`;
+  }
+
+  private async readMeta(b: Backend): Promise<ScopeMeta> {
+    return (
+      (await b.getMeta(this.metaKey())) ?? {
+        key: this.metaKey(),
+        userId: this.userId,
+        mode: this.mode,
+        nextCursor: null,
+        hasMore: true,
+        seq: 0,
+        bootstrappedAt: null,
+        trending: {},
+      }
+    );
+  }
+
+  private online(): boolean {
+    return this.onlineFn();
+  }
+
+  /** Whether the phone currently reports a connection. */
+  isOnline(): boolean {
+    return this.onlineFn();
+  }
+
+  // ---------------------------------------------------------------- network
+
+  private fetchAndApply(kind: 'bootstrap' | 'next', cursor: string | null): Promise<number> {
+    if (this.net) return this.net; // one request at a time; callers re-check the pool afterwards
+    if (!this.online()) return Promise.reject(new FeedUnavailableError('You are offline.'));
+    const p: Promise<number> = (async () => {
+      const resp = await this.fetcher(kind, { mode: this.mode, cursor, size: this.batchSize });
+      if (resp.mode !== this.mode) throw new Error('Feed response is for a different feed');
+      return this.applyBatch(resp);
+    })().finally(() => {
+      if (this.net === p) this.net = null;
+    });
+    this.net = p;
+    return p;
+  }
+
+  /** Asks the server for the newest batch and merges it in. Resolves with the number of new posts. */
+  bootstrap(): Promise<number> {
+    return this.fetchAndApply('bootstrap', null);
+  }
+
+  /** Fetches the next older batch. Resolves with the number of new posts (0 when there is nothing older). */
+  async loadMore(): Promise<number> {
+    const meta = await this.run((b) => this.readMeta(b));
+    if (!meta.hasMore) return 0;
+    if (!meta.nextCursor) return this.bootstrap();
+    return this.fetchAndApply('next', meta.nextCursor);
+  }
+
+  /**
+   * Background pre-fetch. Does nothing when enough unseen posts are stored, when the server has nothing older,
+   * when offline, or right after a failure. Never throws. Resolves true when it fetched a batch.
+   * Pass `unseen` when the caller already knows how many are left (it avoids re-reading the cache).
+   */
+  prefetchIfLow(unseen?: number): Promise<boolean> {
+    // Claimed synchronously: simultaneous callers share one attempt instead of each passing the checks first.
+    if (this.prefetching) return this.prefetching;
+    const attempt = (async () => {
+      try {
+        if (this.net) return false;
+        const meta = await this.run((b) => this.readMeta(b));
+        if (!meta.hasMore || !meta.nextCursor) return false;
+        if (!this.online() || this.nowFn() - this.lastFailureAt < this.backoffMs) return false;
+        const left = unseen ?? (await this.getPool()).length;
+        if (left >= this.lowWater) return false;
+        await this.fetchAndApply('next', meta.nextCursor);
+        return true;
+      } catch {
+        this.lastFailureAt = this.nowFn();
+        return false;
+      }
+    })().finally(() => {
+      if (this.prefetching === attempt) this.prefetching = null;
+    });
+    this.prefetching = attempt;
+    return attempt;
+  }
+
+  /** Tries to catch up as soon as the phone gets its connection back. Returns a function that stops listening. */
+  watchConnectivity(): () => void {
+    if (typeof window === 'undefined') return () => undefined;
+    const onOnline = () => {
+      this.lastFailureAt = -Infinity;
+      void this.prefetchIfLow();
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }
+
+  // ---------------------------------------------------------------- writing
+
+  private applyBatch(resp: FeedBatchResponse): Promise<number> {
+    return this.serial(() =>
+      this.run(async (b) => {
+        const now = this.nowFn();
+        const existing = new Map((await b.readScope(this.userId, this.mode)).map((r) => [r.key, r]));
+        const fresh: CachedPostRecord[] = [];
+        let added = 0;
+        for (const post of resp.batch.posts) {
+          const key = `${this.userId}|${this.mode}|${post.id}`;
+          const prev = existing.get(key);
+          const parsed = Date.parse(post.expires_at);
+          const expiresAtMs = Number.isFinite(parsed) ? parsed : now + FALLBACK_TTL_MS;
+          if (expiresAtMs <= now) continue; // already expired: never stored
+          if (!prev) added++;
+          fresh.push({
+            key,
+            userId: this.userId,
+            mode: this.mode,
+            postId: post.id,
+            post,
+            batchId: resp.batch.id,
+            fetchedAt: now,
+            expiresAtMs,
+            // what the person already did with this post survives a refresh of its data
+            viewSeq: prev?.viewSeq ?? null,
+            viewedAt: prev?.viewedAt ?? null,
+            viewCount: prev?.viewCount ?? 0,
+            dwellMs: prev?.dwellMs ?? 0,
+          });
+        }
+        await b.putRecords(fresh);
+
+        const meta = await this.readMeta(b);
+        meta.trending = resp.trending;
+        meta.nextCursor = resp.batch.nextCursor;
+        meta.hasMore = resp.batch.hasMore;
+        if (resp.kind === 'bootstrap') meta.bootstrappedAt = now;
+        await b.putMeta(meta);
+
+        // Bound the history. Unseen posts are never evicted: they are what the feed still has to show.
+        const all = new Map(existing);
+        for (const r of fresh) all.set(r.key, r);
+        const overflow = all.size - this.maxRecords;
+        if (overflow > 0) {
+          const oldestViewed = [...all.values()]
+            .filter((r) => r.viewSeq !== null)
+            .sort((x, y) => x.viewSeq! - y.viewSeq!)
+            .slice(0, overflow);
+          await b.deleteRecords(oldestViewed.map((r) => r.key));
+        }
+        this.dataVersion++;
+        return added;
+      }),
+    );
+  }
+
+  /**
+   * Marks posts as viewed (call it with a frame's posts when that frame comes into focus). The first view fixes the
+   * post's place in the history; later calls only add to its view count. Unknown ids are ignored.
+   */
+  markViewed(ids: readonly string[]): Promise<number> {
+    return this.touch(ids.map((id) => ({ id })), true);
+  }
+
+  /** Adds measured on-screen time to posts (a post not yet marked viewed becomes viewed). Does not count as a new view. */
+  recordDwell(entries: ReadonlyArray<{ id: string; dwellMs: number }>): Promise<number> {
+    return this.touch(entries, false);
+  }
+
+  private touch(entries: ReadonlyArray<{ id: string; dwellMs?: number }>, countView: boolean): Promise<number> {
+    if (entries.length === 0) return Promise.resolve(0);
+    return this.serial(() =>
+      this.run(async (b) => {
+        const now = this.nowFn();
+        const records = new Map((await b.readScope(this.userId, this.mode)).map((r) => [r.postId, r]));
+        const meta = await this.readMeta(b);
+        const touched = new Map<string, CachedPostRecord>();
+        for (const e of entries) {
+          const rec = records.get(e.id);
+          if (!rec) continue;
+          if (!touched.has(e.id)) {
+            if (rec.viewSeq === null) {
+              rec.viewSeq = ++meta.seq;
+              rec.viewedAt = now;
+              rec.viewCount = 1;
+            } else if (countView) {
+              rec.viewCount++;
+            }
+            touched.set(e.id, rec);
+          }
+          rec.dwellMs += Math.max(0, e.dwellMs ?? 0);
+        }
+        if (touched.size === 0) return 0;
+        await b.putRecords([...touched.values()]);
+        await b.putMeta(meta);
+        return touched.size;
+      }),
+    );
+  }
+
+  // ---------------------------------------------------------------- reading
+
+  /** Posts not viewed yet and not expired, newest first. This is what local ranking starts from. */
+  async getPool(): Promise<PipelinePost[]> {
+    const now = this.nowFn();
+    const records = await this.run((b) => b.readScope(this.userId, this.mode));
+    return records
+      .filter((r) => r.viewSeq === null && r.expiresAtMs > now)
+      .sort((a, b) => b.post.meta.timestamp - a.post.meta.timestamp || (a.postId < b.postId ? 1 : -1))
+      .map((r) => r.post);
+  }
+
+  async getTrending(): Promise<Record<string, number>> {
+    return (await this.run((b) => this.readMeta(b))).trending;
+  }
+
+  async hasMore(): Promise<boolean> {
+    return (await this.run((b) => this.readMeta(b))).hasMore;
+  }
+
+  /** Viewed posts, most recently first-viewed first. Reads only from the phone. */
+  async getHistory(opts: { limit?: number; beforeSeq?: number } = {}): Promise<HistoryEntry[]> {
+    const { limit = 50, beforeSeq } = opts;
+    const now = this.nowFn();
+    const records = await this.run((b) => b.readScope(this.userId, this.mode));
+    return records
+      .filter((r) => r.viewSeq !== null && r.expiresAtMs > now && (beforeSeq === undefined || r.viewSeq < beforeSeq))
+      .sort((a, b) => b.viewSeq! - a.viewSeq!)
+      .slice(0, Math.max(0, limit))
+      .map((r) => ({ post: r.post, viewSeq: r.viewSeq!, viewedAt: r.viewedAt ?? 0 }));
+  }
+
+  /**
+   * History grouped into frames for scrolling back up, nearest first. Items inside a frame keep the order they
+   * were shown in. Continue upward with `beforeSeq` set to the last returned frame's `firstSeq`.
+   */
+  async getHistoryFrames(opts: { frameSize?: number; frames?: number; beforeSeq?: number } = {}): Promise<HistoryFrame[]> {
+    const { frameSize = 8, frames = 3, beforeSeq } = opts;
+    const size = Math.max(1, Math.floor(frameSize));
+    const entries = await this.getHistory({ limit: size * Math.max(1, frames), beforeSeq });
+    const out: HistoryFrame[] = [];
+    for (let i = 0; i < entries.length; i += size) {
+      const chunk = entries.slice(i, i + size).reverse();
+      out.push({ items: chunk.map((e) => e.post), firstSeq: chunk[0]!.viewSeq, lastSeq: chunk[chunk.length - 1]!.viewSeq });
+    }
+    return out;
+  }
+
+  /** Everything the feed can show with no connection: unseen posts first, then history. One read. */
+  async readOffline(): Promise<{ unviewed: PipelinePost[]; history: PipelinePost[]; trending: Record<string, number> }> {
+    const now = this.nowFn();
+    const [records, meta] = await this.run(async (b) => [await b.readScope(this.userId, this.mode), await this.readMeta(b)] as const);
+    const live = records.filter((r) => r.expiresAtMs > now);
+    return {
+      unviewed: live
+        .filter((r) => r.viewSeq === null)
+        .sort((a, b) => b.post.meta.timestamp - a.post.meta.timestamp)
+        .map((r) => r.post),
+      history: live
+        .filter((r) => r.viewSeq !== null)
+        .sort((a, b) => b.viewSeq! - a.viewSeq!)
+        .map((r) => r.post),
+      trending: meta.trending,
+    };
+  }
+
+  async getStats(): Promise<CacheStats> {
+    const now = this.nowFn();
+    const [records, meta] = await this.run(async (b) => [await b.readScope(this.userId, this.mode), await this.readMeta(b)] as const);
+    const live = records.filter((r) => r.expiresAtMs > now);
+    const viewed = live.filter((r) => r.viewSeq !== null).length;
+    return {
+      unviewed: live.length - viewed,
+      viewed,
+      total: live.length,
+      backend: (await this.openBackend()).kind, // after run(), so a fallback to memory shows up here
+      hasMore: meta.hasMore,
+      bootstrappedAt: meta.bootstrappedAt,
+    };
+  }
+
+  // ---------------------------------------------------------------- lifecycle
+
+  /**
+   * Gets the feed ready. A warm cache is used straight away (and refreshed in the background if it is old);
+   * a cold one asks the server. With no connection it falls back to whatever is stored, and only throws when
+   * there is nothing at all.
+   */
+  async start(): Promise<StartResult> {
+    await this.purgeExpired();
+    const meta = await this.run((b) => this.readMeta(b));
+    const age = meta.bootstrappedAt === null ? Infinity : this.nowFn() - meta.bootstrappedAt;
+    const pool = await this.getPool();
+    if (pool.length > 0) {
+      const stale = age > this.freshMs;
+      if (stale) void this.bootstrap().catch(() => void (this.lastFailureAt = this.nowFn()));
+      return { source: 'cache', stale };
+    }
+    try {
+      await this.bootstrap();
+      return { source: 'network', stale: false };
+    } catch (error) {
+      if (error instanceof FeedHttpError && (error.status === 401 || error.status === 403)) throw error;
+      if ((await this.getStats()).total > 0) return { source: 'cache', stale: true }; // history only: still something to show
+      if (error instanceof FeedHttpError) throw error;
+      throw new FeedUnavailableError(
+        error instanceof FeedUnavailableError
+          ? undefined
+          : 'Could not reach the server and no posts are saved on this phone yet.',
+      );
+    }
+  }
+
+  /** Deletes every stored post and cursor of expired posts (all feed modes for this person). */
+  purgeExpired(): Promise<number> {
+    return this.serial(() =>
+      this.run(async (b) => {
+        const now = this.nowFn();
+        const gone = (await b.readUser(this.userId)).filter((r) => r.expiresAtMs <= now).map((r) => r.key);
+        if (gone.length > 0) await b.deleteRecords(gone);
+        return gone.length;
+      }),
+    );
+  }
+
+  /** Forgets everything stored for this person, in every feed mode. Call it on sign-out. */
+  clear(): Promise<void> {
+    return this.serial(() =>
+      this.run(async (b) => {
+        await b.deleteUser(this.userId);
+        this.dataVersion++;
+      }),
+    );
+  }
+
+  /** Closes the database connection. The manager can still be used; it reopens on demand. */
+  async destroy(): Promise<void> {
+    const pending = this.backendPromise;
+    this.backendPromise = null;
+    if (pending) (await pending).close();
+  }
+}
+```
+
+#### `src/feed-pipeline/LocalPersonalization.ts`
+
+```ts
+/**
+ * Re-ranks the posts cached on the phone using only what this person did on this phone (tags clicked, how long
+ * posts were looked at, likes, "show less") plus the trending weights the server sent with the batch.
+ * Nothing here talks to the server, so it can run on every frame and works offline.
+ *
+ *   score = 0.40 preference + 0.25 trending + 0.20 recency + 0.15 engagement   (minus a penalty for posts already seen)
+ *
+ * Preferences are per tag, decay with a 14 day half-life and are kept in localStorage, one entry per signed-in
+ * person, so two accounts on one phone never share them.
+ */
+import type { PipelinePost } from '../../shared/feed-pipeline.ts';
+
+export type InteractionKind = 'like' | 'comment' | 'more_like_this' | 'show_less' | 'not_interested';
+
+export interface PersonalizationConfig {
+  weights: { preference: number; trending: number; recency: number; engagement: number };
+  /** How long it takes a stored preference to lose half its strength. */
+  halfLifeMs: number;
+  /** A post fades to zero recency after this long. */
+  recencyWindowMs: number;
+  /** A view shorter than this teaches nothing. */
+  viewThresholdMs: number;
+  /** Subtracted from the score of a post the viewer has already seen. */
+  seenPenalty: number;
+  /** Subtracted per same-author post among the last three picks. */
+  authorRepeatPenalty: number;
+  maxTags: number;
+  weightMin: number;
+  weightMax: number;
+  deltas: Record<InteractionKind, number> & { tagClick: number; viewMin: number; viewMax: number };
+}
+
+export const DEFAULT_PERSONALIZATION: PersonalizationConfig = {
+  weights: { preference: 0.4, trending: 0.25, recency: 0.2, engagement: 0.15 },
+  halfLifeMs: 14 * 86_400_000,
+  recencyWindowMs: 7 * 86_400_000,
+  viewThresholdMs: 3000,
+  seenPenalty: 0.5,
+  authorRepeatPenalty: 0.15,
+  maxTags: 200,
+  weightMin: -10,
+  weightMax: 25,
+  // the same steps the server's For You feed uses for its own signals
+  deltas: { like: 1, comment: 3, more_like_this: 3, show_less: -3, not_interested: -4, tagClick: 1.5, viewMin: 0.1, viewMax: 0.6 },
+};
+
+export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+export interface RankContext {
+  /** Hot topic slug -> 0..1 (the batch envelope's `trending`). */
+  trending?: Readonly<Record<string, number>>;
+  /** Post ids the viewer has already seen. */
+  seen?: ReadonlySet<string>;
+  now?: number;
+}
+
+export interface ScoreBreakdown {
+  preference: number;
+  trending: number;
+  recency: number;
+  engagement: number;
+  seen: boolean;
+  total: number;
+}
+
+export interface LocalPersonalizationOptions {
+  userId: string;
+  /** Defaults to localStorage when it exists and works, otherwise memory only. */
+  storage?: StorageLike | null;
+  now?: () => number;
+  config?: Partial<PersonalizationConfig>;
+}
+
+interface StoredPrefs {
+  v: 1;
+  /** tag -> [weight at time t, t] */
+  tags: Record<string, [number, number]>;
+}
+
+const MAX_TAG_LENGTH = 40;
+
+export function normalizeTag(tag: string): string | null {
+  const t = tag.trim().replace(/^#+/, '').toLowerCase();
+  return t.length > 0 && t.length <= MAX_TAG_LENGTH ? t : null;
+}
+
+function defaultStorage(): StorageLike | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null; // some browsers throw just for touching localStorage
+  }
+}
+
+export class LocalPersonalization {
+  private readonly key: string;
+  private readonly storage: StorageLike | null;
+  private readonly nowFn: () => number;
+  private readonly cfg: PersonalizationConfig;
+  private tags = new Map<string, { w: number; t: number }>();
+
+  constructor(options: LocalPersonalizationOptions) {
+    this.key = `pgc:feed-prefs:v1:${options.userId}`;
+    this.storage = options.storage === undefined ? defaultStorage() : options.storage;
+    this.nowFn = options.now ?? (() => Date.now());
+    this.cfg = {
+      ...DEFAULT_PERSONALIZATION,
+      ...options.config,
+      weights: { ...DEFAULT_PERSONALIZATION.weights, ...options.config?.weights },
+      deltas: { ...DEFAULT_PERSONALIZATION.deltas, ...options.config?.deltas },
+    };
+    this.load();
+  }
+
+  // ---------------------------------------------------------------- storage
+
+  private load(): void {
+    try {
+      const raw = this.storage?.getItem(this.key);
+      if (!raw) return;
+      const data = JSON.parse(raw) as Partial<StoredPrefs>;
+      if (data.v !== 1 || !data.tags || typeof data.tags !== 'object') return;
+      for (const [tag, entry] of Object.entries(data.tags)) {
+        const [w, t] = entry as [unknown, unknown];
+        if (typeof w === 'number' && typeof t === 'number' && Number.isFinite(w) && Number.isFinite(t)) {
+          this.tags.set(tag, { w, t });
+        }
+      }
+    } catch {
+      this.tags.clear(); // corrupt entry: start clean rather than break the feed
+    }
+  }
+
+  private save(): void {
+    try {
+      const tags: StoredPrefs['tags'] = {};
+      for (const [tag, e] of this.tags) tags[tag] = [Math.round(e.w * 1000) / 1000, e.t];
+      this.storage?.setItem(this.key, JSON.stringify({ v: 1, tags } satisfies StoredPrefs));
+    } catch {
+      /* quota or private mode: keep working from memory */
+    }
+  }
+
+  // ---------------------------------------------------------------- learning
+
+  private decayed(e: { w: number; t: number }, now: number): number {
+    return e.w * Math.pow(0.5, Math.max(0, now - e.t) / this.cfg.halfLifeMs);
+  }
+
+  private bump(rawTags: readonly string[], delta: number): void {
+    const now = this.nowFn();
+    for (const raw of rawTags) {
+      const tag = normalizeTag(raw);
+      if (!tag) continue;
+      const current = this.tags.get(tag);
+      const base = current ? this.decayed(current, now) : 0;
+      const w = Math.min(this.cfg.weightMax, Math.max(this.cfg.weightMin, base + delta));
+      this.tags.set(tag, { w, t: now });
+    }
+    if (this.tags.size > this.cfg.maxTags) {
+      const strongest = [...this.tags.entries()]
+        .sort((a, b) => Math.abs(this.decayed(b[1], now)) - Math.abs(this.decayed(a[1], now)))
+        .slice(0, this.cfg.maxTags);
+      this.tags = new Map(strongest);
+    }
+    this.save();
+  }
+
+  /** The person tapped a tag or hashtag. */
+  recordTagClick(tag: string): void {
+    this.bump([tag], this.cfg.deltas.tagClick);
+  }
+
+  /** The person looked at a post for `dwellMs`. Fly-bys under the threshold teach nothing. */
+  recordView(post: Pick<PipelinePost, 'meta'>, dwellMs: number): void {
+    const { viewThresholdMs: min, deltas } = this.cfg;
+    if (!(dwellMs >= min)) return;
+    const t = Math.min(1, (dwellMs - min) / 12_000); // full strength at 15 s
+    this.bump(post.meta.tags, deltas.viewMin + (deltas.viewMax - deltas.viewMin) * t);
+  }
+
+  /** Mirrors the server's own feedback steps: like +1, comment +3, more like this +3, show less -3, not interested -4. */
+  recordInteraction(post: Pick<PipelinePost, 'meta'>, kind: InteractionKind): void {
+    this.bump(post.meta.tags, this.cfg.deltas[kind]);
+  }
+
+  /** What has been learned so far, strongest first, decayed to now. */
+  getTagWeights(): Record<string, number> {
+    const now = this.nowFn();
+    return Object.fromEntries(
+      [...this.tags.entries()]
+        .map(([tag, e]) => [tag, Math.round(this.decayed(e, now) * 1000) / 1000] as const)
+        .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])),
+    );
+  }
+
+  reset(): void {
+    this.tags.clear();
+    try {
+      this.storage?.removeItem(this.key);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // ---------------------------------------------------------------- scoring
+
+  scorePost(post: PipelinePost, ctx: RankContext = {}): ScoreBreakdown {
+    const now = ctx.now ?? this.nowFn();
+    const { weights: w } = this.cfg;
+
+    const tagWeights = post.meta.tags
+      .map((raw) => normalizeTag(raw))
+      .filter((t): t is string => t !== null)
+      .map((t) => {
+        const e = this.tags.get(t);
+        return e ? this.decayed(e, now) : 0;
+      });
+    const top = tagWeights.filter((x) => x > 0).sort((a, b) => b - a).slice(0, 3).reduce((s, x) => s + x, 0);
+    const worst = Math.min(0, ...tagWeights); // one disliked tag is enough to push a post down
+    const preference = Math.tanh((top + worst) / 6);
+
+    let hot = 0;
+    for (const raw of post.meta.tags) hot = Math.max(hot, ctx.trending?.[raw] ?? 0);
+    const trending = Math.min(1, Math.max(post.meta.trendingScore, hot));
+
+    const recency = Math.min(1, Math.max(0, 1 - (now - post.meta.timestamp) / this.cfg.recencyWindowMs));
+    const engagement = Math.min(1, Math.log1p(Math.max(0, post.meta.likesCount)) / Math.log1p(30));
+    const seen = ctx.seen?.has(post.id) ?? false;
+
+    const total =
+      w.preference * preference + w.trending * trending + w.recency * recency + w.engagement * engagement - (seen ? this.cfg.seenPenalty : 0);
+    return { preference, trending, recency, engagement, seen, total };
+  }
+
+  /**
+   * Best first. Deterministic: ties fall back to newer first, then id. After scoring, a light pass keeps one author
+   * from filling several slots in a row.
+   */
+  rankWithScores(posts: readonly PipelinePost[], ctx: RankContext = {}): Array<{ post: PipelinePost; score: ScoreBreakdown }> {
+    const now = ctx.now ?? this.nowFn();
+    const scored = posts
+      .map((post) => ({ post, score: this.scorePost(post, { ...ctx, now }) }))
+      .sort(
+        (a, b) =>
+          b.score.total - a.score.total ||
+          b.post.meta.timestamp - a.post.meta.timestamp ||
+          (a.post.id < b.post.id ? -1 : a.post.id > b.post.id ? 1 : 0),
+      );
+
+    const out: typeof scored = [];
+    const rest = scored.slice();
+    const LOOKAHEAD = 60;
+    while (rest.length > 0) {
+      const recentAuthors = out.slice(-3).map((e) => e.post.author_id);
+      let bestIndex = 0;
+      let best = -Infinity;
+      for (let i = 0; i < Math.min(rest.length, LOOKAHEAD); i++) {
+        const c = rest[i]!;
+        const repeats = recentAuthors.filter((a) => a === c.post.author_id).length;
+        const adjusted = c.score.total - repeats * this.cfg.authorRepeatPenalty;
+        if (adjusted > best) {
+          best = adjusted;
+          bestIndex = i;
+        }
+      }
+      out.push(rest.splice(bestIndex, 1)[0]!);
+    }
+    return out;
+  }
+
+  rank(posts: readonly PipelinePost[], ctx: RankContext = {}): PipelinePost[] {
+    return this.rankWithScores(posts, ctx).map((e) => e.post);
+  }
+}
+```
+
+#### `src/feed-pipeline/pipelineSource.ts`
+
+```ts
+/**
+ * Glue between the local cache, local ranking and the frame engine. Nothing in src/feed-engine changes.
+ *
+ *   createPipelineFeedSource   a FeedSource the FeedFrameManager can use instead of createApiFeedSource
+ *   attachHistoryTracking      marks a frame's posts viewed when it comes into focus (builds the history)
+ *   createLocalImpressionSender  feeds on-screen time into local preferences and the history, then reports upstream
+ */
+import type { PipelinePost } from '../../shared/feed-pipeline.ts';
+import type { FeedFrameManager, FeedSource, ModerationState } from '../feed-engine/index.ts';
+import type { PipelineMode } from '../../shared/feed-pipeline.ts';
+import { sendImpressions, type ImpressionReport } from '../lib/impressions.ts';
+import { FeedCacheManager, type FeedCacheOptions } from './FeedCacheManager.ts';
+import { LocalPersonalization, type LocalPersonalizationOptions } from './LocalPersonalization.ts';
+
+/** SAFE or WILD, straight from the server's tag. */
+export function classifyPipelinePost(post: PipelinePost): ModerationState {
+  return post.meta.isWild ? 'WILD' : 'SAFE';
+}
+
+export interface PipelineSourceOptions {
+  cache: FeedCacheManager;
+  personalization: LocalPersonalization;
+  /** Server fetches allowed per load() while hunting for enough posts of one state. Default 3. */
+  maxPagesPerLoad?: number;
+}
+
+export interface PipelineFeedSource extends FeedSource<PipelinePost> {
+  /** A post this source has already handed to the engine (to attribute impressions and interactions). */
+  getPost(id: string): PipelinePost | undefined;
+}
+
+type Pools = Record<ModerationState, PipelinePost[]>;
+const emptyPools = (): Pools => ({ SAFE: [], WILD: [] });
+
+export function createPipelineFeedSource(options: PipelineSourceOptions): PipelineFeedSource {
+  const { cache, personalization, maxPagesPerLoad = 3 } = options;
+  const served = new Map<string, PipelinePost>();
+  let pools = emptyPools();
+  let builtVersion = -1;
+  let started: Promise<void> | null = null;
+  let history: Pools | null = null;
+
+  const start = (): Promise<void> => {
+    started ??= cache.start().then(
+      () => undefined,
+      (error: unknown) => {
+        started = null; // let a retry start again
+        throw error;
+      },
+    );
+    return started;
+  };
+
+  /** Re-rank everything not yet shown, then split it into the two pools. Runs again when a new batch arrives. */
+  async function rebuild(): Promise<void> {
+    const [pool, trending] = await Promise.all([cache.getPool(), cache.getTrending()]);
+    const ranked = personalization.rank(
+      pool.filter((p) => !served.has(p.id)),
+      { trending },
+    );
+    pools = emptyPools();
+    for (const post of ranked) pools[classifyPipelinePost(post)].push(post);
+    builtVersion = cache.version;
+  }
+
+  /** Previously viewed posts, newest view first. Only used when the network is unavailable. */
+  async function loadHistory(): Promise<Pools> {
+    if (!history) {
+      history = emptyPools();
+      for (const post of (await cache.readOffline()).history) {
+        if (!served.has(post.id)) history[classifyPipelinePost(post)].push(post);
+      }
+    }
+    return history;
+  }
+
+  return {
+    getPost: (id) => served.get(id),
+
+    async load(kind, limit) {
+      await start();
+      let failure: unknown = null;
+      for (let page = 0; ; page++) {
+        if (builtVersion !== cache.version) await rebuild();
+        if (pools[kind].length >= limit || page >= maxPagesPerLoad || !(await cache.hasMore())) break;
+        try {
+          await cache.loadMore();
+        } catch (error) {
+          failure = error; // offline or server trouble: use what is stored
+          break;
+        }
+      }
+
+      let items = pools[kind].splice(0, limit);
+      const unreachable = failure !== null || !cache.isOnline();
+      if (items.length === 0 && unreachable) {
+        items = (await loadHistory())[kind].splice(0, limit); // nothing unseen left: show what was seen before
+        if (items.length === 0 && failure !== null) throw failure; // nothing stored at all: let the page show "Try again"
+      }
+      for (const post of items) served.set(post.id, post);
+
+      void cache.prefetchIfLow(pools.SAFE.length + pools.WILD.length);
+      const more = unreachable ? true : await cache.hasMore();
+      return { items, done: !more && pools[kind].length === 0 };
+    },
+  };
+}
+
+/**
+ * Builds the history as the person scrolls: every frame that takes focus has its posts marked viewed in
+ * IndexedDB. Returns the unsubscribe function.
+ */
+export function attachHistoryTracking<T extends { id: string }>(
+  manager: Pick<FeedFrameManager<T>, 'on'>,
+  cache: Pick<FeedCacheManager, 'markViewed'>,
+): () => void {
+  return manager.on('frameFocus', ({ frame }) => {
+    if (frame.kind === 'MID' || frame.items.length === 0) return;
+    void cache.markViewed(frame.items.map((p) => p.id)).catch(() => undefined);
+  });
+}
+
+export interface LocalImpressionSenderOptions {
+  personalization: Pick<LocalPersonalization, 'recordView'>;
+  cache: Pick<FeedCacheManager, 'recordDwell'>;
+  getPost: (id: string) => PipelinePost | undefined;
+  /** Where the reports go afterwards. Defaults to the existing POST /api/impressions. */
+  upstream?: (batch: ImpressionReport[]) => void | Promise<void>;
+}
+
+/**
+ * Drop-in `send` for `new ImpressionTracker(send)`. Local learning happens first and never waits on the network,
+ * so it keeps working offline; the upstream report is best effort.
+ */
+export function createLocalImpressionSender(options: LocalImpressionSenderOptions) {
+  const { personalization, cache, getPost, upstream = sendImpressions } = options;
+  return async (batch: ImpressionReport[]): Promise<void> => {
+    for (const report of batch) {
+      const post = getPost(report.post_id);
+      if (post) personalization.recordView(post, report.duration_ms);
+    }
+    void cache.recordDwell(batch.map((r) => ({ id: r.post_id, dwellMs: r.duration_ms }))).catch(() => undefined);
+    await Promise.resolve(upstream(batch)).catch(() => undefined);
+  };
+}
+
+export interface FeedPipelineOptions {
+  userId: string;
+  mode: PipelineMode;
+  cache?: Partial<Omit<FeedCacheOptions, 'userId' | 'mode'>>;
+  personalization?: Partial<Omit<LocalPersonalizationOptions, 'userId'>>;
+}
+
+export interface FeedPipeline {
+  cache: FeedCacheManager;
+  personalization: LocalPersonalization;
+  source: PipelineFeedSource;
+  /** Track history on a FeedFrameManager built with `source`. Returns the unsubscribe function. */
+  attach<T extends { id: string }>(manager: Pick<FeedFrameManager<T>, 'on'>): () => void;
+  /** `send` for an ImpressionTracker. */
+  impressionSender(upstream?: LocalImpressionSenderOptions['upstream']): (batch: ImpressionReport[]) => Promise<void>;
+  /** Closes the database connection. Does not delete anything. */
+  dispose(): Promise<void>;
+}
+
+/** Everything one signed-in person needs for one feed mode, wired together. */
+export function createFeedPipeline(options: FeedPipelineOptions): FeedPipeline {
+  const cache = new FeedCacheManager({ userId: options.userId, mode: options.mode, ...options.cache });
+  const personalization = new LocalPersonalization({ userId: options.userId, ...options.personalization });
+  const source = createPipelineFeedSource({ cache, personalization });
+  return {
+    cache,
+    personalization,
+    source,
+    attach: (manager) => attachHistoryTracking(manager, cache),
+    impressionSender: (upstream) => createLocalImpressionSender({ personalization, cache, getPost: source.getPost, upstream }),
+    dispose: () => cache.destroy(),
+  };
+}
+
+/**
+ * Sign-out: forgets this person's cached posts, history and learned preferences on this phone (both feed modes).
+ * Best effort; never throws.
+ */
+export async function forgetFeedDataFor(userId: string): Promise<void> {
+  try {
+    const cache = new FeedCacheManager({ userId, mode: 'for_you' });
+    await cache.clear();
+    await cache.destroy();
+  } catch {
+    /* nothing stored, or storage unavailable */
+  }
+  new LocalPersonalization({ userId }).reset();
+}
+```
+
+---
 
 ## Academic details and moving up
 
