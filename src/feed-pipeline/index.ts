@@ -1,0 +1,35 @@
+export {
+  FEED_DB_NAME,
+  FeedCacheManager,
+  FeedHttpError,
+  FeedUnavailableError,
+  httpBatchFetcher,
+  type BatchFetcher,
+  type BatchFetchParams,
+  type CacheStats,
+  type CachedPostRecord,
+  type FeedCacheOptions,
+  type HistoryEntry,
+  type HistoryFrame,
+  type StartResult,
+} from './FeedCacheManager.ts';
+export {
+  DEFAULT_PERSONALIZATION,
+  LocalPersonalization,
+  normalizeTag,
+  type InteractionKind,
+  type LocalPersonalizationOptions,
+  type PersonalizationConfig,
+  type RankContext,
+  type ScoreBreakdown,
+  type StorageLike,
+} from './LocalPersonalization.ts';
+export {
+  attachHistoryTracking,
+  classifyPipelinePost,
+  createLocalImpressionSender,
+  createPipelineFeedSource,
+  type LocalImpressionSenderOptions,
+  type PipelineFeedSource,
+  type PipelineSourceOptions,
+} from './pipelineSource.ts';
