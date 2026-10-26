@@ -24,6 +24,7 @@ import { handleOnboardingRoutes, getValidSignupTicket, purgeExpiredSignupTickets
 import { buildMeResponse } from './me.ts';
 import { handleAppealRoutes, issueAppealTicket } from './appeals.ts';
 import { handleAcademicRoutes } from './academic.ts';
+import { handleFeedPipelineRoutes } from './feed-pipeline/controller.ts';
 import { effectiveRole, handleAdminRoute, legacyAdminGate } from './admin.ts';
 import { DEFAULT_PRESET_IDS } from '../shared/presets.ts';
 import {
@@ -434,6 +435,10 @@ export default {
     // Own academic details: update, confirm, graduate
     const academicResponse = await handleAcademicRoutes(request, env, pathname);
     if (academicResponse) return academicResponse;
+
+    // Feed pipeline: packaged SAFE/WILD batches for the phone's local cache (/api/v1/feed/bootstrap and /next)
+    const pipelineResponse = await handleFeedPipelineRoutes(request, env, pathname, { hydratePosts, getBlockedUserIds });
+    if (pipelineResponse) return pipelineResponse;
 
     // Appeals from suspended or banned students (ticket cookie, no session)
     const appealResponse = await handleAppealRoutes(request, env, pathname);
