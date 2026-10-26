@@ -9,9 +9,9 @@ export interface ImpressionTrackerOptions {
   visibleRatio?: number;
   /** Shorter views are fly-bys and are not reported. Default 1000 ms. */
   minViewMs?: number;
-  /** How often queued reports are sent. Default 5000 ms. */
+  /** How often queued reports are sent. Default 15000 ms: every request counts against a daily Worker allowance. */
   flushIntervalMs?: number;
-  /** Send immediately once this many reports are queued. Default 10. */
+  /** Send immediately once this many reports are queued. Default 20 (the server keeps at most 20 per request). */
   maxBatch?: number;
   now?: () => number;
 }
@@ -39,7 +39,7 @@ export class ImpressionTracker {
   constructor(send: Send, options: ImpressionTrackerOptions = {}) {
     this.send = send;
     this.minViewMs = options.minViewMs ?? 1000;
-    this.maxBatch = options.maxBatch ?? 10;
+    this.maxBatch = options.maxBatch ?? 20;
     this.now = options.now ?? (() => Date.now());
     this.observer =
       typeof IntersectionObserver === 'undefined'
@@ -48,7 +48,7 @@ export class ImpressionTracker {
             threshold: options.visibleRatio ?? 0.5,
           });
     if (this.observer) {
-      this.timer = setInterval(() => this.flush(), options.flushIntervalMs ?? 5000);
+      this.timer = setInterval(() => this.flush(), options.flushIntervalMs ?? 15_000);
       document.addEventListener('visibilitychange', this.onHidden);
     }
   }

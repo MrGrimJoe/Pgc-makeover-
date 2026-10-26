@@ -62,6 +62,7 @@ import { extractTopicsFromText } from './content/topics.ts';
 import { rankPosts, type CandidatePost, type UserRankingContext } from './ranking/engine.ts';
 import { computeDecayedWeight } from './ranking/decay.ts';
 import { RANKING_CONFIG } from './ranking/config.ts';
+import { recordImpressions } from './impressions.ts';
 import { decodeDeliveredCursor, encodeDeliveredCursor, hashPostId } from './ranking/cursor.ts';
 
 function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
@@ -377,14 +378,19 @@ export async function computeTrends(db: D1Database, nowMs = Date.now()): Promise
     const results = rows.results || [];
     await db.prepare('DELETE FROM trend_snapshots WHERE window = ?').bind(window).run();
 
-    for (const r of results) {
-      const snapId = `snap_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-      const score = Number(r.author_count) * 2.0 + Number(r.post_count);
+    // Several rows per statement: one query per trending topic could pass the free plan's 50 queries per run.
+    const TREND_ROWS_PER_INSERT = 15; // 5 bound values each, under D1's limit of 100 per query
+    for (let i = 0; i < results.length; i += TREND_ROWS_PER_INSERT) {
+      const chunk = results.slice(i, i + TREND_ROWS_PER_INSERT);
+      const values = chunk.map(() => '(?, ?, ?, ?, ?)').join(', ');
+      const binds: unknown[] = [];
+      for (const r of chunk) {
+        const snapId = `snap_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+        binds.push(snapId, r.topic_id, window, cutoffIso, Number(r.author_count) * 2.0 + Number(r.post_count));
+      }
       await db
-        .prepare(
-          'INSERT INTO trend_snapshots (id, topic_id, window, window_start, score) VALUES (?, ?, ?, ?, ?)'
-        )
-        .bind(snapId, r.topic_id, window, cutoffIso, score)
+        .prepare(`INSERT INTO trend_snapshots (id, topic_id, window, window_start, score) VALUES ${values}`)
+        .bind(...binds)
         .run();
     }
   }
@@ -393,8 +399,18 @@ export async function computeTrends(db: D1Database, nowMs = Date.now()): Promise
 export default {
   // Cloudflare Scheduled Cron Trigger handler for daily post expiry and hourly trends job
   async scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    await runPostLifecycleExpiry(env);
-    await computeTrends(env.DB);
+    // Each job on its own: if expiry stops early (the free plan allows 50 D1 queries per run), trends still run,
+    // and the next hourly run picks the rest of the expiry work up.
+    try {
+      await runPostLifecycleExpiry(env);
+    } catch (err) {
+      console.error('[cron] expiry failed', err instanceof Error ? err.message : err);
+    }
+    try {
+      await computeTrends(env.DB);
+    } catch (err) {
+      console.error('[cron] trends failed', err instanceof Error ? err.message : err);
+    }
   },
 
   async fetch(request: Request, env: Env, _ctx?: ExecutionContext): Promise<Response> {
@@ -1457,42 +1473,16 @@ export default {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
 
-      let body: { impressions?: Array<{ post_id: string; position?: number; duration_ms?: number }> };
+      let body: { impressions?: unknown };
       try {
         body = await request.json();
       } catch {
         return jsonResponse({ error: 'Invalid JSON body' }, 400);
       }
 
-      const impressions = body.impressions || [];
-      const now = new Date().toISOString();
-
-      const oneHourAgoIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-
-      for (const item of impressions) {
-        if (!item.post_id) continue;
-        const existing = await env.DB.prepare(
-          'SELECT id FROM impressions WHERE viewer_id = ? AND post_id = ? AND shown_at >= ? LIMIT 1'
-        )
-          .bind(auth.user.id, item.post_id, oneHourAgoIso)
-          .first();
-
-        if (!existing) {
-          const impId = `imp_${generateRandomString(16).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-          await env.DB.prepare(
-            'INSERT INTO impressions (id, viewer_id, post_id, shown_at, position) VALUES (?, ?, ?, ?, ?)'
-          )
-            .bind(impId, auth.user.id, item.post_id, now, item.position || 0)
-            .run();
-        }
-
-        // View over 3 seconds (+0.1 signal)
-        if (item.duration_ms && item.duration_ms >= 3000) {
-          await updateUserTopicSignalsForPost(env.DB, auth.user.id, item.post_id, 0.1);
-        }
-      }
-
-      return jsonResponse({ success: true, recorded: impressions.length });
+      // A fixed handful of D1 queries however many posts are in the batch (see worker/impressions.ts)
+      const result = await recordImpressions(env.DB, auth.user.id, body?.impressions);
+      return jsonResponse({ success: true, recorded: result.received });
     }
 
     // GET /api/search - Search posts by query or topic with rate limiting
@@ -2032,7 +2022,7 @@ export default {
                  c.name AS author_class_name,
                  (SELECT COUNT(DISTINCT user_id) FROM post_reactions WHERE post_id = p.id${engagersExclude}) +
                  (SELECT COUNT(DISTINCT author_id) FROM comments WHERE post_id = p.id${commentsExclude}) AS distinct_engagers,
-                 (SELECT COUNT(*) FROM impressions WHERE post_id = p.id) AS impressions_count
+                 p.impressions_count AS impressions_count
           FROM posts p
           JOIN profiles pr ON pr.user_id = p.author_id
           LEFT JOIN classes c ON c.id = pr.class_id

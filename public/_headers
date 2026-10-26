@@ -2,6 +2,12 @@
 /stickers/*
   Cache-Control: public, max-age=31536000, immutable
   X-Content-Type-Options: nosniff
+# Vite names these files by content, so they can never change under the same name: no re-checking on every visit.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+# The on-device card reader (about 22 MB): downloaded once per phone, then kept for a month.
+/ocr/*
+  Cache-Control: public, max-age=2592000
 /sw.js
   Cache-Control: no-cache
 /*
