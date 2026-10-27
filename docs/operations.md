@@ -232,7 +232,7 @@ A media row is deleted only when **nothing references it** (`post_media`, `messa
 Fixed in this version: the orphan cleanup used to ignore `message_media`, so a message photo older than 24 hours was deleted from storage while the message still existed. `tests/media-retention.test.ts` covers every reference type.
 
 ### Sticker library
-`GET/POST /api/stickers/library`, `DELETE /api/stickers/library/:mediaId`. Up to 200 items per person; only your own stickers and GIFs can be added.
+`GET/POST /api/stickers/library`, `DELETE /api/stickers/library/:mediaId`. Up to 200 items per person; only your own stickers and GIFs can be added through this route. Favorites (`/api/stickers/favorites`, migration 017) copy other people's uploads into the person's own library on the server; each copy counts against the 200 MB media quota.
 
 ### Client compression (`src/lib/media.ts`)
 Photos are scaled to at most 1600 px on the long edge and re-encoded as WebP at about 0.8 (JPEG where WebP encoding is unsupported), with a 320 px thumbnail. Stickers are 512x512 WebP, contain-fit with transparent padding. GIFs and clips are uploaded as they are within the cap; over the cap they are refused with a "trim it" message (conversion to a looping WebM is offered only where WebCodecs `ImageDecoder` and `VideoEncoder` exist, never required). Cloudflare Image Transformations are deliberately not used: the free plan allows 5,000 unique transformations a month and each extra size counts separately. They remain a possible future option.

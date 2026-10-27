@@ -379,7 +379,7 @@ After deploying, check on the real site: Chrome DevTools, Application, Manifest 
 - A renamed file keeps its number only if its content is unchanged. **Replacing a file's content under the same file name keeps its number**, so you can improve a sticker later without breaking old messages.
 - Never edit `numbering.json` by hand and never delete it: it is the memory that keeps numbers from being reused.
 
-**Where they work:** chats, posts (one sticker/GIF instead of photos; text is still required) and comments (text and/or one sticker/GIF). The picker has Stickers and GIFs tabs with **Recent** (remembered on the device only), **Mine** (your uploads; "Manage" removes them, "Add from phone" turns a picture or a clip into one) and a chip per bundled pack. There is no third-party GIF search in this version; `src/lib/gif-providers.ts` only documents where one could be added.
+**Where they work:** chats, posts (one sticker/GIF instead of photos; text is still required) and comments (text and/or one sticker/GIF). The picker has Stickers and GIFs tabs with **Recent** (remembered on the device only), **Mine** (your uploads; "Manage" removes them, "Add from phone" turns a picture or a clip into one) and a chip per bundled pack, and **Favorites** (see below). There is no third-party GIF search in this version; `src/lib/gif-providers.ts` only documents where one could be added.
 
 ---
 
@@ -465,6 +465,12 @@ Built on top of `2971c1d`. Each change is its own commit.
 
 ---
 
+### Favorites, adding text, and meme templates
+
+- **Favorites.** Tap any sticker or GIF in a chat, post or comment: a sheet offers **Add to favorites** (tap again to remove) and **Add text** (still pictures only). A bundled sticker is stored as its key only (table `sticker_favorites`, nothing in R2). A sticker or GIF someone else uploaded is **copied on the server** into your own library (`sticker_library.source = 'favorite'`, your storage quota, per-person dedupe, 60 per hour), so it keeps working after the original expires. You can only favorite what you can already see (same rule as reading the file; outsiders get the same 404 as for a file that does not exist). Favorites appear on the picker's **Favorites** chip; removing one from there removes the key, or deletes your copy. Limit: 200 favorites plus the 200-item library. Needs migration `017_sticker_favorites.sql`.
+- **Add text (memes).** Any still picture can get text: **Edit** in the chat viewer and in the new full-screen viewer for post photos, **Add text** in the preview before sending, and an **Add text** button on photos in the New post page. Up to 8 text boxes (drag on the picture, or use the Size / Across / Up and down sliders), colours, outline, ALL CAPS, Meme or Plain letters. The text is drawn again at full size when you press Done and goes through the normal photo compression (1600 px, WebP/JPEG). Afterwards: Download, Share, Save as sticker, Edit again, and in a chat **Send in this chat**. Animated GIFs and clips cannot be edited (they would lose their movement). Code: `src/lib/image-edit.ts` (pure layout and drawing), `ImageEditor`, `EditFlow`, `EditedResult`, `PhotoViewer`, `StickerSheet`.
+- **Meme templates.** Put the template pictures in a pack folder under `public/stickers/<pack>/` and set `"template": true` in its `pack.json` (see the existing packs). In the picker, tapping a template opens the editor (and the finished picture goes to the preview in a chat, or into the post as a photo) instead of sending the template itself. Use pictures at least 500 px wide so the text stays sharp; the 128 px sticker packs are too small for good memes. Run `npm run build:stickers` (also part of `npm run build`) after adding them.
+
 ## API Routes Reference
 
 | Method | Endpoint | Auth Required | Description |
@@ -498,6 +504,8 @@ Built on top of `2971c1d`. Each change is its own commit.
 | `GET` | `/api/media/:id/thumb` | **Yes** | Thumbnail, same read rules |
 | `GET` `POST` | `/api/stickers/library` | **Yes** | List or add to your sticker/GIF library (max 200) |
 | `DELETE` | `/api/stickers/library/:mediaId` | **Yes** | Remove from your library |
+| `GET` `POST` | `/api/stickers/favorites` | **Yes** | List your starred bundled stickers; add one (`{sticker_key}`: `app:` key, or `usr:` key copied into your library) |
+| `DELETE` | `/api/stickers/favorites/:key` | **Yes** | Un-star a bundled sticker (URL-encode the key); copies leave through the library route |
 | `POST` | `/api/messages/:id/forward` | **Yes** | Forward a message you can read to another conversation (references the same media) |
 | `GET` | `/api/media/:id` | **Yes** | Serves image bytes from R2 with `X-Content-Type-Options: nosniff` (owner, attached to a visible post or message, or a profile picture of someone not blocked with you) |
 | `POST` | `/api/reports` | **Yes** | Reports post, comment, or user (verifies target, single open report, rate-limited) |

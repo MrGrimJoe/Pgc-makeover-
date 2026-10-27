@@ -296,6 +296,17 @@ r = await call('GET', '/api/me', { cookie: ayesha }); ok('free-text campus repla
   for (const bad of [null, 5, ['x'], {}]) { r = await call('POST', `/api/messages/${msgId}/forward`, { cookie: RCV, json: { conversation_id: bad } }); ok(`forward conversation_id ${JSON.stringify(bad)} rejected`, r.s === 400, `status ${r.s}`); }
   r = await call('POST', `/api/conversations/${caId}/messages`, { cookie: OUT, json: { body: 'x', media_ids: [fwdMedia] } }); ok('sending someone else’s media id through the normal route -> 400', r.s === 400, `status ${r.s}`);
   r = await call('POST', `/api/messages/${msgId}/forward`, { json: { conversation_id: abId } }); ok('forward without a session -> 401', r.s === 401, `status ${r.s}`);
+  // favorites: a bundled key is only a key; someone else's upload is copied only by people who can see it
+  r = await call('POST', '/api/stickers/favorites', { json: { sticker_key: 'app:memes/1' } }); ok('favorite without a session -> 401', r.s === 401, `status ${r.s}`);
+  r = await call('POST', '/api/stickers/favorites', { cookie: OUT, json: { sticker_key: `usr:${fwdMedia}` } }); const favMissing = await call('POST', '/api/stickers/favorites', { cookie: OUT, json: { sticker_key: 'usr:med_doesnotexist' } });
+  ok('an outsider cannot favorite a sticker in a chat they are not in -> 404, same answer as a missing file', r.s === 404 && favMissing.s === 404 && JSON.stringify(r.j) === JSON.stringify(favMissing.j), `status ${r.s}/${favMissing.s}`);
+  for (const bad of ["x' OR '1'='1", '../x', 'app:memes/0', 'app:nope/1', 'usr:abc', 5, null, ['app:memes/1'], {}]) { r = await call('POST', '/api/stickers/favorites', { cookie: RCV, json: { sticker_key: bad } }); ok(`favorite key ${JSON.stringify(bad)?.slice(0, 24)} rejected`, r.s === 400, `status ${r.s}`); }
+  r = await call('POST', '/api/stickers/favorites', { cookie: RCV, json: { sticker_key: `usr:${fwdMedia}` } }); const favCopy = r.j?.media_id; ok('POSITIVE CONTROL: the recipient copies a sticker from the chat', r.s === 201 && !!favCopy && favCopy !== fwdMedia, `status ${r.s}`);
+  r = await call('GET', `/api/media/${favCopy}`, { cookie: OUT }); ok('the copy is private to its new owner -> 403 for others', r.s === 403, `status ${r.s}`);
+  r = await call('GET', `/api/media/${favCopy}`, { cookie: SND }); ok('the original sender cannot read the recipient’s copy -> 403', r.s === 403, `status ${r.s}`);
+  r = await call('DELETE', `/api/stickers/library/${favCopy}`, { cookie: OUT }); ok('nobody else can remove the copy from the library -> 404', r.s === 404, `status ${r.s}`);
+  r = await call('DELETE', '/api/stickers/favorites/usr%3Amed_x', { cookie: RCV }); ok('favorites route refuses uploaded keys on delete -> 400', r.s === 400, `status ${r.s}`);
+  r = await call('GET', '/api/stickers/favorites', { cookie: OUT }); ok('favorites lists are private -> an outsider sees none', r.s === 200 && Array.isArray(r.j?.keys) && r.j.keys.length === 0, `status ${r.s}`);
   // message shape rules: media-only is fine, empty is not, at most 4 attachments, unknown fields rejected
   r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { body: '   ' } }); ok('empty message with no media -> 400', r.s === 400, `status ${r.s}`);
   r = await call('POST', `/api/conversations/${abId}/messages`, { cookie: SND, json: { body: 'x', media_ids: [fwdMedia, fwdMedia, fwdMedia, fwdMedia, fwdMedia] } }); ok('5 attachments -> 400', r.s === 400, `status ${r.s}`);

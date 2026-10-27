@@ -44,7 +44,7 @@ function stubPicture() {
 
 const fakeEnv = (): MediaEnv => ({
   async decode() { return { width: 800, height: 600, source: {} }; },
-  async encode(draw, size, mime) { draw({ clear: () => undefined, drawImage: () => undefined, canvas2d: undefined }); return new Blob([new Uint8Array(500)], { type: mime }); },
+  async encode(draw, _size, mime) { draw({ clear: () => undefined, drawImage: () => undefined, canvas2d: undefined }); return new Blob([new Uint8Array(500)], { type: mime }); },
 });
 
 const source = () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });

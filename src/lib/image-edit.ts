@@ -58,7 +58,7 @@ export function createLayer(patch: Partial<TextLayer> = {}): TextLayer {
     text: '',
     x: 0.5,
     y: 0.5,
-    size: 0.09,
+    size: 0.07,
     color: '#FFFFFF',
     outline: true,
     style: 'meme',
