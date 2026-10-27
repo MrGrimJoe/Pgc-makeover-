@@ -166,7 +166,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
                   )}
                 </div>
                 {comment.body && <p className="text-text text-[15px] whitespace-pre-wrap">{comment.body}</p>}
-                {comment.sticker_key && <StickerView stickerKey={comment.sticker_key} size={120} />}
+                {comment.sticker_key && <StickerView stickerKey={comment.sticker_key} size={120} favoritable />}
                 {comment.author_id !== currentUserId && (
                   <button type="button" onClick={() => setReportingId(comment.id)} aria-label="Report this comment" className="min-h-[44px] px-1 bg-transparent border-0 text-[12px] text-text-muted hover:text-danger cursor-pointer">Report</button>
                 )}

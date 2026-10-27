@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import type { MediaItem } from '../../shared/schema.ts';
-import { BarChart2, Image, Smile, X } from 'lucide-react';
+import { BarChart2, Image, Pencil, Smile, X } from 'lucide-react';
+import { ImageEditor } from '../components/ImageEditor.tsx';
+import { fetchMediaBlob } from '../lib/media-actions.ts';
 import { checkPollOptions, POLL_MAX_OPTIONS, POLL_MIN_OPTIONS, POLL_OPTION_MAX } from '../../shared/poll.ts';
 import { PickerPanel } from '../components/chat/PickerPanel.tsx';
 import { MediaPreview } from '../components/chat/MediaPreview.tsx';
@@ -32,6 +34,8 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [addFiles, setAddFiles] = useState<File[] | null>(null);
   const [libraryKey, setLibraryKey] = useState(0);
+  // A photo being given text: the upload it replaces (null for a finished template that is only being added)
+  const [editTarget, setEditTarget] = useState<{ id: string; blob: Blob } | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   useFocusTrap(sheetRef, () => setPickerOpen(false), pickerOpen);
   // null = no poll; otherwise the option texts being typed
@@ -66,6 +70,21 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
     } finally {
       setUploading(false);
       e.target.value = '';
+    }
+  };
+
+  /** Compresses and uploads one finished picture (for example an edited template) and adds it to the post. */
+  const addPhotoFile = async (file: File, replaceId?: string) => {
+    setUploading(true);
+    setError(null);
+    try {
+      const prepared = await compressPhoto(file, browserMediaEnv());
+      const item = await uploadBlob(prepared.blob, 'photo', { width: prepared.width, height: prepared.height, thumb: prepared.thumb });
+      setMediaList((prev) => (replaceId ? prev.map((m) => (m.id === replaceId ? item : m)) : prev.length < 4 ? [...prev, item] : prev));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -165,6 +184,14 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
                 alt="Upload preview"
                 className="w-full h-full object-cover"
               />
+              <button
+                type="button"
+                onClick={() => void fetchMediaBlob(m.id).then((blob) => setEditTarget({ id: m.id, blob })).catch((e: Error) => setError(e.message))}
+                aria-label="Add text to image"
+                className="absolute bottom-0 left-0 w-[44px] h-[44px] min-w-[44px] min-h-[44px] flex items-end justify-start text-white cursor-pointer"
+              >
+                <span className="m-1 p-1 rounded-full bg-[#17233A]/70 flex items-center justify-center"><Pencil className="w-3 h-3" aria-hidden="true" /></span>
+              </button>
               <button
                 type="button"
                 onClick={() => handleRemoveMedia(m.id)}
@@ -297,11 +324,23 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         <div className="fixed inset-0 pl-[var(--nav-w,0px)] z-50 flex items-end justify-center bg-black/50" onClick={() => setPickerOpen(false)}>
           <div ref={sheetRef} role="dialog" aria-modal="true" aria-label="Choose a sticker or GIF" tabIndex={-1} onClick={(e) => e.stopPropagation()} className="w-full max-w-content h-[60vh] bg-[var(--bg,#fff)] rounded-t-[16px] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
             <div className="flex-1 min-h-0">
-              <PickerPanel userId={currentUserId} reloadKey={libraryKey} onPick={(key) => { setStickerKey(key); setPickerOpen(false); }} onAddFiles={(files) => setAddFiles(files)} />
+              <PickerPanel userId={currentUserId} reloadKey={libraryKey} onPick={(key) => { setStickerKey(key); setPickerOpen(false); }} onAddFiles={(files) => setAddFiles(files)} onTemplateEdited={(file) => { setPickerOpen(false); void addPhotoFile(file); }} />
             </div>
             <button type="button" onClick={() => setPickerOpen(false)} className="min-h-[44px] bg-transparent border-0 text-[14px] font-semibold text-[var(--muted,#5B6577)] cursor-pointer">Close</button>
           </div>
         </div>
+      )}
+      {editTarget && (
+        <ImageEditor
+          source={editTarget.blob}
+          doneLabel="Use this picture"
+          onCancel={() => setEditTarget(null)}
+          onDone={async ({ file }) => {
+            const id = editTarget.id;
+            setEditTarget(null);
+            await addPhotoFile(file, id);
+          }}
+        />
       )}
       {addFiles && (
         <MediaPreview

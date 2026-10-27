@@ -201,6 +201,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
             userId={currentUserId}
             onPick={(key) => void pickSticker(key)}
             onAddFiles={(files) => { setPreviewMode('library'); setPreviewFiles(files); }}
+            onTemplateEdited={(file) => { setPickerOpen(false); setPreviewMode('send'); setPreviewFiles([file]); }}
           />
         }
       />
@@ -214,7 +215,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
         />
       )}
       {previewFiles && <MediaPreview files={previewFiles} mode={previewMode} onCancel={() => setPreviewFiles(null)} onConfirm={confirmPreview} />}
-      {viewer && <MediaViewer message={viewer.msg} startIndex={viewer.index} isSelf={viewer.msg.sender_id === currentUserId} onClose={() => setViewer(null)} onNotice={setNotice} />}
+      {viewer && <MediaViewer message={viewer.msg} startIndex={viewer.index} isSelf={viewer.msg.sender_id === currentUserId} onClose={() => setViewer(null)} onNotice={setNotice} onSendFile={(file) => { setViewer(null); setPreviewMode('send'); setPreviewFiles([file]); }} />}
       {reporting && (
         <ReportModal
           targetType={reporting.type}

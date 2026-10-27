@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { RotateCw, X } from 'lucide-react';
+import { Pencil, RotateCw, X } from 'lucide-react';
+import { ImageEditor } from '../ImageEditor.tsx';
 import { sniffMime, type SniffedType } from '../../../shared/media-rules.ts';
 import { CROP_ASPECTS, cropForAspect, cropFramePercent, sendAsOptions, type CropAspect, type SendAs } from '../../lib/media.ts';
 import { readHead, type PickedItem } from '../../lib/media-upload.ts';
@@ -37,7 +38,8 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useFocusTrap(ref, () => !busy && onCancel());
+  const [editing, setEditing] = useState(false);
+  useFocusTrap(ref, () => !busy && onCancel(), !editing);
 
   const limited = useMemo(() => files.slice(0, MAX_ITEMS), [files]);
   const tooMany = files.length > MAX_ITEMS;
@@ -136,6 +138,9 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
         {cur && canEdit && (
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2 items-center">
+              <button type="button" onClick={() => setEditing(true)} className="min-h-[44px] px-3.5 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center gap-1.5">
+                <Pencil className="w-4 h-4" aria-hidden="true" />Add text
+              </button>
               <button type="button" onClick={() => patch({ rotate: (cur.rotate + 1) % 4 })} aria-label="Rotate 90 degrees" className="min-h-[44px] px-3.5 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center gap-1.5">
                 <RotateCw className="w-4 h-4" aria-hidden="true" />Rotate
               </button>
@@ -190,6 +195,20 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
           {busy ? 'Working...' : mode === 'library' ? 'Add' : 'Send'}
         </button>
       </div>
+      {editing && cur && (
+        <ImageEditor
+          source={cur.file}
+          doneLabel="Use this picture"
+          onCancel={() => setEditing(false)}
+          onDone={async ({ file }) => {
+            // The text is baked into a new file, so rotate and crop start again from the finished picture
+            const head = await readHead(file);
+            if (typeof URL.createObjectURL === 'function') URL.revokeObjectURL?.(cur.url);
+            patch({ file, mime: sniffMime(head), url: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '', rotate: 0, aspect: 'original', ox: 0.5, oy: 0.5, naturalW: 0, naturalH: 0 });
+            setEditing(false);
+          }}
+        />
+      )}
     </div>
   );
 };

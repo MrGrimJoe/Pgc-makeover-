@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Settings2 } from 'lucide-react';
-import { STICKER_PACKS } from '../../../shared/stickers.ts';
+import { STICKER_PACKS, type StickerPack } from '../../../shared/stickers.ts';
 import { appKey, bundledUrl, parseStickerKey, resolveBundled } from '../../../shared/sticker-keys.ts';
 import { loadRecent, saveRecent } from '../../lib/recent-stickers.ts';
 import { usePrefersReducedMotion } from '../../lib/motion.ts';
+import { fetchFavoriteKeys, removeFavorite } from '../../lib/favorites.ts';
+import { EditFlow } from '../EditFlow.tsx';
 
 export interface LibraryEntry {
   media_id: string;
@@ -11,6 +13,8 @@ export interface LibraryEntry {
   mime_type: string;
   width: number | null;
   height: number | null;
+  /** 'favorite' for a copy of someone else's sticker or GIF; 'own' for what the person uploaded. */
+  source?: 'own' | 'favorite';
 }
 
 interface PickerPanelProps {
@@ -23,6 +27,13 @@ interface PickerPanelProps {
   /** Bumped by the parent after an item was added, so the list reloads. */
   reloadKey?: number;
   initialTab?: 'stickers' | 'gifs';
+  /** The bundled packs. Only tests pass their own. */
+  packs?: readonly StickerPack[];
+  /**
+   * Packs marked "template": true hold meme templates. When this is set, tapping one opens the text editor and the
+   * finished picture is handed over here (the parent previews and sends it as a photo). Without it they send like any sticker.
+   */
+  onTemplateEdited?: (file: File) => void;
 }
 
 interface Tile {
@@ -46,11 +57,13 @@ const Thumb: React.FC<{ tile: Tile; reduced: boolean }> = ({ tile, reduced }) =>
  * Sticker and GIF picker. Chips: Recent (this device only), Mine (your uploads), then each bundled pack.
  * "Manage" removes your uploads; "Add from phone" opens the preview to turn a picture or a clip into one.
  */
-export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddFiles, reloadKey = 0, initialTab = 'stickers' }) => {
+export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddFiles, reloadKey = 0, initialTab = 'stickers', packs: packList = STICKER_PACKS, onTemplateEdited }) => {
   const reduced = usePrefersReducedMotion();
   const [tab, setTab] = useState<'stickers' | 'gifs'>(initialTab);
   const [chip, setChip] = useState<string | null>(null); // 'recent' | 'mine' | pack id
   const [items, setItems] = useState<LibraryEntry[] | null>(null);
+  const [favKeys, setFavKeys] = useState<string[]>([]);
+  const [templateSource, setTemplateSource] = useState<Blob | null>(null);
   const [recent, setRecent] = useState<string[]>(() => loadRecent(userId));
   const [manage, setManage] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +76,8 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
       if (!res.ok) throw new Error('Could not load your stickers.');
       setItems(((await res.json()) as { items: LibraryEntry[] }).items ?? []);
       setError(null);
+      // Starred bundled stickers; a failure here only hides them
+      setFavKeys(await fetchFavoriteKeys().catch(() => []));
     } catch (e) {
       setError((e as Error).message);
       setItems([]);
@@ -80,33 +95,64 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
       }),
     [recent, kind]
   );
+  const usrTile = (i: LibraryEntry): Tile => ({ key: `usr:${i.media_id}`, kind, src: `/api/media/${encodeURIComponent(i.media_id)}`, alt: kind === 'gif' ? 'GIF' : 'Sticker' });
   const mineTiles = useMemo<Tile[]>(
-    () => (items ?? []).filter((i) => i.kind === kind).map((i) => ({ key: `usr:${i.media_id}`, kind, src: `/api/media/${encodeURIComponent(i.media_id)}`, alt: kind === 'gif' ? 'GIF' : 'Sticker' })),
+    () => (items ?? []).filter((i) => i.kind === kind && i.source !== 'favorite').map(usrTile),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, kind]
   );
   const packs = useMemo(
-    () => STICKER_PACKS.map((p) => ({ pack: p, tiles: p.items.filter((i) => i.kind === kind).map((i): Tile => ({ key: appKey(p.id, i.number), kind, src: bundledUrl(p, i), alt: i.alt })) })).filter((x) => x.tiles.length > 0),
-    [kind]
+    () => packList.map((p) => ({ pack: p, tiles: p.items.filter((i) => i.kind === kind).map((i): Tile => ({ key: appKey(p.id, i.number), kind, src: bundledUrl(p, i), alt: i.alt })) })).filter((x) => x.tiles.length > 0),
+    [kind, packList]
   );
+  // Favorites: starred bundled stickers first, then copies saved from other people's chats, posts and comments
+  const favoriteTiles = useMemo<Tile[]>(() => {
+    const bundled = favKeys.flatMap((key): Tile[] => {
+      const p = parseStickerKey(key);
+      if (p?.kind !== 'app') return [];
+      const r = resolveBundled(p.pack, p.number, packList);
+      return r.status === 'ok' && r.item.kind === kind ? [{ key, kind, src: bundledUrl(r.pack, r.item), alt: r.item.alt }] : [];
+    });
+    const saved = (items ?? []).filter((i) => i.kind === kind && i.source === 'favorite').map(usrTile);
+    return [...bundled, ...saved];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favKeys, items, kind, packList]);
 
   // The first chip that has something in it
   const chips = [
     ...(recentTiles.length > 0 ? [{ id: 'recent', label: 'Recent' }] : []),
+    { id: 'favorites', label: 'Favorites' },
     { id: 'mine', label: 'Mine' },
     ...packs.map(({ pack }) => ({ id: pack.id, label: pack.name })),
   ];
-  const active = chips.some((c) => c.id === chip) ? chip! : recentTiles.length > 0 ? 'recent' : mineTiles.length > 0 || packs.length === 0 ? 'mine' : packs[0]!.pack.id;
-  const tiles = active === 'recent' ? recentTiles : active === 'mine' ? mineTiles : packs.find((p) => p.pack.id === active)?.tiles ?? [];
+  const active = chips.some((c) => c.id === chip) ? chip! : recentTiles.length > 0 ? 'recent' : favoriteTiles.length > 0 ? 'favorites' : mineTiles.length > 0 || packs.length === 0 ? 'mine' : packs[0]!.pack.id;
+  const tiles = active === 'recent' ? recentTiles : active === 'favorites' ? favoriteTiles : active === 'mine' ? mineTiles : packs.find((p) => p.pack.id === active)?.tiles ?? [];
+  const activePack = packs.find((p) => p.pack.id === active)?.pack;
+  const asTemplate = !!onTemplateEdited && !!activePack?.template;
 
-  const pick = (tile: Tile) => {
+  const pick = async (tile: Tile) => {
+    if (asTemplate) {
+      // A template is a picture to write on, not something to send as it is
+      try {
+        const res = await fetch(tile.src);
+        if (!res.ok) throw new Error('Could not load this template.');
+        setTemplateSource(await res.blob());
+      } catch (e) {
+        setError((e as Error).message);
+      }
+      return;
+    }
     if (parseStickerKey(tile.key)?.kind === 'app') setRecent(saveRecent(userId, tile.key));
     onPick(tile.key, tile.kind);
   };
   const remove = async (tile: Tile) => {
-    const id = tile.key.slice('usr:'.length);
-    const res = await fetch(`/api/stickers/library/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (res.ok) setItems((all) => (all ?? []).filter((i) => i.media_id !== id));
-    else setError('Could not remove it.');
+    try {
+      await removeFavorite(tile.key); // a bundled favorite leaves the list; an uploaded one leaves the library
+      if (parseStickerKey(tile.key)?.kind === 'app') setFavKeys((all) => all.filter((k) => k !== tile.key));
+      else setItems((all) => (all ?? []).filter((i) => `usr:${i.media_id}` !== tile.key));
+    } catch (e) {
+      setError((e as Error).message || 'Could not remove it.');
+    }
   };
 
   const tabBtn = (on: boolean) => `flex-1 min-h-[44px] text-[14px] font-semibold cursor-pointer border-0 border-b-2 bg-transparent ${on ? 'border-[var(--blue,#244C8A)] text-[var(--blue,#244C8A)]' : 'border-transparent text-[var(--muted,#5B6577)]'}`;
@@ -124,7 +170,7 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
             <button key={c.id} type="button" role="radio" aria-checked={active === c.id} onClick={() => { setChip(c.id); setManage(false); }} className={chipBtn(active === c.id)}>{c.label}</button>
           ))}
         </div>
-        {active === 'mine' && mineTiles.length > 0 && (
+        {(active === 'mine' || active === 'favorites') && tiles.length > 0 && (
           <button type="button" onClick={() => setManage((m) => !m)} aria-pressed={manage} className="shrink-0 min-h-[44px] px-3 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center gap-1.5">
             <Settings2 className="w-4 h-4" aria-hidden="true" />{manage ? 'Done' : 'Manage'}
           </button>
@@ -135,15 +181,17 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
         {items === null && active === 'mine' && <p className="text-[13px] text-[var(--muted,#5B6577)] p-2 m-0" aria-busy="true">Loading...</p>}
         {items !== null && tiles.length === 0 && (
           <p className="text-[13px] text-[var(--muted,#5B6577)] p-3 m-0">
-            {active === 'mine'
-              ? kind === 'sticker' ? 'No stickers yet. Add a picture from your phone to make one.' : 'No GIFs yet. Add a GIF or a short clip from your phone.'
-              : 'Nothing here yet.'}
+            {active === 'favorites'
+              ? `No favorite ${kind === 'gif' ? 'GIFs' : 'stickers'} yet. Tap one in a chat, post or comment and choose Add to favorites.`
+              : active === 'mine'
+                ? kind === 'sticker' ? 'No stickers yet. Add a picture from your phone to make one.' : 'No GIFs yet. Add a GIF or a short clip from your phone.'
+                : 'Nothing here yet.'}
           </p>
         )}
         <ul className="grid grid-cols-4 gap-2 list-none m-0 p-0">
           {tiles.map((tile) => (
             <li key={tile.key} className="relative">
-              <button type="button" onClick={() => (manage ? undefined : pick(tile))} disabled={manage} aria-label={`Send ${tile.alt}`} className="w-full aspect-square min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] p-1 cursor-pointer disabled:cursor-default">
+              <button type="button" onClick={() => (manage ? undefined : void pick(tile))} disabled={manage} aria-label={asTemplate ? `Add text to ${tile.alt}` : `Send ${tile.alt}`} className="w-full aspect-square min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] p-1 cursor-pointer disabled:cursor-default">
                 <Thumb tile={tile} reduced={reduced} />
               </button>
               {manage && (
@@ -153,6 +201,9 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
           ))}
         </ul>
       </div>
+      {templateSource && onTemplateEdited && (
+        <EditFlow source={templateSource} sendLabel="Use this picture" onClose={() => setTemplateSource(null)} onSend={(f) => { setTemplateSource(null); onTemplateEdited(f); }} />
+      )}
       <div className="p-2 shrink-0">
         <button type="button" onClick={() => file.current?.click()} className="w-full min-h-[44px] rounded-[10px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center justify-center gap-1.5">
           <Plus className="w-4 h-4" aria-hidden="true" />Add from phone

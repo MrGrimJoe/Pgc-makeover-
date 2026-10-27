@@ -58,17 +58,27 @@ export async function saveAsSticker(
   }
 
   const blob = await fetchMediaBlob(media.id, fetchImpl);
-  let uploaded;
   if (media.mime_type === 'image/gif' || media.mime_type.startsWith('video/')) {
     const asSticker = media.mime_type === 'image/gif' && blob.size <= MEDIA_SIZE_CAPS.sticker;
-    uploaded = await uploadBlob(blob, asSticker ? 'sticker' : 'gif', {}, fetchImpl);
-  } else {
-    const prepared = await makeSticker(blob, deps.env ?? browserMediaEnv());
-    uploaded = await uploadBlob(prepared.blob, 'sticker', { width: prepared.width, height: prepared.height }, fetchImpl);
+    const uploaded = await uploadBlob(blob, asSticker ? 'sticker' : 'gif', {}, fetchImpl);
+    await addUploadedToLibrary(uploaded.id, fetchImpl);
+    return;
   }
-  const res = await addToLibrary(uploaded.id);
+  await saveBlobAsSticker(blob, deps);
+}
+
+async function addUploadedToLibrary(mediaId: string, fetchImpl: typeof fetch): Promise<void> {
+  const res = await fetchImpl('/api/stickers/library', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId }) });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(data.error || 'Could not save to your stickers.');
   }
+}
+
+/** Turns a still picture (for example one with text on it) into a 512 px sticker of the person's own and adds it to their library. */
+export async function saveBlobAsSticker(blob: Blob, deps: { env?: MediaEnv; fetchImpl?: typeof fetch } = {}): Promise<void> {
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const prepared = await makeSticker(blob, deps.env ?? browserMediaEnv());
+  const uploaded = await uploadBlob(prepared.blob, 'sticker', { width: prepared.width, height: prepared.height }, fetchImpl);
+  await addUploadedToLibrary(uploaded.id, fetchImpl);
 }

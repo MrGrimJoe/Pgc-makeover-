@@ -92,6 +92,7 @@ export interface ManifestPack {
   name: string;
   order: number;
   placeholder: boolean;
+  template: boolean;
   items: ManifestItem[];
   retired: number[];
 }
@@ -162,7 +163,7 @@ export function buildCatalog(dir: string): BuildResult {
     const packDir = join(dir, id);
     const metaPath = join(packDir, 'pack.json');
     if (!existsSync(metaPath)) throw new Error(`Pack "${id}" has no pack.json (needs a name and an order)`);
-    const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { name?: string; order?: number; placeholder?: boolean; alts?: Record<string, string> };
+    const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { name?: string; order?: number; placeholder?: boolean; template?: boolean; alts?: Record<string, string> };
     if (typeof meta.name !== 'string' || !meta.name.trim() || meta.name.length > 60) throw new Error(`Pack "${id}": pack.json needs a "name" (1 to 60 characters)`);
     if (typeof meta.order !== 'number') throw new Error(`Pack "${id}": pack.json needs a numeric "order"`);
 
@@ -203,7 +204,7 @@ export function buildCatalog(dir: string): BuildResult {
     }
     items.sort((a, b) => a.number - b.number);
     retired.sort((a, b) => a - b);
-    packs.push({ id, name: meta.name.trim(), order: meta.order, placeholder: meta.placeholder === true, items, retired });
+    packs.push({ id, name: meta.name.trim(), order: meta.order, placeholder: meta.placeholder === true, template: meta.template === true, items, retired });
   }
   // Packs that were removed entirely keep their numbering, with every item retired
   for (const [id, p] of Object.entries(prev.packs)) {
@@ -236,6 +237,8 @@ export interface StickerPack {
   readonly order: number;
   /** True for the stand-in pack that ships until the real stickers are added. */
   readonly placeholder: boolean;
+  /** True for a pack of meme templates ("template": true in pack.json). Tapping one opens the text editor instead of sending it. */
+  readonly template: boolean;
   readonly items: readonly BundledSticker[];
   /** Numbers that were removed. They are never reused; old messages show a placeholder. */
   readonly retired: readonly number[];

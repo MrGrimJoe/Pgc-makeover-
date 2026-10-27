@@ -16,6 +16,8 @@ export interface StickerPack {
   readonly order: number;
   /** True for the stand-in pack that ships until the real stickers are added. */
   readonly placeholder: boolean;
+  /** True for a pack of meme templates ("template": true in pack.json). Tapping one opens the text editor instead of sending it. */
+  readonly template: boolean;
   readonly items: readonly BundledSticker[];
   /** Numbers that were removed. They are never reused; old messages show a placeholder. */
   readonly retired: readonly number[];
@@ -27,6 +29,7 @@ export const STICKER_PACKS: readonly StickerPack[] = [
     "name": "Memes",
     "order": 10,
     "placeholder": false,
+    "template": false,
     "items": [
       {
         "number": 1,
@@ -486,6 +489,7 @@ export const STICKER_PACKS: readonly StickerPack[] = [
     "name": "Reactions",
     "order": 20,
     "placeholder": false,
+    "template": false,
     "items": [
       {
         "number": 1,

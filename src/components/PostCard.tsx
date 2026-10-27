@@ -7,6 +7,7 @@ import { Heart, MessageSquare, Flag, Trash2 } from 'lucide-react';
 import { CommentModal } from './CommentModal.tsx';
 import { ReportModal } from './ReportModal.tsx';
 import { Avatar } from './Avatar.tsx';
+import { PhotoViewer } from './PhotoViewer.tsx';
 
 interface PostCardProps {
   post: PostItem;
@@ -34,6 +35,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [likePopping, setLikePopping] = useState(false);
+  const [viewingPhotos, setViewingPhotos] = useState(false);
 
   useEffect(() => {
     onEngagementChange?.(post.id, { likes_count: likesCount, has_liked: hasLiked, comments_count: commentsCount });
@@ -187,13 +189,21 @@ export const PostCard: React.FC<PostCardProps> = ({
         <>
           {/* Full-bleed image at 4:5 aspect ratio */}
           <div className="w-full aspect-[4/5] bg-[var(--bg2,#F8F9FC)] overflow-hidden">
-            <img
-              src={`/api/media/${photos[0]!.id}`}
-              alt={`Photo post by @${post.author_username}`}
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
+            <button
+              type="button"
+              onClick={() => setViewingPhotos(true)}
+              aria-label={`Open photo by @${post.author_username}`}
+              className="block w-full h-full p-0 border-0 bg-transparent cursor-pointer"
+            >
+              <img
+                src={`/api/media/${photos[0]!.id}`}
+                alt={`Photo post by @${post.author_username}`}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            </button>
           </div>
+          {viewingPhotos && <PhotoViewer photos={photos} label={`Photo by @${post.author_username}`} onClose={() => setViewingPhotos(false)} />}
 
           {/* Action Row: 24px icons with 44px tap targets, report flag on the far right */}
           <div className="flex items-center gap-4 px-4 pt-2.5">
@@ -251,7 +261,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
           {post.sticker_key && (
             <div className="px-4 pt-2">
-              <StickerView stickerKey={post.sticker_key} size={160} media={post.media} />
+              <StickerView stickerKey={post.sticker_key} size={160} media={post.media} favoritable />
             </div>
           )}
 
@@ -277,7 +287,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
           {post.sticker_key && (
             <div className="px-4 pt-2">
-              <StickerView stickerKey={post.sticker_key} size={160} media={post.media} />
+              <StickerView stickerKey={post.sticker_key} size={160} media={post.media} favoritable />
             </div>
           )}
 

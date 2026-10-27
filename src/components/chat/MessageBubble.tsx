@@ -26,7 +26,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isSelf, onOpe
   const stickersOnly = !msg.body && (!!stickerKey || media.length > 0) && media.every(isSticker);
   const keyedSticker = stickerKey ? (
     <div className="flex flex-col items-start">
-      <StickerView stickerKey={stickerKey} size={160} media={msg.media} />
+      <StickerView stickerKey={stickerKey} size={160} media={msg.media} favoritable />
     </div>
   ) : null;
 

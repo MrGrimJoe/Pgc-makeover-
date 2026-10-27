@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Flag, Forward, Share2, Smile, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Flag, Forward, Pencil, Share2, Smile, Star, X } from 'lucide-react';
 import type { MessageItem } from '../../../shared/schema.ts';
 import { AnimatedMedia } from './AnimatedMedia.tsx';
 import { ForwardPicker } from './ForwardPicker.tsx';
@@ -7,6 +7,8 @@ import { mediaLabel } from './MessageBubble.tsx';
 import { ReportModal } from '../ReportModal.tsx';
 import { useFocusTrap } from '../../lib/focus-trap.ts';
 import { canShareFiles, downloadBlob, fetchMediaBlob, fileNameFor, saveAsSticker } from '../../lib/media-actions.ts';
+import { addFavorite } from '../../lib/favorites.ts';
+import { EditFlow } from '../EditFlow.tsx';
 
 interface MediaViewerProps {
   message: MessageItem;
@@ -14,22 +16,25 @@ interface MediaViewerProps {
   isSelf: boolean;
   onClose: () => void;
   onNotice: (text: string) => void;
+  /** Sends a finished picture (one edited here) into the open chat. */
+  onSendFile?: (file: File) => void;
 }
 
 const action =
   'min-h-[44px] px-3 rounded-full border border-white/40 bg-black/40 text-white text-[13px] font-semibold cursor-pointer inline-flex items-center gap-1.5';
 
 /** Full-screen view of message media with Download, Share, Forward, Save as sticker and Report. */
-export const MediaViewer: React.FC<MediaViewerProps> = ({ message, startIndex, isSelf, onClose, onNotice }) => {
+export const MediaViewer: React.FC<MediaViewerProps> = ({ message, startIndex, isSelf, onClose, onNotice, onSendFile }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(startIndex);
   const [forwarding, setForwarding] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Blob | null>(null);
   const [shareFile, setShareFile] = useState<File | null>(null);
   const media = message.media ?? [];
   const cur = media[index];
-  useFocusTrap(ref, onClose, !forwarding && !reporting);
+  useFocusTrap(ref, onClose, !forwarding && !reporting && !editing);
 
   // The Share button only appears when this browser can share a file of this type
   const [canShare, setCanShare] = useState(false);
@@ -98,9 +103,20 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ message, startIndex, i
         <button type="button" className={action} disabled={busy !== null} onClick={() => setForwarding(true)}>
           <Forward className="w-4 h-4" aria-hidden="true" />Forward
         </button>
-        <button type="button" className={action} disabled={busy !== null} onClick={() => void run('save', () => saveAsSticker(cur, isSelf), 'Saved to your stickers.')}>
-          <Smile className="w-4 h-4" aria-hidden="true" />Save as sticker
-        </button>
+        {(cur.kind === 'photo' || cur.kind === 'sticker') && (
+          <button type="button" className={action} disabled={busy !== null} onClick={() => void run('edit', async () => setEditing(await fetchMediaBlob(cur.id)))}>
+            <Pencil className="w-4 h-4" aria-hidden="true" />Edit
+          </button>
+        )}
+        {cur.kind === 'sticker' || cur.kind === 'gif' ? (
+          <button type="button" className={action} disabled={busy !== null} onClick={() => void run('save', async () => { const r = await addFavorite(`usr:${cur.id}`); onNotice(r.already ? 'Already in your favorites.' : 'Added to your favorites.'); })}>
+            <Star className="w-4 h-4" aria-hidden="true" />Add to favorites
+          </button>
+        ) : (
+          <button type="button" className={action} disabled={busy !== null} onClick={() => void run('save', () => saveAsSticker(cur, isSelf), 'Saved to your stickers.')}>
+            <Smile className="w-4 h-4" aria-hidden="true" />Save as sticker
+          </button>
+        )}
         {!isSelf && (
           <button type="button" className={action} disabled={busy !== null} onClick={() => setReporting(true)}>
             <Flag className="w-4 h-4" aria-hidden="true" />Report
@@ -108,6 +124,7 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ message, startIndex, i
         )}
       </div>
 
+      {editing && <EditFlow source={editing} onClose={() => setEditing(null)} onSend={onSendFile ? (f) => { setEditing(null); onSendFile(f); } : undefined} sendLabel="Send in this chat" />}
       {forwarding && <ForwardPicker messageId={message.id} onClose={() => setForwarding(false)} onForwarded={() => { setForwarding(false); onNotice('Forwarded.'); }} />}
       {reporting && <ReportModal targetType="message" targetId={message.id} onClose={() => setReporting(false)} onReportSubmitted={() => { setReporting(false); onNotice('Report sent. Thank you.'); }} />}
     </div>

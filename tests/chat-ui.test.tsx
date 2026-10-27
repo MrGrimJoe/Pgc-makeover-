@@ -273,14 +273,28 @@ describe('MediaViewer', () => {
     expect(onNotice).toHaveBeenCalledWith('Forwarded.');
   });
 
-  it('Save as sticker adds your own sticker by id (nothing is re-uploaded)', async () => {
-    const net = installFetch({ 'POST /api/stickers/library': () => json({ success: true }, 201) }); restores.push(net.restore);
+  it('a sticker offers Add to favorites (the server keeps a copy), and reports when it was already there', async () => {
+    let n = 0;
+    const net = installFetch({ 'POST /api/stickers/favorites': () => (n++ === 0 ? json({ success: true, key: 'usr:med_9', kind: 'sticker' }, 201) : json({ success: true, key: 'usr:med_9', kind: 'sticker', already: true }, 200)) }); restores.push(net.restore);
     const onNotice = vi.fn();
-    m = await mount(<MediaViewer message={message({ media: [media('sticker')], sender_id: 'me' })} startIndex={0} isSelf onClose={() => undefined} onNotice={onNotice} />);
-    await click(byText(m.container, 'button', 'Save as sticker'));
+    m = await mount(<MediaViewer message={message({ media: [media('sticker')] })} startIndex={0} isSelf={false} onClose={() => undefined} onNotice={onNotice} />);
+    expect(byText(m.container, 'button', 'Save as sticker')).toBeNull();
+    await click(byText(m.container, 'button', 'Add to favorites'));
     await flush();
-    expect(net.calls).toEqual([{ url: '/api/stickers/library', method: 'POST', body: { media_id: 'med_1' } }]);
-    expect(onNotice).toHaveBeenCalledWith('Saved to your stickers.');
+    expect(net.calls).toEqual([{ url: '/api/stickers/favorites', method: 'POST', body: { sticker_key: 'usr:med_1' } }]);
+    expect(onNotice).toHaveBeenLastCalledWith('Added to your favorites.');
+    await click(byText(m.container, 'button', 'Add to favorites'));
+    await flush();
+    expect(onNotice).toHaveBeenLastCalledWith('Already in your favorites.');
+  });
+
+  it('a photo offers Edit, and Save as sticker still turns it into a sticker', async () => {
+    m = await mount(<MediaViewer message={message()} startIndex={0} isSelf={false} onClose={() => undefined} onNotice={() => undefined} />);
+    expect(byText(m.container, 'button', 'Edit')).not.toBeNull();
+    expect(byText(m.container, 'button', 'Add to favorites')).toBeNull();
+    m.unmount();
+    m = await mount(<MediaViewer message={message({ media: [media('gif', 'med_g', 'video/mp4')] })} startIndex={0} isSelf={false} onClose={() => undefined} onNotice={() => undefined} />);
+    expect(byText(m.container, 'button', 'Edit')).toBeNull(); // a loop would lose its movement
   });
 });
 
