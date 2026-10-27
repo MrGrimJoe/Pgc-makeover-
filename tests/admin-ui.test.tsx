@@ -185,6 +185,7 @@ describe('Settings: the Admin tools entry and the account id', () => {
       let opened = 0;
       m = await mount(<LayoutProvider><SettingsPage currentUser={meAs(role)} onProfileUpdated={() => undefined} onAccountDeleted={() => undefined} onLogout={() => undefined} onBack={() => undefined} onOpenAdmin={() => { opened++; }} /></LayoutProvider>);
       await flush(); await flush();
+      await click(byText(document.body, '[role="tab"]', 'Account'));
       await click(byText(document.body, 'button', 'Open admin tools'));
       expect(opened).toBe(1);
     });
@@ -194,6 +195,7 @@ describe('Settings: the Admin tools entry and the account id', () => {
     cleanups.push(net().restore);
     m = await mount(settings('user'));
     await flush(); await flush();
+    await click(byText(document.body, '[role="tab"]', 'Account')); // where the entry would be
     expect(byText(document.body, 'button', 'Open admin tools')).toBeNull();
     expect(document.body.textContent).not.toContain('Admin tools');
   });
@@ -202,6 +204,7 @@ describe('Settings: the Admin tools entry and the account id', () => {
     cleanups.push(net().restore);
     m = await mount(settings('user'));
     await flush(); await flush();
+    await click(byText(document.body, '[role="tab"]', 'Account'));
     expect(document.body.textContent).toContain('Account ID: usr_me');
     expect(byText(document.body, 'button', 'Copy')).not.toBeNull();
   });

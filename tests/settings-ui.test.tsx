@@ -34,24 +34,62 @@ const baseRoutes = {
   'GET /api/stickers/library': () => json({ items: [{ media_id: 'med_s1', kind: 'sticker', mime_type: 'image/webp', width: 512, height: 512 }] }),
 };
 
+const tab = (c: HTMLElement, name: string) => click(byText(c, '[role="tab"]', name));
+
 describe('Settings page', () => {
   it('has every section from the page map, and no axe violations', async () => {
     const net = installFetch(baseRoutes); restores.push(net.restore);
     m = await mount(<SettingsPage currentUser={me} onProfileUpdated={() => undefined} onAccountDeleted={() => undefined} onLogout={() => undefined} onBack={() => undefined} />);
     await flush(); await flush();
-    for (const h of ['Chat background', 'Who can message you', 'Blocked people', 'Interests', 'My stickers & GIFs', 'Account']) {
-      expect([...m.container.querySelectorAll('h2')].some((e) => e.textContent === h), h).toBe(true);
-    }
-    expect(byText(m.container, 'button', 'Sign out')).not.toBeNull();
-    expect(byText(m.container, 'button', 'Delete account')).not.toBeNull();
+    const tabs = [...m.container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
+    expect(tabs).toEqual(['Privacy', 'Appearance', 'Content', 'Account']);
+    const h2s = () => [...m!.container.querySelectorAll('h2')].map((e) => e.textContent);
+    expect(h2s()).toEqual(expect.arrayContaining(['Who can message you', 'Blocked people']));
+    expect(h2s()).not.toContain('Chat background'); // one section at a time
+    await tab(m.container, 'Appearance');
+    expect(h2s()).toContain('Chat background');
     expect(m.container.querySelector('[data-testid="bg-preview"]')?.textContent).toContain('Hello!');
     expect(await axeViolations(m.container)).toBe('');
+    await tab(m.container, 'Content');
+    expect(h2s()).toEqual(expect.arrayContaining(['Interests', 'My stickers & GIFs']));
+    expect(await axeViolations(m.container)).toBe('');
+    await tab(m.container, 'Account');
+    expect(h2s()).toContain('Account');
+    expect(byText(m.container, 'button', 'Sign out')).not.toBeNull();
+    expect(byText(m.container, 'button', 'Delete account')).not.toBeNull();
+    expect(await axeViolations(m.container)).toBe('');
+    await tab(m.container, 'Privacy'); // and back again
+    expect(h2s()).toContain('Who can message you');
+  });
+
+  it('tabs follow the tab pattern: one selected, one in the tab order, arrow keys move between them', async () => {
+    const net = installFetch(baseRoutes); restores.push(net.restore);
+    m = await mount(<SettingsPage currentUser={me} onProfileUpdated={() => undefined} onAccountDeleted={() => undefined} onLogout={() => undefined} onBack={() => undefined} />);
+    await flush();
+    const tabs = () => [...m!.container.querySelectorAll<HTMLElement>('[role="tab"]')];
+    expect(tabs().map((t) => t.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false', 'false']);
+    expect(tabs().map((t) => t.tabIndex)).toEqual([0, -1, -1, -1]);
+    const panel = m.container.querySelector('[role="tabpanel"]')!;
+    expect(panel.getAttribute('aria-labelledby')).toBe(tabs()[0]!.id);
+    const key = (k: string) => act(async () => { document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); });
+    await act(async () => { tabs()[0]!.focus(); });
+    await key('ArrowRight');
+    expect(tabs()[1]!.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(tabs()[1]);
+    await key('End');
+    expect(tabs()[3]!.getAttribute('aria-selected')).toBe('true');
+    await key('ArrowRight'); // wraps round
+    expect(tabs()[0]!.getAttribute('aria-selected')).toBe('true');
+    await key('ArrowLeft');
+    expect(tabs()[3]!.getAttribute('aria-selected')).toBe('true');
+    expect(m.container.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe(tabs()[3]!.id);
   });
 
   it('choosing a preset updates the live preview and is kept on the phone; Reset returns to Plain', async () => {
     const net = installFetch(baseRoutes); restores.push(net.restore);
     m = await mount(<SettingsPage currentUser={me} onProfileUpdated={() => undefined} onAccountDeleted={() => undefined} onLogout={() => undefined} onBack={() => undefined} />);
     await flush();
+    await tab(m.container, 'Appearance');
     expect(byText(m.container, '[role="radio"]', 'Plain')?.getAttribute('aria-checked')).toBe('true');
     await click(byText(m.container, '[role="radio"]', 'Mint'));
     await flush();
@@ -93,6 +131,7 @@ describe('Settings page', () => {
     expect(m.container.textContent).toContain('@bob');
     await click(byLabel(m.container, 'Unblock @bob')); await flush();
     expect(m.container.textContent).toContain('No blocked people');
+    await tab(m.container, 'Content');
     await click(byLabel(m.container, 'Remove #cricket')); await flush();
     expect(m.container.textContent).not.toContain('#cricket');
     await click(byLabel(m.container, 'Remove sticker')); await flush();
@@ -104,6 +143,7 @@ describe('Settings page', () => {
     const net = installFetch({ ...baseRoutes, 'DELETE /api/me': () => json({ success: true }) }); restores.push(net.restore);
     m = await mount(<SettingsPage currentUser={me} onProfileUpdated={() => undefined} onAccountDeleted={onDeleted} onLogout={() => undefined} onBack={() => undefined} />);
     await flush();
+    await tab(m.container, 'Account');
     await click(byText(m.container, 'button', 'Delete account'));
     const confirm = byText(m.container, 'button', 'Delete permanently') as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
@@ -120,6 +160,7 @@ describe('Settings page', () => {
     const net = installFetch({ ...baseRoutes, 'POST /api/stickers/library': () => json({ success: true }, 201) }); restores.push(net.restore);
     m = await mount(<SettingsPage currentUser={me} onProfileUpdated={() => undefined} onAccountDeleted={() => undefined} onLogout={() => undefined} onBack={() => undefined} />);
     await flush();
+    await tab(m.container, 'Content');
     const input = m.container.querySelector<HTMLInputElement>('[data-testid="settings-library-input"]')!;
     await act(async () => { Object.defineProperty(input, 'files', { configurable: true, value: [pngFile()] }); input.dispatchEvent(new Event('change', { bubbles: true })); });
     await flush(); await flush();

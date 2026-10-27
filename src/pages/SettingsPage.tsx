@@ -31,13 +31,13 @@ const card = 'border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#f
 const h2 = 'm-0 text-[15px] font-semibold text-[var(--text,#17233A)]';
 const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer disabled:opacity-40';
 
-/** The four groups of Settings. On desktop they are a list on the left and one is shown at a time. */
+/** The four groups of Settings. One is shown at a time: tabs across the top on phones and tablets, a list on the left on desktop. */
 type SectionId = 'privacy' | 'look' | 'content' | 'account';
-const SECTIONS: Array<{ id: SectionId; label: string }> = [
-  { id: 'privacy', label: 'Privacy and safety' },
-  { id: 'look', label: 'Appearance' },
-  { id: 'content', label: 'Your content' },
-  { id: 'account', label: 'Account' },
+const SECTIONS: Array<{ id: SectionId; label: string; tab: string }> = [
+  { id: 'privacy', label: 'Privacy and safety', tab: 'Privacy' },
+  { id: 'look', label: 'Appearance', tab: 'Appearance' },
+  { id: 'content', label: 'Your content', tab: 'Content' },
+  { id: 'account', label: 'Account', tab: 'Account' },
 ];
 
 /** Sample bubbles for the live preview. Fixed text, not real messages. */
@@ -54,7 +54,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
   const layout = useLayout();
   const split = layout === 'desktop'; // two panes: section list and the chosen section
   const [section, setSection] = useState<SectionId>('privacy');
-  const show = (id: SectionId) => !split || section === id;
+  const show = (id: SectionId) => section === id;
+  const tabKeys = (e: React.KeyboardEvent<HTMLElement>) => {
+    // Left/Right/Home/End move between tabs and select the one that gets focus
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const i = SECTIONS.findIndex((x) => x.id === section);
+    const n = e.key === 'Home' ? 0 : e.key === 'End' ? SECTIONS.length - 1 : e.key === 'ArrowRight' ? (i + 1) % SECTIONS.length : (i - 1 + SECTIONS.length) % SECTIONS.length;
+    e.preventDefault();
+    setSection(SECTIONS[n]!.id);
+    document.getElementById(`settings-tab-${SECTIONS[n]!.id}`)?.focus();
+  };
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // "Saved." style notices fade away by themselves; errors stay until the next action
@@ -183,6 +192,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
         <h1 className="m-0 text-[18px] font-semibold text-[var(--text,#17233A)]">Settings</h1>
       </header>
 
+      {!split && (
+        <div role="tablist" aria-label="Settings sections" onKeyDown={tabKeys} className="sticky top-[48px] z-30 flex bg-[var(--bg,#fff)] border-b border-[var(--line,#E8EBF0)] overflow-x-auto">
+          {SECTIONS.map(({ id, tab }) => (
+            <button
+              key={id}
+              id={`settings-tab-${id}`}
+              type="button"
+              role="tab"
+              aria-selected={section === id}
+              aria-controls="settings-panel"
+              tabIndex={section === id ? 0 : -1}
+              onClick={() => setSection(id)}
+              className={`flex-1 shrink-0 min-h-[44px] px-3 text-[14px] font-semibold whitespace-nowrap cursor-pointer bg-transparent border-0 border-b-2 ${section === id ? 'border-[var(--blue,#244C8A)] text-[var(--blue,#244C8A)]' : 'border-transparent text-[var(--muted,#5B6577)]'}`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className={split ? 'flex items-start gap-6 p-6' : 'p-3 space-y-3'}>
         {split && (
           <div role="group" aria-label="Settings sections" onKeyDown={arrowKeyNav} className="sticky top-[72px] shrink-0 w-[200px] space-y-1">
@@ -199,7 +228,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
             ))}
           </div>
         )}
-        <div className={split ? 'flex-1 min-w-0 max-w-[640px] space-y-3' : 'space-y-3'}>
+        <div {...(split ? {} : { role: 'tabpanel', id: 'settings-panel', 'aria-labelledby': `settings-tab-${section}` })} className={split ? 'flex-1 min-w-0 max-w-[640px] space-y-3' : 'space-y-3'}>
         {message && <div role={message.type === 'error' ? 'alert' : 'status'} className={`rise-in p-2.5 rounded-[8px] border text-[13px] ${message.type === 'error' ? 'border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)]' : 'border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)]'} bg-[var(--bg,#fff)]`}>{message.text}</div>}
 
         <div className="rise-in border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 flex items-center gap-3" style={{ '--i': 0 } as React.CSSProperties}>

@@ -51,6 +51,8 @@ Base commit: `ba1d936`. Patches are cumulative from that base.
 
 - **Add text to pictures, and favorites** (migration 017): server-side favorites (`worker/stickers.ts`, `sticker_favorites`, `sticker_library.source`), the text editor (`src/lib/image-edit.ts`, `ImageEditor`, `EditFlow`, `EditedResult`), a full-screen viewer for post photos, Edit in the chat viewer, Add text in the send preview and on the New post page, sticker options sheet on stickers in chats/posts/comments, Favorites chip in the picker, and `"template": true` packs that open the editor. Tests: `tests/sticker-favorites.test.ts`, `tests/image-edit.test.ts`, `tests/editor-favorites-ui.test.tsx`; attack suite extended (358 checks). Not verified: the editor and the canvas drawing in a real browser or on a phone (jsdom and a recorded canvas only), and no real meme templates were in the repo when this was written.
 
+- **Settings in tabs:** on phones and tablets Settings shows one section at a time under four tabs (Privacy, Appearance, Content, Account) with the profile card on top; arrow keys, Home and End move between tabs. Desktop keeps the section list on the left. Tests in `tests/settings-ui.test.tsx` and `tests/layout-panes.test.tsx`. Not looked at on a real phone.
+
 ## Not started
 - Phase 3 leftover: the compact composer is used for comments, but the New post page still has its own text box (it also holds photos, the poll builder and the sticker choice). The post page does now take photos or one sticker/GIF, and compresses photos, but its text box is its own.
 - Nothing planned is left in Phases 1 to 5.

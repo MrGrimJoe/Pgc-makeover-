@@ -92,16 +92,24 @@ describe('Messages: one pane on phones, two panes on tablets and desktops', () =
   });
 });
 
-describe('Settings: one page, and on desktop a section list with one section at a time', () => {
+describe('Settings: tabs on phones and tablets, and on desktop a section list; one section at a time', () => {
   const settings = () => <SettingsPage currentUser={me} onProfileUpdated={() => undefined} onAccountDeleted={() => undefined} onLogout={() => undefined} onBack={() => undefined} />;
   const h2s = () => [...document.querySelectorAll('h2')].map((e) => e.textContent);
   const sectionMenu = () => document.querySelector('[role="group"][aria-label="Settings sections"]');
 
   for (const width of [390, 820]) {
-    it(`${width}px: every section on one scrolling page, no section list`, async () => {
+    it(`${width}px: four tabs across the top, one section at a time, no side list`, async () => {
       await open(width, settings());
       expect(sectionMenu()).toBeNull();
-      for (const h of ['Chat background', 'Who can message you', 'Blocked people', 'Interests', 'My stickers & GIFs', 'Account']) expect(h2s(), h).toContain(h);
+      const tabs = () => [...document.querySelectorAll<HTMLElement>('[role="tablist"] [role="tab"]')];
+      expect(tabs().map((t) => t.textContent)).toEqual(['Privacy', 'Appearance', 'Content', 'Account']);
+      expect(h2s()).toContain('Who can message you');
+      expect(h2s()).not.toContain('Chat background');
+      for (const [name, heading] of [['Appearance', 'Chat background'], ['Content', 'Interests'], ['Account', 'Account']] as const) {
+        await click(byText(document.body, '[role="tab"]', name));
+        expect(h2s(), heading).toContain(heading);
+        expect(h2s()).not.toContain('Who can message you');
+      }
     });
   }
 
@@ -122,7 +130,7 @@ describe('Settings: one page, and on desktop a section list with one section at 
     expect(await axeViolations(document.body)).toBe('');
   });
 
-  it('resizing to desktop and back keeps all sections reachable', async () => {
+  it('resizing to desktop and back keeps all sections reachable, with the chosen section kept', async () => {
     const vp = await open(390, settings());
     await act(async () => { vp.resizeTo(1280); });
     await flush();
@@ -130,6 +138,8 @@ describe('Settings: one page, and on desktop a section list with one section at 
     await act(async () => { vp.resizeTo(390); });
     await flush();
     expect(sectionMenu()).toBeNull();
+    expect(document.querySelectorAll('[role="tab"]').length).toBe(4);
+    await click(byText(document.body, '[role="tab"]', 'Appearance'));
     expect(h2s()).toContain('Chat background');
   });
 });
