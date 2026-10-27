@@ -31,6 +31,8 @@ export {
   createLocalImpressionSender,
   createPipelineFeedSource,
   forgetFeedDataFor,
+  invalidateFeedFor,
+  OWN_POST_LEAD_MS,
   type FeedPipeline,
   type FeedPipelineOptions,
   type LocalImpressionSenderOptions,

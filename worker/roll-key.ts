@@ -2,10 +2,6 @@ import type { Env } from './types.ts';
 
 const DEV_ONLY_SECRET = 'development-only-roll-key-secret';
 
-/** Is the card scan a required part of sign-up? On unless REQUIRE_CARD_SCAN is exactly "false". */
-export function cardScanRequired(env: Env): boolean {
-  return env.REQUIRE_CARD_SCAN !== 'false';
-}
 
 /**
  * The stored form of "this student at this campus": HMAC-SHA256(secret, campusKey | normalized roll), hex.

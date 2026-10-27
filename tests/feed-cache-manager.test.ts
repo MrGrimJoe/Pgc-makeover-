@@ -269,21 +269,77 @@ describe('offline', () => {
     clock.t += 10 * MIN;
     server.failWith = new FeedHttpError(401, 'Unauthorized');
     const m = make();
-    // stale cache is still served (the person is only refreshing in the background)...
+    // a stale cache is still served when the refresh is refused...
     expect((await m.start()).source).toBe('cache');
     // ...but a cold start with a 401 is an error, not an empty "offline" feed
     await expect(make({ userId: 'someone-else' }).start()).rejects.toMatchObject({ status: 401 });
   });
 });
 
-describe('a stale cache', () => {
-  it('is used immediately and refreshed in the background', async () => {
+describe('the request limiter and a stale cache', () => {
+  const bootstraps = () => server.calls.filter((c) => c.kind === 'bootstrap').length;
+
+  it('a cold cache always asks for a full batch, however the limiter is set', async () => {
+    expect(await make({ lowWaterMark: 1 }).start()).toEqual({ source: 'network', stale: false });
+    expect(bootstraps()).toBe(1);
+    expect((await make().getStats()).total).toBeGreaterThanOrEqual(30);
+  });
+
+  it('an old cache that still holds enough unseen posts does not ask the server (the limiter)', async () => {
     await make().start();
     server.calls = [];
-    clock.t += 6 * MIN;
-    const m = make();
-    expect(await m.start()).toEqual({ source: 'cache', stale: true });
-    await vi.waitFor(() => expect(server.calls.filter((c) => c.kind === 'bootstrap')).toHaveLength(1));
+    clock.t += 60 * MIN; // very old, but 30 unseen posts are stored and the limit is 15
+    expect(await make().start()).toEqual({ source: 'cache', stale: true }); // flagged old, nothing requested
+    expect(server.calls).toHaveLength(0);
+  });
+
+  it('once the stored unseen posts fall below the limit, an old cache refreshes before the feed is shown', async () => {
+    await make().start();
+    server.calls = [];
+    server.posts = [makePost(0, { author: 'me' }), ...server.posts];
+    clock.t += 2 * MIN;
+    const m = make({ lowWaterMark: 1000 }); // stands for "fewer unseen than the limit"
+    expect(await m.start()).toEqual({ source: 'cache', stale: false });
+    expect(bootstraps()).toBe(1);
+    expect(ids(await m.getPool())[0]).toBe('p000');
+  });
+
+  it('a young cache never refreshes, even when the stock is low (at most one refresh a minute)', async () => {
+    await make().start();
+    server.calls = [];
+    clock.t += 30_000;
+    expect(await make({ lowWaterMark: 1000 }).start()).toEqual({ source: 'cache', stale: false });
+    expect(server.calls).toHaveLength(0);
+  });
+
+  it('a slow server does not hold the feed back: the stored posts show, flagged stale, and the refresh carries on', async () => {
+    await make().start();
+    clock.t += 2 * MIN;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const slow = make({ lowWaterMark: 1000, staleWaitMs: 20, fetchBatch: async (kind, params) => { await gate; return server.fetcher(kind, params); } });
+    expect(await slow.start()).toEqual({ source: 'cache', stale: true });
+    release();
+    await vi.waitFor(async () => expect((await slow.getStats()).bootstrappedAt).toBe(clock.t));
+  });
+
+  it('markStale owes a refresh that ignores both the limiter and the age, survives a reload, and is paid once', async () => {
+    await make().start();
+    await make().markStale();
+    server.calls = [];
+    clock.t += 5_000; // young, and 30 unseen posts stored
+    expect(await make().start()).toEqual({ source: 'cache', stale: false });
+    expect(bootstraps()).toBe(1);
+    clock.t += 5_000;
+    await make().start(); // paid: back to the limiter
+    expect(bootstraps()).toBe(1);
+  });
+
+  it('markStale on a scope that was never stored does nothing', async () => {
+    await make().markStale();
+    server.calls = [];
+    expect((await make().start()).source).toBe('network'); // starts cold, as it would have anyway
+    expect(bootstraps()).toBe(1);
   });
 });
 

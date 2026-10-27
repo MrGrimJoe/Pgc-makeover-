@@ -17,6 +17,9 @@ export function classifyPipelinePost(post: PipelinePost): ModerationState {
   return post.meta.isWild ? 'WILD' : 'SAFE';
 }
 
+/** How long a post the viewer just made stays at the top of their own For You and Following. */
+export const OWN_POST_LEAD_MS = 10 * 60_000;
+
 export interface PipelineSourceOptions {
   cache: FeedCacheManager;
   personalization: LocalPersonalization;
@@ -58,6 +61,9 @@ export function createPipelineFeedSource(options: PipelineSourceOptions): Pipeli
       pool.filter((p) => !served.has(p.id)),
       { trending },
     );
+    // What the person just posted leads their own feed for a few minutes, so a new post never looks lost.
+    const justMine = (p: PipelinePost) => p.author_id === cache.userId && cache.now() - p.meta.timestamp < OWN_POST_LEAD_MS;
+    ranked.sort((a, b) => Number(justMine(b)) - Number(justMine(a))); // stable: the rest keeps its ranked order
     pools = emptyPools();
     for (const post of ranked) pools[classifyPipelinePost(post)].push(post);
     builtVersion = cache.version;
@@ -178,6 +184,22 @@ export function createFeedPipeline(options: FeedPipelineOptions): FeedPipeline {
     impressionSender: (upstream) => createLocalImpressionSender({ personalization, cache, getPost: source.getPost, upstream }),
     dispose: () => cache.destroy(),
   };
+}
+
+/**
+ * Call it after the person posts: the next time the feed opens it asks the server for the newest posts first (in both
+ * feed modes) instead of trusting what is stored. Best effort; never throws.
+ */
+export async function invalidateFeedFor(userId: string): Promise<void> {
+  for (const mode of ['for_you', 'following'] as const) {
+    try {
+      const cache = new FeedCacheManager({ userId, mode });
+      await cache.markStale();
+      await cache.destroy();
+    } catch {
+      /* nothing stored, or storage unavailable: the feed then simply starts cold */
+    }
+  }
 }
 
 /**

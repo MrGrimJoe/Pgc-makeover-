@@ -5,6 +5,7 @@ import { Avatar } from '../components/Avatar.tsx';
 import { compareCard, describeCheck, hasMismatch, type PrintedCheck } from '../../shared/card-match.ts';
 import { readCardText } from '../lib/cardOcr.ts';
 import { CardScanner } from '../components/CardScanner.tsx';
+import { ACCEPTED_TYPES, prefersPhotoUpload, readCardPhoto } from '../lib/cardPhoto.ts';
 import { TurnstileWidget } from '../components/TurnstileWidget.tsx';
 import { PROGRAMS, cleanSection, isValidSession } from '../../shared/academic.ts';
 import { ROLL_INPUT_PATTERN, barcodeMatchesRoll, isUsableRoll, normalizeRoll } from '../../shared/roll.ts';
@@ -67,9 +68,15 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
   const [acadSession, setAcadSession] = useState('');
   const [section, setSection] = useState('');
   const [roll, setRoll] = useState('');
-  const [cardScan, setCardScan] = useState<'required' | 'optional'>('required');
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  // Laptops and desktops get "upload a photo of your card" instead of the camera scanner (decided once per visit)
+  const [uploadMode] = useState(prefersPhotoUpload);
+  const [cardSource, setCardSource] = useState<'camera' | 'upload'>('camera');
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoProblem, setPhotoProblem] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const cardFileRef = useRef<HTMLInputElement>(null);
   const [printed, setPrinted] = useState<PrintedCheck | 'reading' | null>(null);
   const [mismatchOk, setMismatchOk] = useState(false);
   const [siteKey, setSiteKey] = useState<string | null>(null);
@@ -96,7 +103,6 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
         if (cancelled) return;
         setRealName(data.suggested_name || '');
         setEmail(data.email);
-        setCardScan(data.card_scan === 'optional' ? 'optional' : 'required');
         setSiteKey(data.turnstile_site_key ?? null);
         setSession('ready');
         const cls = await fetch('/api/classes');
@@ -163,8 +169,8 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
     (!printed || !hasMismatch(printed) || mismatchOk) &&
     ROLL_INPUT_PATTERN.test(roll.trim()) &&
     isUsableRoll(normalizeRoll(roll)) &&
-    // a scan that disagrees with the typed roll number blocks sign-up; an unscanned card blocks it only when required
-    (scannedBarcode ? barcodeMatchesRoll(scannedBarcode, roll) : cardScan === 'optional');
+    // The card is not optional: no scan (or picture) blocks sign-up, and so does a barcode that disagrees with the roll number.
+    (scannedBarcode ? barcodeMatchesRoll(scannedBarcode, roll) : false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,7 +190,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
           session: acadSession.trim(),
           ...(section.trim() ? { section: section.trim() } : {}),
           roll_number: roll.trim(),
-          ...(scannedBarcode ? { card: { barcode: scannedBarcode, ...(typeof printed === 'object' && printed ? { printed } : {}) } } : {}),
+          ...(scannedBarcode ? { card: { barcode: scannedBarcode, ...(cardSource === 'upload' ? { source: 'upload' as const } : {}), ...(typeof printed === 'object' && printed ? { printed } : {}) } } : {}),
           ...(siteKey && turnstileToken ? { turnstile_token: turnstileToken } : {}),
         }),
       });
@@ -206,6 +212,42 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
       if (siteKey) setTurnstileReset((n) => n + 1); // a check can be used once
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /** A barcode was read, from the camera or from a picture. Then the printed text is read on this device and compared. */
+  const handleCardRead = (text: string, frame: HTMLCanvasElement | undefined, source: 'camera' | 'upload') => {
+    setScannedBarcode(text);
+    setCardSource(source);
+    setScanning(false);
+    setError(null);
+    setPhotoProblem(null);
+    setMismatchOk(false);
+    setPrinted(null);
+    if (!frame || !campus) return;
+    // Read the printed text on this device, then compare. A failure just means "could not read".
+    setPrinted('reading');
+    const typed = { name: realName, campusName: campus.campus ? campus.campus.name : campus.other, program, session: acadSession.trim() };
+    void readCardText(frame).then((t) => {
+      setPrinted(compareCard(t, typed));
+      frame.width = 0; // the picture is dropped; nothing keeps it
+    });
+  };
+
+  /** A picture of the card was chosen or dropped (laptop). Rejected pictures say why; nothing is uploaded either way. */
+  const handleCardPicture = async (file: File | undefined) => {
+    if (!file || photoBusy) return;
+    setPhotoBusy(true);
+    setPhotoProblem(null);
+    setScannedBarcode(null);
+    setPrinted(null);
+    try {
+      const result = await readCardPhoto(file);
+      if (result.ok) handleCardRead(result.barcode, result.frame, 'upload');
+      else setPhotoProblem(result.message);
+    } finally {
+      setPhotoBusy(false);
+      if (cardFileRef.current) cardFileRef.current.value = ''; // the same file can be chosen again
     }
   };
 
@@ -450,16 +492,43 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
             </p>
           ) : (
             <p className="text-[12px] text-[var(--muted,#5B6577)]">
-              {cardScan === 'required'
-                ? 'Scan the barcode on your card to finish. It is read on this device and the picture is not saved.'
-                : 'Scanning your card is optional for now. Without it your account is marked as not checked.'}
+              {uploadMode
+                ? 'Upload a picture of your card to finish. It is required, and a blurry, dark or cropped picture will be turned down with a reason.'
+                : 'Scan the barcode on your card to finish. It is required. It is read on this device and the picture is not saved.'}
             </p>
           )}
           {printed === 'reading' && <p role="status" className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">Reading the printed details on your card...</p>}
           {printed && printed !== 'reading' && <PrintedSummary check={printed} confirmed={mismatchOk} onConfirm={setMismatchOk} />}
-          <button type="button" onClick={() => { setPrinted(null); setScanning(true); }} className={`${secondaryButton} mt-2`}>
-            {scannedBarcode ? 'Scan again' : 'Scan student card'}
-          </button>
+          {uploadMode ? (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); void handleCardPicture(e.dataTransfer?.files?.[0]); }}
+              className={`mt-2 rounded-[12px] border border-dashed p-3 space-y-2 ${dragging ? 'border-[var(--blue,#244C8A)]' : 'border-[var(--line,#E8EBF0)]'}`}
+            >
+              <input
+                ref={cardFileRef}
+                id="signup-card-file"
+                type="file"
+                accept={ACCEPTED_TYPES.join(',')}
+                aria-label="Choose a picture of your student card"
+                className="sr-only"
+                onChange={(e) => void handleCardPicture(e.target.files?.[0])}
+              />
+              <p className="text-[12px] text-[var(--muted,#5B6577)] m-0">
+                Drop a clear picture of the front of your card here, with the whole barcode in it. It is read on this device and the picture is not saved or sent anywhere.
+              </p>
+              {photoProblem && <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)] m-0">{photoProblem}</p>}
+              {photoBusy && <p role="status" className="text-[12px] text-[var(--muted,#5B6577)] m-0">Reading your picture...</p>}
+              <button type="button" disabled={photoBusy} onClick={() => cardFileRef.current?.click()} className={secondaryButton}>
+                {scannedBarcode ? 'Choose a different picture' : 'Upload a picture of your student card'}
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => { setPrinted(null); setScanning(true); }} className={`${secondaryButton} mt-2`}>
+              {scannedBarcode ? 'Scan again' : 'Scan student card'}
+            </button>
+          )}
         </div>
 
         {siteKey && <TurnstileWidget siteKey={siteKey} onToken={setTurnstileToken} resetKey={turnstileReset} />}
@@ -474,24 +543,10 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
           {submitting ? 'Creating account...' : 'Create account'}
         </button>
       </form>
-      {scanning && (
+      {scanning && !uploadMode && (
         <CardScanner
           onClose={() => setScanning(false)}
-          onResult={(text, frame) => {
-            setScannedBarcode(text);
-            setScanning(false);
-            setError(null);
-            setMismatchOk(false);
-            setPrinted(null);
-            if (!frame || !campus) return;
-            // Read the printed text on this device, then compare. A failure just means "could not read".
-            setPrinted('reading');
-            const typed = { name: realName, campusName: campus.campus ? campus.campus.name : campus.other, program, session: acadSession.trim() };
-            void readCardText(frame).then((t) => {
-              setPrinted(compareCard(t, typed));
-              frame.width = 0; // the picture is dropped; nothing keeps it
-            });
-          }}
+          onResult={(text, frame) => handleCardRead(text, frame, 'camera')}
         />
       )}
     </div>

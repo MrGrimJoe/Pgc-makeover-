@@ -3,7 +3,7 @@
  * A real browser signs up for real: Chromium with a fake camera that "looks at" the sample student card, so the barcode
  * scan, the printed-text reading and the whole form run exactly as on a phone (the camera picture is a file here).
  *
- *   1. Start the server with the scan required:   REQUIRE_CARD_SCAN=true PORT=3111 npm run dev
+ *   1. Start the server:   PORT=3111 npm run dev        (the card scan is always required)
  *   2. npm install --no-save playwright           (and a Chromium: CHROMIUM_PATH=/path/to/chrome, or npx playwright install chromium)
  *   3. BASE_URL=http://localhost:3111 npx tsx scripts/e2e-signup.mts
  *

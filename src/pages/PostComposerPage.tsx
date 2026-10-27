@@ -10,6 +10,7 @@ import { StickerView } from '../components/StickerView.tsx';
 import { useFocusTrap } from '../lib/focus-trap.ts';
 import { browserMediaEnv, compressPhoto } from '../lib/media.ts';
 import { prepareAndUpload, uploadBlob } from '../lib/media-upload.ts';
+import { invalidateFeedFor } from '../feed-pipeline/index.ts';
 
 interface PostComposerPageProps {
   /** The signed-in person (recent stickers are remembered per person on this device). */
@@ -120,6 +121,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
       setMediaList([]);
       setStickerKey(null);
       setPollOptions(null);
+      await invalidateFeedFor(currentUserId); // the feed asks the server for the newest posts the next time it opens
       onPostCreated();
     } catch (err) {
       setError((err as Error).message);

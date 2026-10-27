@@ -46,6 +46,8 @@ export const OCR_RESULTS = ['match', 'uncertain', 'mismatch', 'unreadable'] as c
 export const cardScanSchema = z
   .object({
     barcode: z.string().trim().min(1).max(64),
+    /** How the barcode was read: the live camera, or a picture file chosen on a laptop. Recorded as the verification method. */
+    source: z.enum(['camera', 'upload']).optional(),
     /** How the printed text on the card compared with what was typed. Reported by the browser; informational only. */
     printed: z
       .object({ name: z.enum(OCR_RESULTS), campus: z.enum(OCR_RESULTS), program: z.enum(OCR_RESULTS), session: z.enum(OCR_RESULTS) })
@@ -156,7 +158,8 @@ export interface SignupSessionResponse {
   /** The verified Google email, shown back to the person signing up. */
   email: string | null;
   /** Whether the card scan is a required step of this sign-up. */
-  card_scan: 'required' | 'optional';
+  /** Always 'required': the card is not optional. Kept in the answer so an older page still understands it. */
+  card_scan: 'required';
   /** Public Turnstile site key when the check is on; the sign-up form then shows the widget. */
   turnstile_site_key?: string;
 }

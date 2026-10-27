@@ -24,6 +24,10 @@ import {
 export const FEED_DB_NAME = 'pgc-feed-cache';
 const DB_VERSION = 1;
 const FALLBACK_TTL_MS = 14 * 24 * 3_600_000;
+/** A stored feed younger than this is used as it is. Older, the newest posts are fetched before the feed is shown. */
+export const DEFAULT_FRESH_MS = 60_000;
+/** How long opening the feed waits for that refresh before showing what is stored (the refresh carries on behind it). */
+export const DEFAULT_STALE_WAIT_MS = 2_500;
 
 export interface CachedPostRecord {
   /** `${userId}|${mode}|${postId}` */
@@ -53,6 +57,8 @@ export interface ScopeMeta {
   /** Last view sequence number handed out. */
   seq: number;
   bootstrappedAt: number | null;
+  /** True when a refresh is owed regardless of how much is stored (the person posted). Cleared by the next bootstrap. */
+  dirty?: boolean;
   /** Hot topics from the latest batch, for local ranking. */
   trending: Record<string, number>;
 }
@@ -216,10 +222,17 @@ export interface FeedCacheOptions {
   fetchBatch?: BatchFetcher;
   /** Posts to ask for per batch (the server clamps to 30..50). */
   batchSize?: number;
-  /** Pre-fetch when fewer than this many unseen posts are left. */
+  /**
+   * The request limiter: the server is asked for more posts only when fewer than this many unseen posts are stored
+   * (default 15). It covers the background pre-fetch and the refresh of an old cache when the feed opens. It does not
+   * cover the first request on a cold cache (that always asks for a full batch), a refresh after the person posts, or
+   * a page that cannot be filled from what is stored. So the server is asked slowly, as the stored posts are used up.
+   */
   lowWaterMark?: number;
   /** A cache bootstrapped this recently is used as it is, with no server call at start. Default 5 minutes. */
   freshMs?: number;
+  /** How long `start()` waits for a refresh of a stale cache before showing what is stored. Default 2.5 seconds. */
+  staleWaitMs?: number;
   /** Cap on stored posts per mode. Only viewed (history) posts are evicted, oldest first. Default 400. */
   maxRecords?: number;
   /** After a failed background fetch, wait this long before trying again. Default 15 s. */
@@ -267,6 +280,7 @@ export class FeedCacheManager {
   private readonly batchSize: number;
   private readonly lowWater: number;
   private readonly freshMs: number;
+  private readonly staleWaitMs: number;
   private readonly maxRecords: number;
   private readonly backoffMs: number;
   private readonly dbName: string;
@@ -287,7 +301,8 @@ export class FeedCacheManager {
     this.fetcher = options.fetchBatch ?? httpBatchFetcher;
     this.batchSize = options.batchSize ?? BATCH_SIZE_DEFAULT;
     this.lowWater = options.lowWaterMark ?? LOW_WATER_MARK;
-    this.freshMs = options.freshMs ?? 5 * 60_000;
+    this.freshMs = options.freshMs ?? DEFAULT_FRESH_MS;
+    this.staleWaitMs = options.staleWaitMs ?? DEFAULT_STALE_WAIT_MS;
     this.maxRecords = options.maxRecords ?? 400;
     this.backoffMs = options.retryBackoffMs ?? 15_000;
     this.dbName = options.dbName ?? FEED_DB_NAME;
@@ -361,6 +376,11 @@ export class FeedCacheManager {
 
   private online(): boolean {
     return this.onlineFn();
+  }
+
+  /** The cache's clock (injectable for tests), so everything that judges the age of a post uses the same time. */
+  now(): number {
+    return this.nowFn();
   }
 
   /** Whether the phone currently reports a connection. */
@@ -475,7 +495,10 @@ export class FeedCacheManager {
         meta.trending = resp.trending;
         meta.nextCursor = resp.batch.nextCursor;
         meta.hasMore = resp.batch.hasMore;
-        if (resp.kind === 'bootstrap') meta.bootstrappedAt = now;
+        if (resp.kind === 'bootstrap') {
+          meta.bootstrappedAt = now;
+          delete meta.dirty;
+        }
         await b.putMeta(meta);
 
         // Bound the history. Unseen posts are never evicted: they are what the feed still has to show.
@@ -623,9 +646,11 @@ export class FeedCacheManager {
   // ---------------------------------------------------------------- lifecycle
 
   /**
-   * Gets the feed ready. A warm cache is used straight away (and refreshed in the background if it is old);
-   * a cold one asks the server. With no connection it falls back to whatever is stored, and only throws when
-   * there is nothing at all.
+   * Gets the feed ready. A cold cache asks the server for a full batch. A stored feed is used as it is while it holds
+   * enough unseen posts (`lowWaterMark`); the server is asked for more only when the stock is low and the stored feed
+   * is older than `freshMs`, or when a refresh is owed because the person posted (`markStale`). Such a refresh is done
+   * before the feed is shown, waiting at most `staleWaitMs`; after that, or with no connection, the stored posts are
+   * shown and the refresh carries on behind them. Only throws when there is nothing at all to show.
    */
   async start(): Promise<StartResult> {
     await this.purgeExpired();
@@ -633,9 +658,24 @@ export class FeedCacheManager {
     const age = meta.bootstrappedAt === null ? Infinity : this.nowFn() - meta.bootstrappedAt;
     const pool = await this.getPool();
     if (pool.length > 0) {
-      const stale = age > this.freshMs;
-      if (stale) void this.bootstrap().catch(() => void (this.lastFailureAt = this.nowFn()));
-      return { source: 'cache', stale };
+      const aged = age > this.freshMs;
+      const owed = meta.dirty === true;
+      const stockLow = pool.length < this.lowWater;
+      if (!owed && !(aged && stockLow)) return { source: 'cache', stale: aged }; // enough stored: no request
+      if (!this.online()) return { source: 'cache', stale: true };
+      const refresh = this.bootstrap().then(
+        () => true,
+        () => {
+          this.lastFailureAt = this.nowFn();
+          return false; // the stored posts are still shown (a signed-out answer is picked up by the next request)
+        },
+      );
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const wait = new Promise<false>((resolve) => {
+        timer = setTimeout(() => resolve(false), this.staleWaitMs);
+      });
+      const refreshed = await Promise.race([refresh, wait]).finally(() => clearTimeout(timer));
+      return { source: 'cache', stale: !refreshed };
     }
     try {
       await this.bootstrap();
@@ -650,6 +690,22 @@ export class FeedCacheManager {
           : 'Could not reach the server and no posts are saved on this phone yet.',
       );
     }
+  }
+
+  /**
+   * Makes the next `start()` fetch the newest posts first, even if the cache is young and holds plenty (the limiter
+   * does not apply). Call it when something the person did changes what the feed should show (they posted). Kept in
+   * storage, so it survives a reload. Does nothing for a scope with nothing stored (that one starts cold anyway).
+   */
+  markStale(): Promise<void> {
+    return this.serial(() =>
+      this.run(async (b) => {
+        const meta = await b.getMeta(this.metaKey());
+        if (!meta) return;
+        meta.dirty = true;
+        await b.putMeta(meta);
+      }),
+    );
   }
 
   /** Deletes every stored post and cursor of expired posts (all feed modes for this person). */

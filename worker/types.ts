@@ -36,7 +36,6 @@ export interface Env {
   ROLL_KEY_SECRET?: string;
 
   // 'false' lets people sign up without scanning their card (they stay 'unverified'). Anything else requires the scan.
-  REQUIRE_CARD_SCAN?: string;
 }
 
 export interface ClassRow {

@@ -34,7 +34,6 @@ let calls: Recorded[];
 let sessionValid: boolean;
 let completeStatus: number;
 let takenUsernames: string[];
-let cardScanMode: 'required' | 'optional';
 let turnstileKey: string | undefined;
 
 function json(body: unknown, status = 200) {
@@ -50,7 +49,7 @@ function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 
   if (url === '/api/signup/session') {
     return Promise.resolve(
-      sessionValid ? json({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com', card_scan: cardScanMode, ...(turnstileKey ? { turnstile_site_key: turnstileKey } : {}) }) : json({ error: 'expired' }, 401)
+      sessionValid ? json({ valid: true, suggested_name: 'Ayesha K', email: 'ayesha@gmail.com', card_scan: 'required', ...(turnstileKey ? { turnstile_site_key: turnstileKey } : {}) }) : json({ error: 'expired' }, 401)
     );
   }
   if (url === '/api/classes') return Promise.resolve(json({ classes: [{ id: 'cls_2026', name: 'Class of 2026' }] }));
@@ -127,6 +126,12 @@ async function click(el: Element) {
 
 const submitButton = () => [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Create account')) as HTMLButtonElement;
 
+/** Completes the card step: a scan whose barcode matches the roll number typed by fillValidForm. */
+async function scanCardOk() {
+  await click([...container.querySelectorAll('button')].find((b) => /Scan (student card|again)/.test(b.textContent ?? ''))!);
+  await waitFor(() => /barcode matches your roll number/.test(container.textContent ?? ''), 'card scanned');
+}
+
 async function fillValidForm(pickCampus = true) {
   await type('signup-real-name', 'Ayesha Khan');
   await type('signup-username', 'ayesha_k');
@@ -158,7 +163,6 @@ beforeEach(() => {
   sessionValid = true;
   completeStatus = 201;
   takenUsernames = [];
-  cardScanMode = 'optional';
   scanOutcome = { barcode: '20240907' };
   cameraStopped = 0;
   ocrText = null;
@@ -200,6 +204,7 @@ describe('Onboarding page (interactive)', () => {
     expect(container.textContent).toContain('3 to 20 lowercase letters');
     expect(submitButton().disabled).toBe(true);
     await fillValidForm();
+    await scanCardOk();
     expect(submitButton().disabled).toBe(false);
   });
 
@@ -221,6 +226,7 @@ describe('Onboarding page (interactive)', () => {
   it('chooses a campus by keyboard and submits the right data, then offers a photo step', async () => {
     await mount();
     await fillValidForm();
+    await scanCardOk();
     expect(container.textContent).toContain(LISTED.name);
     expect(container.textContent).toContain('Change');
     await click(submitButton());
@@ -233,6 +239,7 @@ describe('Onboarding page (interactive)', () => {
       campus_id: LISTED.id,
       class_id: 'cls_2026',
       program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907',
+      card: { barcode: '20240907' },
     });
   });
 
@@ -240,6 +247,7 @@ describe('Onboarding page (interactive)', () => {
     const onComplete = vi.fn();
     await mount(onComplete);
     await fillValidForm();
+    await scanCardOk();
     await click(submitButton());
     await waitFor(() => /Skip for now/.test(container.textContent ?? ''), 'skip button');
     await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Skip for now')!);
@@ -250,6 +258,7 @@ describe('Onboarding page (interactive)', () => {
     completeStatus = 409;
     await mount();
     await fillValidForm();
+    await scanCardOk();
     await click(submitButton());
     await waitFor(() => !!container.querySelector('[role="alert"]'), 'error message');
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('already taken');
@@ -276,6 +285,7 @@ describe('Onboarding page (interactive)', () => {
   it('takes a campus that is not listed as free text and submits campus_other (never campus_id)', async () => {
     await mount();
     await fillValidForm(false);
+    await scanCardOk();
     const input = byId<HTMLInputElement>('signup-campus-input');
     await act(async () => input.focus());
     await type('signup-campus-input', 'Green Valley College');
@@ -293,6 +303,7 @@ describe('Onboarding page (interactive)', () => {
       campus_other: 'Green Valley College',
       class_id: 'cls_2026',
       program: 'fsc_pre_engineering', session: '2024-2026', roll_number: '2024-0907',
+      card: { barcode: '20240907' },
     });
   });
 });
@@ -308,7 +319,6 @@ describe('Student card step', () => {
   }
 
   it('needs a scan when the server asks for one, and sends the barcode with the form', async () => {
-    cardScanMode = 'required';
     await mount();
     await fillValidForm();
     expect(submitButton().disabled).toBe(true);
@@ -324,7 +334,6 @@ describe('Student card step', () => {
   });
 
   it('a barcode that disagrees with the typed roll number blocks sign-up and says why; fixing the number clears it', async () => {
-    cardScanMode = 'required';
     scanOutcome = { barcode: '20240999' };
     await mount();
     await fillValidForm();
@@ -337,15 +346,14 @@ describe('Student card step', () => {
     expect(submitButton().disabled).toBe(false);
   });
 
-  it('when the scan is optional the form can be sent without one', async () => {
-    cardScanMode = 'optional';
+  it('the card is not optional: with everything else valid, Create account stays disabled until it is scanned', async () => {
     await mount();
     await fillValidForm();
-    expect(container.textContent).toContain('Scanning your card is optional');
+    expect(container.textContent).toContain('It is required');
+    expect(submitButton().disabled).toBe(true);
+    await click(scanButton());
+    await waitFor(() => /barcode matches your roll number/.test(container.textContent ?? ''), 'match');
     expect(submitButton().disabled).toBe(false);
-    await click(submitButton());
-    await waitFor(() => !!calls.find((c) => c.url === '/api/signup/complete'), 'post');
-    expect((calls.find((c) => c.url === '/api/signup/complete')!.body as Record<string, unknown>).card).toBeUndefined();
   });
 
   it.each([
@@ -353,7 +361,6 @@ describe('Student card step', () => {
     ['no-camera', /No camera was found/],
     ['unsupported', /cannot open the camera/],
   ] as const)('explains a camera problem (%s) and leaves the form usable', async (error, text) => {
-    cardScanMode = 'required';
     scanOutcome = { error };
     await mount();
     await fillValidForm();
@@ -366,17 +373,16 @@ describe('Student card step', () => {
   });
 
   it('server refusals are shown as given (mismatch and duplicate)', async () => {
-    cardScanMode = 'optional';
     completeStatus = 409;
     await mount();
     await fillValidForm();
+    await scanCardOk();
     await click(submitButton());
     await waitFor(() => /already taken|already registered/.test(container.textContent ?? ''), 'error text');
     expect(submitButton().disabled).toBe(false);
   });
 
   it('has no accessibility violations with the card step shown', async () => {
-    cardScanMode = 'required';
     await mount();
     await fillValidForm();
     await scanAndWait();
@@ -403,6 +409,7 @@ describe('Bot check step', () => {
     completeStatus = 409;
     await mount();
     await fillValidForm();
+    await scanCardOk();
     await waitFor(() => !!container.querySelector('[aria-label="Security check"]'), 'widget host');
     await flush(30);
     expect(submitButton().disabled).toBe(true);
@@ -427,7 +434,6 @@ describe('Printed details on the card (OCR)', () => {
   }
 
   it('says what looks right when the card agrees with the form', async () => {
-    cardScanMode = 'required';
     ocrText = CARD;
     await mount();
     await fillValidForm();
@@ -442,7 +448,6 @@ describe('Printed details on the card (OCR)', () => {
   });
 
   it('a clear mismatch is shown plainly and needs the student to confirm; nothing is changed for them', async () => {
-    cardScanMode = 'required';
     ocrText = 'sample student card multan campus name bilal ahmed program commerce session 2022-2024 roll no 20240907';
     await mount();
     await fillValidForm();
@@ -458,7 +463,6 @@ describe('Printed details on the card (OCR)', () => {
   });
 
   it('unreadable text never blocks sign-up', async () => {
-    cardScanMode = 'required';
     ocrText = '~~ ..';
     await mount();
     await fillValidForm();

@@ -56,6 +56,31 @@ describe('student verification at sign-up', () => {
     expect(JSON.stringify(row)).not.toContain('20240907');
   });
 
+  it('a barcode read from a picture on a laptop is recorded as barcode-photo, and is checked exactly like a camera scan', async () => {
+    const ok = await signup(env, 'p', { ...base, card: { barcode: '20240907', source: 'upload' } });
+    expect(ok.status).toBe(201);
+    const row = await env.DB.prepare('SELECT verification_status, verification_method FROM user_private').first<Record<string, string | null>>();
+    expect(row).toEqual({ verification_status: 'provisional', verification_method: 'barcode-photo' });
+
+    const { cookie } = await startSignup(env, { sub: 'p2', email: 'p2@gmail.com' });
+    const bad = await call(env, 'POST', '/api/signup/complete', { cookie, json: { ...base, username: 'second_one', roll_number: '2024-0908', card: { barcode: '20240907', source: 'upload' } } });
+    expect(bad.status).toBe(422);
+    expect(bad.json.code).toBe('card_mismatch');
+  });
+
+  it('refuses an unknown card source', async () => {
+    const res = await signup(env, 'q', { ...base, card: { barcode: '20240907', source: 'telepathy' } });
+    expect(res.status).toBe(400);
+    expect(await count(env, 'SELECT COUNT(*) AS n FROM users')).toBe(0);
+  });
+
+  it('with the scan required, a sign-up with no card at all is refused whatever the device', async () => {
+    const { card: _omit, ...noCard } = base;
+    const res = await signup(env, 'r', noCard);
+    expect(res.status).toBe(422);
+    expect(res.json.code).toBe('card_required');
+  });
+
   it('a mismatching barcode is refused with a reason and creates nothing, and a retry works', async () => {
     const { cookie } = await startSignup(env, { sub: 'm' });
     const bad = await call(env, 'POST', '/api/signup/complete', { cookie, json: { ...base, card: { barcode: '20240908' } } });
@@ -77,7 +102,7 @@ describe('student verification at sign-up', () => {
     }
   });
 
-  it('the scan is required by default', async () => {
+  it('the scan is required', async () => {
     const { card: _c, ...noCard } = base;
     const res = await signup(env, 'n', noCard);
     expect(res.status).toBe(422);
@@ -85,15 +110,16 @@ describe('student verification at sign-up', () => {
     expect(await count(env, 'SELECT COUNT(*) AS n FROM users')).toBe(0);
   });
 
-  it('REQUIRE_CARD_SCAN=false allows an unverified account and says so', async () => {
-    const open = await makeEnv({ REQUIRE_CARD_SCAN: 'false' });
-    await seedClassCampus(open);
+  it('the scan is not negotiable: an old REQUIRE_CARD_SCAN=false setting is ignored', async () => {
+    const env2 = await makeEnv({ REQUIRE_CARD_SCAN: 'false' } as Partial<Env>);
+    await seedClassCampus(env2);
     const { card: _c, ...noCard } = base;
-    const { cookie } = await startSignup(open, { sub: 'o' });
-    expect((await call(open, 'GET', '/api/signup/session', { cookie })).json.card_scan).toBe('optional');
-    expect((await call(open, 'POST', '/api/signup/complete', { cookie, json: noCard })).status).toBe(201);
-    const row = await open.DB.prepare('SELECT verification_status, verified_at FROM user_private').first<Record<string, unknown>>();
-    expect(row).toEqual({ verification_status: 'unverified', verified_at: null });
+    const { cookie } = await startSignup(env2, { sub: 'o' });
+    expect((await call(env2, 'GET', '/api/signup/session', { cookie })).json.card_scan).toBe('required');
+    const res = await call(env2, 'POST', '/api/signup/complete', { cookie, json: noCard });
+    expect(res.status).toBe(422);
+    expect(res.json.code).toBe('card_required');
+    expect(await count(env2, 'SELECT COUNT(*) AS n FROM users')).toBe(0);
   });
 });
 

@@ -19,7 +19,7 @@ import {
 import { findCampus, campusName, cleanCampusOther } from '../shared/campus.ts';
 import { isReservedUsername, normalizeUsername } from '../shared/username.ts';
 import { barcodeMatchesRoll, campusKey, normalizeRoll, rollLast3 } from '../shared/roll.ts';
-import { cardScanRequired, computeRollKey } from './roll-key.ts';
+import { computeRollKey } from './roll-key.ts';
 import { turnstileEnabled, verifyTurnstile } from './turnstile.ts';
 
 export const SIGNUP_TICKET_COOKIE = 'signup_ticket';
@@ -81,7 +81,7 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
       valid: true,
       suggested_name: ticket.display_name,
       email: ticket.email,
-      card_scan: cardScanRequired(env) ? 'required' : 'optional',
+      card_scan: 'required',
       ...(turnstileEnabled(env) ? { turnstile_site_key: env.TURNSTILE_SITE_KEY } : {}),
     };
     return jsonResponse(body);
@@ -149,6 +149,8 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
     if (!rollKey) return jsonResponse({ error: 'Sign-up is not available right now. Please try again later.' }, 503);
 
     let verificationStatus: 'unverified' | 'provisional' = 'unverified';
+    // A barcode read from a picture file is recorded as such: it is no stronger than a camera scan, and easier to copy.
+    const verificationMethod = data.card?.source === 'upload' ? 'barcode-photo' : 'barcode';
     if (data.card) {
       if (!barcodeMatchesRoll(data.card.barcode, data.roll_number)) {
         return jsonResponse(
@@ -160,8 +162,9 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
         );
       }
       verificationStatus = 'provisional';
-    } else if (cardScanRequired(env)) {
-      return jsonResponse({ error: 'Scan your student card to finish signing up.', code: 'card_required' }, 422);
+    } else {
+      // Not negotiable: there is no switch to turn this off. No card, no account.
+      return jsonResponse({ error: 'Scan or upload your student card to finish signing up.', code: 'card_required' }, 422);
     }
 
     const existingAccount = await env.DB.prepare('SELECT id FROM users WHERE provider_subject = ?')
@@ -228,7 +231,7 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
         regKey,
         rollKey,
         verificationStatus,
-        verificationStatus === 'provisional' ? 'barcode' : null,
+        verificationStatus === 'provisional' ? verificationMethod : null,
         verificationStatus === 'provisional' ? now : null,
         data.program,
         data.session,
