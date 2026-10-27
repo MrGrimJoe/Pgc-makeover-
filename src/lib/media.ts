@@ -96,11 +96,27 @@ export function planFile(kind: MediaKind, size: number, head: Uint8Array, opts: 
 }
 
 /** The browser pieces compressPhoto and makeSticker need. Injected so tests can run without a canvas. */
+/** The part of a canvas 2D context the text editor draws with. The real context satisfies it; tests pass a recorder. */
+export interface Canvas2DLike {
+  font: string;
+  fillStyle: string;
+  strokeStyle: string;
+  lineWidth: number;
+  lineJoin: string;
+  textAlign: string;
+  textBaseline: string;
+  measureText(text: string): { width: number };
+  fillText(text: string, x: number, y: number): void;
+  strokeText(text: string, x: number, y: number): void;
+  save(): void;
+  restore(): void;
+}
+
 export interface MediaEnv {
   decode(file: Blob): Promise<{ width: number; height: number; close?: () => void; source: unknown }>;
   /** Draws onto a canvas of the given size and encodes it. Returns null when the type is not supported. */
   encode(
-    draw: (ctx: { drawImage: (source: unknown, ...args: number[]) => void; clear: () => void }) => void,
+    draw: (ctx: { drawImage: (source: unknown, ...args: number[]) => void; clear: () => void; canvas2d?: Canvas2DLike }) => void,
     size: Size,
     mime: string,
     quality: number
@@ -131,7 +147,7 @@ async function encodeBest(env: MediaEnv, draw: Parameters<MediaEnv['encode']>[0]
  * Decodes, scales to at most 1600 px on the long edge, and encodes WebP at about 0.8 (JPEG as a fallback).
  * Also makes a 320 px thumbnail. Re-encoding strips EXIF. Throws a readable error when the result is still too big.
  */
-export async function compressPhoto(file: Blob, env: MediaEnv, opts: { maxEdge?: number; maxBytes?: number; kind?: 'photo' | 'background'; crop?: CropRect; rotate90?: number } = {}): Promise<PreparedImage> {
+export async function compressPhoto(file: Blob, env: MediaEnv, opts: { maxEdge?: number; maxBytes?: number; kind?: 'photo' | 'background'; crop?: CropRect; rotate90?: number; overlay?: (ctx: Canvas2DLike, size: Size) => void } = {}): Promise<PreparedImage> {
   const kind = opts.kind ?? 'photo';
   const cap = opts.maxBytes ?? MEDIA_SIZE_CAPS[kind];
   const img = await env.decode(file);
@@ -147,6 +163,8 @@ export async function compressPhoto(file: Blob, env: MediaEnv, opts: { maxEdge?:
       ctx.clear();
       // The canvas is drawn pre-rotated by the env; rotation is passed through as a transform argument
       ctx.drawImage(img.source, c.x, c.y, c.width, c.height, 0, 0, target.width, target.height, turns);
+      // Text and other marks from the editor, drawn in the same pass so the picture is encoded once
+      if (opts.overlay && ctx.canvas2d) opts.overlay(ctx.canvas2d, target);
     };
     let blob = await encodeBest(env, drawAt(size), size);
     let outSize = size;
@@ -210,6 +228,7 @@ export function browserMediaEnv(): MediaEnv {
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
       draw({
+        canvas2d: ctx as unknown as Canvas2DLike,
         clear: () => ctx.clearRect(0, 0, size.width, size.height),
         drawImage: (source, ...a) => {
           const turns = a.length === 9 ? (a[8] as number) : 0;
