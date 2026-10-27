@@ -20,7 +20,7 @@ import {
 const MESSAGE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const ORPHAN_AGE_MS = 24 * 60 * 60 * 1000;
 
-function randomId(len: number): string {
+export function randomId(len: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(len));
   return [...bytes].map((b) => (b % 36).toString(36)).join('');
 }
@@ -200,7 +200,7 @@ export async function canReadMedia(env: Env, media: MediaReadRow, viewerId: stri
   return false;
 }
 
-async function liveBytes(db: D1Database, ownerId: string): Promise<number> {
+export async function liveBytes(db: D1Database, ownerId: string): Promise<number> {
   const r = await db.prepare('SELECT COALESCE(SUM(size_bytes + thumb_size_bytes), 0) AS n FROM media WHERE owner_id = ?').bind(ownerId).first<{ n: number }>();
   return r?.n ?? 0;
 }
@@ -375,7 +375,7 @@ export async function deleteOwnMedia(env: Env, userId: string, mediaId: string):
 
 export async function listLibrary(env: Env, userId: string): Promise<Response> {
   const rows = await env.DB.prepare(
-    `SELECT m.id AS media_id, m.kind, m.mime_type, m.width, m.height, m.duration_ms, m.size_bytes, sl.created_at
+    `SELECT m.id AS media_id, m.kind, m.mime_type, m.width, m.height, m.duration_ms, m.size_bytes, sl.created_at, sl.source
      FROM sticker_library sl JOIN media m ON m.id = sl.media_id
      WHERE sl.user_id = ? ORDER BY sl.created_at DESC, m.id LIMIT ?`
   )

@@ -50,7 +50,7 @@ import {
 } from '../shared/schema.ts';
 import { checkRateLimit } from './rate-limit.ts';
 import { isBlockedBetween, canSendDmTo } from './permissions.ts';
-import { validateStickerKey } from './stickers.ts';
+import { validateStickerKey, listFavoriteKeys, addFavorite, removeFavoriteKey } from './stickers.ts';
 import { bundledKind } from '../shared/sticker-keys.ts';
 import { loadMediaItem, handleUpload, serveMedia, deleteOwnMedia, listLibrary, addToLibrary, removeFromLibrary, forwardMessage } from './media.ts';
 import { runPostLifecycleExpiry, deletePostAndMedia } from './jobs/expiry.ts';
@@ -3458,6 +3458,25 @@ export default {
       const auth = await authenticateRequest(request, env.DB);
       if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
       return removeFromLibrary(env, auth.user.id, pathname.slice('/api/stickers/library/'.length));
+    }
+
+    // Favorites: a bundled sticker is starred by key; someone else's upload is copied into the person's own library
+    if (pathname === '/api/stickers/favorites' && (method === 'GET' || method === 'POST')) {
+      const auth = await authenticateRequest(request, env.DB);
+      if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+      if (method === 'GET') return listFavoriteKeys(env, auth.user.id);
+      let body: any;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400);
+      }
+      return addFavorite(env, auth.user.id, body?.sticker_key);
+    }
+    if (pathname.startsWith('/api/stickers/favorites/') && method === 'DELETE') {
+      const auth = await authenticateRequest(request, env.DB);
+      if (!auth) return jsonResponse({ error: 'Unauthorized' }, 401);
+      return removeFavoriteKey(env, auth.user.id, pathname.slice('/api/stickers/favorites/'.length));
     }
 
     // POST /api/messages/:id/forward
