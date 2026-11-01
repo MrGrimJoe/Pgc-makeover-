@@ -24,7 +24,7 @@ export const StickerPlaceholder: React.FC<{ size: number; className?: string }> 
     role="img"
     aria-label="Sticker unavailable"
     style={{ width: size, height: size }}
-    className={`flex flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed border-[var(--line,#E8EBF0)] bg-[var(--bg2,#F8F9FC)] text-[var(--muted,#5B6577)] text-[11px] ${className}`}
+    className={`flex flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed border-[var(--line,#E8EBF0)] bg-[var(--bg2,#F8F9FC)] text-[var(--muted,#5B6577)] text-[0.733333rem] ${className}`}
   >
     <ImageOff className="w-5 h-5" aria-hidden="true" />
     <span>Unavailable</span>
@@ -52,7 +52,7 @@ export const StickerView: React.FC<StickerViewProps> = ({ favoritable = false, .
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Sticker options"
-        className={corner ? 'absolute top-0 right-0 w-[44px] h-[44px] rounded-full bg-black/50 border-0 text-white text-[18px] leading-none cursor-pointer' : 'absolute inset-0 w-full h-full bg-transparent border-0 cursor-pointer'}
+        className={corner ? 'absolute top-0 right-0 w-[44px] h-[44px] rounded-full bg-black/50 border-0 text-white text-[1.2rem] leading-none cursor-pointer' : 'absolute inset-0 w-full h-full bg-transparent border-0 cursor-pointer'}
       >
         {corner ? <Star className="w-5 h-5 mx-auto" aria-hidden="true" /> : null}
       </button>

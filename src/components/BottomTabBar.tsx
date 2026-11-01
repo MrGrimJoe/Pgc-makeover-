@@ -9,11 +9,16 @@ interface BottomTabBarProps {
   isAuthenticated: boolean;
 }
 
-const TABS: Array<{ tab: AppTab; label: string; Icon: typeof Home }> = [
-  { tab: 'feed', label: 'Feed', Icon: Home },
-  { tab: 'search', label: 'Search', Icon: Search },
-  { tab: 'post', label: 'New post', Icon: PlusSquare },
-  { tab: 'profile', label: 'Profile', Icon: User },
+/**
+ * fillWhenActive: whether the icon is drawn filled when its tab is selected. A filled house or person still reads
+ * as one; a filled "New post" square swallows its plus (a blank black square) and a filled magnifier is a blob.
+ * Those two get a heavier stroke instead, the same way the side navigation draws its active icon.
+ */
+const TABS: Array<{ tab: AppTab; label: string; Icon: typeof Home; fillWhenActive: boolean }> = [
+  { tab: 'feed', label: 'Feed', Icon: Home, fillWhenActive: true },
+  { tab: 'search', label: 'Search', Icon: Search, fillWhenActive: false },
+  { tab: 'post', label: 'New post', Icon: PlusSquare, fillWhenActive: false },
+  { tab: 'profile', label: 'Profile', Icon: User, fillWhenActive: true },
 ];
 
 export const BottomTabBar: React.FC<BottomTabBarProps> = ({ activeTab, setActiveTab, isAuthenticated }) => {
@@ -25,7 +30,7 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ activeTab, setActive
       data-nav="bottom"
       className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-content h-[56px] flex bg-[var(--bg,#fff)] border-t border-[var(--line,#E8EBF0)] pb-[env(safe-area-inset-bottom)] z-40"
     >
-      {TABS.map(({ tab, label, Icon }) => {
+      {TABS.map(({ tab, label, Icon, fillWhenActive }) => {
         const active = activeTab === tab;
         return (
           <button
@@ -47,8 +52,8 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ activeTab, setActive
             {/* The key restarts the little pop each time the tab is selected */}
             <Icon
               key={active ? 'on' : 'off'}
-              className={`w-6 h-6 stroke-[1.7] ${active ? 'tab-pop' : ''}`}
-              fill={active ? 'currentColor' : 'none'}
+              className={`w-6 h-6 ${active && !fillWhenActive ? 'stroke-[2.4]' : 'stroke-[1.7]'} ${active ? 'tab-pop' : ''}`}
+              fill={active && fillWhenActive ? 'currentColor' : 'none'}
               aria-hidden="true"
             />
           </button>

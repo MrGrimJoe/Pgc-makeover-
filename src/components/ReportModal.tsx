@@ -59,7 +59,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         return (
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3">
-          <span className="text-[15px] font-semibold text-text">Report {targetType}</span>
+          <span className="text-[1rem] font-semibold text-text">Report {targetType}</span>
           <button
             type="button"
             onClick={requestClose}
@@ -71,14 +71,14 @@ export const ReportModal: React.FC<ReportModalProps> = ({
         </div>
 
         {error && (
-          <div role="alert" className="p-2.5 rounded-sm bg-danger-tint text-danger text-[13px]">
+          <div role="alert" className="p-2.5 rounded-sm bg-danger-tint text-danger text-[0.866667rem]">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label htmlFor="report-reason" className="block text-[13px] font-medium text-text mb-1">
+            <label htmlFor="report-reason" className="block text-[0.866667rem] font-medium text-text mb-1">
               Reason
             </label>
             <textarea
@@ -89,7 +89,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
               placeholder="Why are you reporting this content?"
               maxLength={500}
               required
-              className="w-full bg-bg border border-border rounded-sm p-2.5 text-[15px] text-text focus:outline-none focus:border-primary resize-none transition-colors"
+              className="w-full bg-bg border border-border rounded-sm p-2.5 text-[1rem] text-text focus:outline-none focus:border-primary resize-none transition-colors"
             />
           </div>
 
@@ -97,16 +97,16 @@ export const ReportModal: React.FC<ReportModalProps> = ({
             <button
               type="button"
               onClick={requestClose}
-              className="min-h-[44px] px-3 text-[14px] font-medium text-text-muted hover:text-text cursor-pointer"
+              className="min-h-[44px] px-3 text-[0.933333rem] font-medium text-text-muted hover:text-text cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting || !reason.trim()}
-              className="min-h-[44px] px-4 rounded-sm bg-danger hover:bg-danger/90 disabled:opacity-50 text-on-primary font-semibold text-[14px] cursor-pointer transition-colors"
+              className="min-h-[44px] px-4 rounded-sm bg-danger hover:bg-danger/90 disabled:opacity-50 text-on-primary font-semibold text-[0.933333rem] cursor-pointer transition-colors"
             >
-              {submitting ? 'Submitting...' : 'Submit'}
+              {submitting ? 'Sending...' : 'Send report'}
             </button>
           </div>
         </form>

@@ -99,7 +99,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
       <>
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-border">
-          <span className="text-[15px] font-semibold text-text">Comments</span>
+          <span className="text-[1rem] font-semibold text-text">Comments</span>
           <button
             type="button"
             onClick={requestClose}
@@ -111,7 +111,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
         </div>
 
         {error && (
-          <div role="alert" className="my-2 p-2 rounded-sm bg-danger-tint text-danger text-[13px]">
+          <div role="alert" className="my-2 p-2 rounded-sm bg-danger-tint text-danger text-[0.866667rem]">
             {error}
           </div>
         )}
@@ -130,7 +130,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           )}
 
           {!loading && comments.length === 0 && (
-            <div className="text-center py-8 text-text-muted text-[15px]">
+            <div className="text-center py-8 text-text-muted text-[1rem]">
               No comments yet.
             </div>
           )}
@@ -139,14 +139,14 @@ export const CommentModal: React.FC<CommentModalProps> = ({
             comments.map((comment) => (
               <div
                 key={comment.id}
-                className="rise-in py-2 border-b border-border/60 space-y-1 text-[15px]"
+                className="rise-in py-2 border-b border-border/60 space-y-1 text-[1rem]"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-1.5 truncate">
-                    <span className="font-semibold text-text text-[14px]">
+                    <span className="font-semibold text-text text-[0.933333rem]">
                       {comment.author_username}
                     </span>
-                    <span className="text-[12px] text-text-muted">
+                    <span className="text-[0.8rem] text-text-muted">
                       · {new Date(comment.created_at).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',
@@ -165,10 +165,10 @@ export const CommentModal: React.FC<CommentModalProps> = ({
                     </button>
                   )}
                 </div>
-                {comment.body && <p className="text-text text-[15px] whitespace-pre-wrap">{comment.body}</p>}
+                {comment.body && <p className="text-text text-[1rem] whitespace-pre-wrap">{comment.body}</p>}
                 {comment.sticker_key && <StickerView stickerKey={comment.sticker_key} size={120} favoritable />}
                 {comment.author_id !== currentUserId && (
-                  <button type="button" onClick={() => setReportingId(comment.id)} aria-label="Report this comment" className="min-h-[44px] px-1 bg-transparent border-0 text-[12px] text-text-muted hover:text-danger cursor-pointer">Report</button>
+                  <button type="button" onClick={() => setReportingId(comment.id)} aria-label="Report this comment" className="min-h-[44px] px-1 bg-transparent border-0 text-[0.8rem] text-text-muted hover:text-danger cursor-pointer">Report</button>
                 )}
               </div>
             ))}
@@ -179,7 +179,7 @@ export const CommentModal: React.FC<CommentModalProps> = ({
           {stickerKey && (
             <div className="flex items-center gap-2 pb-2">
               <StickerView stickerKey={stickerKey} size={56} />
-              <button type="button" onClick={() => setStickerKey(null)} aria-label="Remove sticker" className="min-h-[44px] px-3 rounded-full border border-border bg-transparent text-[13px] text-text cursor-pointer">Remove</button>
+              <button type="button" onClick={() => setStickerKey(null)} aria-label="Remove sticker" className="min-h-[44px] px-3 rounded-full border border-border bg-transparent text-[0.866667rem] text-text cursor-pointer">Remove</button>
             </div>
           )}
           <Composer

@@ -153,15 +153,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({
     <div className="w-full max-w-content mx-auto pb-16 tablet:pb-0 bg-[var(--bg,#fff)]">
       {/* 44px search field, 12px radius, 1px border, subtle background, search icon at left */}
       <form onSubmit={handleSearchSubmit} className="p-3 pb-2">
-        <div className="flex items-center gap-2 bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3 h-[44px] text-[var(--muted,#5B6577)]">
+        <div className="field-box flex items-center gap-2 bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3 min-h-[44px] text-[var(--muted,#5B6577)]">
           <Search className="w-5 h-5 shrink-0 stroke-[1.7]" />
+          {/* The input fills the whole 44px field (it was 22px tall inside it) and the field shows the focus ring */}
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search people and #topics"
             aria-label="Search people and #topics"
-            className="flex-1 border-0 bg-transparent text-[var(--text,#17233A)] text-[15px] outline-none"
+            className="flex-1 min-w-0 self-stretch border-0 bg-transparent text-[var(--text,#17233A)] text-[1rem] outline-none"
           />
           {searchQuery && (
             <button
@@ -188,7 +189,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
               type="button"
               onClick={() => handleScopeChange(tab)}
               aria-pressed={isActive}
-              className={`flex-1 min-h-[44px] py-3 text-center text-[14px] font-semibold transition-colors cursor-pointer border-b-2 bg-transparent ${
+              className={`flex-1 min-h-[44px] py-3 text-center text-[0.933333rem] font-semibold transition-colors cursor-pointer border-b-2 bg-transparent ${
                 isActive
                   ? 'text-[var(--text,#17233A)] border-[var(--blue,#244C8A)]'
                   : 'text-[var(--muted,#5B6577)] border-transparent hover:text-[var(--text,#17233A)]'
@@ -203,7 +204,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       {/* When searching: show results */}
       {activeSearch ? (
         <div>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--line,#E8EBF0)] text-[13px] text-[var(--muted,#5B6577)]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--line,#E8EBF0)] text-[0.866667rem] text-[var(--muted,#5B6577)]">
             <span>Results for &ldquo;{activeSearch}&rdquo;</span>
             <button
               type="button"
@@ -226,13 +227,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           )}
 
           {!loading && scopeMissing && (
-            <div className="py-16 text-center text-[13px] text-[var(--muted,#5B6577)] px-4">
+            <div className="py-16 text-center text-[0.866667rem] text-[var(--muted,#5B6577)] px-4">
               Add your {scopeMissing === 'class' ? 'class' : 'campus'} in Edit profile to search it.
             </div>
           )}
 
           {!loading && !scopeMissing && results.length === 0 && !error && (
-            <div className="py-16 text-center text-[13px] text-[var(--muted,#5B6577)] px-4">
+            <div className="py-16 text-center text-[0.866667rem] text-[var(--muted,#5B6577)] px-4">
               No results found for &ldquo;{activeSearch}&rdquo;
             </div>
           )}
@@ -258,7 +259,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
         /* Default Search Screen: Trending & People sections */
         <div className="py-1">
           {/* Section: Trending */}
-          <h3 className="mx-4 mt-4 mb-1 text-[13px] font-semibold text-[var(--muted,#5B6577)] uppercase tracking-[0.4px]">
+          <h3 className="mx-4 mt-4 mb-1 text-[0.866667rem] font-semibold text-[var(--muted,#5B6577)] uppercase tracking-[0.4px]">
             Trending
           </h3>
 
@@ -270,24 +271,24 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 onClick={() => handleTrendClick(t.slug)}
                 className="w-full text-left flex items-center gap-3 px-4 py-2.5 min-h-[56px] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer transition-colors bg-transparent border-0"
               >
-                <b className="font-semibold text-[15px] block text-[var(--text,#17233A)]">
+                <b className="font-semibold text-[1rem] block text-[var(--text,#17233A)]">
                   #{t.slug}
                 </b>
               </button>
             ))
           ) : (
-            <p className="mx-4 my-3 text-[13px] text-[var(--muted,#5B6577)]">
+            <p className="mx-4 my-3 text-[0.866667rem] text-[var(--muted,#5B6577)]">
               No trending topics yet
             </p>
           )}
 
           {/* Section: People */}
-          <h3 className="mx-4 mt-4 mb-1 text-[13px] font-semibold text-[var(--muted,#5B6577)] uppercase tracking-[0.4px]">
+          <h3 className="mx-4 mt-4 mb-1 text-[0.866667rem] font-semibold text-[var(--muted,#5B6577)] uppercase tracking-[0.4px]">
             People
           </h3>
 
           {people.length === 0 && (
-            <p className="mx-4 my-3 text-[13px] text-[var(--muted,#5B6577)]">
+            <p className="mx-4 my-3 text-[0.866667rem] text-[var(--muted,#5B6577)]">
               {!peopleLoaded
                 ? 'Loading...'
                 : hasClass || hasCampus
@@ -305,7 +306,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 type="button"
                 onClick={() => onViewAuthorProfile(person.username)}
                 aria-label={`View profile of @${person.username}`}
-                className="shrink-0 border-0 p-0 bg-transparent cursor-pointer rounded-full"
+                className="shrink-0 border-0 p-[6px] -m-[6px] bg-transparent cursor-pointer rounded-full"
               >
                 <Avatar mediaId={person.avatarMediaId} displayName={person.displayName} username={person.username} size={32} />
               </button>
@@ -313,17 +314,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 className="flex-1 min-w-0 cursor-pointer"
                 onClick={() => onViewAuthorProfile(person.username)}
               >
-                <b className="font-semibold text-[15px] block text-[var(--text,#17233A)] truncate">
+                <b className="font-semibold text-[1rem] block text-[var(--text,#17233A)] truncate">
                   {person.displayName}
                 </b>
-                <small className="text-[var(--muted,#5B6577)] block text-[13px] truncate">
+                <small className="text-[var(--muted,#5B6577)] block text-[0.866667rem] truncate">
                   {person.subtitle}
                 </small>
               </div>
               <button
                 type="button"
                 onClick={() => handleTogglePersonFollow(idx, person.username)}
-                className={`min-h-[44px] px-3.5 rounded-[8px] text-[13px] font-semibold transition-colors cursor-pointer flex items-center justify-center ${
+                className={`min-h-[44px] px-3.5 rounded-[8px] text-[0.866667rem] font-semibold transition-colors cursor-pointer flex items-center justify-center ${
                   person.isFollowing
                     ? 'border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)]'
                     : 'bg-[var(--blue,#244C8A)] border border-[var(--blue,#244C8A)] text-white'

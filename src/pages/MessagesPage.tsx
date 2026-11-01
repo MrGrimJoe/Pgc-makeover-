@@ -73,7 +73,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ currentUserId, initi
               embedded={twoPane}
             />
           ) : (
-            <div className="sticky top-0 h-screen flex items-center justify-center px-6 text-center text-[14px] text-[var(--muted,#5B6577)]">
+            <div className="sticky top-0 h-screen flex items-center justify-center px-6 text-center text-[0.933333rem] text-[var(--muted,#5B6577)]">
               Choose a conversation to start chatting.
             </div>
           )}

@@ -32,7 +32,7 @@ export const AnimatedMedia: React.FC<AnimatedMediaProps> = ({ media, src: srcPro
         onClick={() => setPlaying(true)}
         aria-label={`Play ${label}`}
         style={style}
-        className={`min-h-[44px] min-w-[44px] w-full flex items-center justify-center gap-2 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer ${className}`}
+        className={`min-h-[44px] min-w-[44px] w-full flex items-center justify-center gap-2 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer ${className}`}
       >
         <Play className="w-4 h-4" aria-hidden="true" />
         Play {label}

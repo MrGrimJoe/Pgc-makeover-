@@ -32,7 +32,7 @@ interface ImageEditorProps {
 const PREVIEW_EDGE = 960;
 
 const chip = (on: boolean) =>
-  `min-h-[44px] px-3.5 rounded-full border text-[13px] font-semibold cursor-pointer ${
+  `min-h-[44px] px-3.5 rounded-full border text-[0.866667rem] font-semibold cursor-pointer ${
     on ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] border-[var(--blue,#244C8A)]' : 'bg-[var(--bg,#fff)] text-[var(--text,#17233A)] border-[var(--line,#E8EBF0)]'
   }`;
 
@@ -171,27 +171,27 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ source, title = 'Add t
   };
 
   const slider = 'w-full min-h-[44px]';
-  const labelCls = 'text-[12px] text-[var(--muted,#5B6577)] block';
+  const labelCls = 'text-[0.8rem] text-[var(--muted,#5B6577)] block';
 
   return (
     <div ref={rootRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="fixed inset-0 left-[var(--nav-w,0px)] z-[60] bg-[var(--bg,#fff)] flex flex-col max-w-content mx-auto">
-      <header className="h-[48px] flex items-center justify-between px-2 border-b border-[var(--line,#E8EBF0)] shrink-0">
+      <header className="min-h-[48px] flex items-center justify-between px-2 border-b border-[var(--line,#E8EBF0)] shrink-0">
         <div className="flex items-center">
           <button type="button" onClick={onCancel} disabled={busy} aria-label="Cancel editing" className="w-[44px] h-[44px] flex items-center justify-center bg-transparent border-0 text-[var(--text,#17233A)] cursor-pointer disabled:opacity-40">
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
-          <h2 className="m-0 text-[16px] font-semibold text-[var(--text,#17233A)]">{title}</h2>
+          <h2 className="m-0 text-[1.066667rem] font-semibold text-[var(--text,#17233A)]">{title}</h2>
         </div>
-        <button type="button" onClick={() => void done()} disabled={busy || loadError} className="min-h-[44px] px-4 rounded-full bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[14px] font-semibold cursor-pointer border-0 disabled:opacity-40">
+        <button type="button" onClick={() => void done()} disabled={busy || loadError} className="min-h-[44px] px-4 rounded-full bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[0.933333rem] font-semibold cursor-pointer border-0 disabled:opacity-40">
           {busy ? 'Working...' : doneLabel}
         </button>
       </header>
 
       <div className="flex-1 min-h-0 flex items-center justify-center bg-[var(--bg2,#F8F9FC)] p-2 overflow-hidden" data-testid="editor-stage">
         {loadError ? (
-          <p role="alert" className="m-0 text-[14px] text-[var(--danger,#B23A40)]">This picture could not be opened.</p>
+          <p role="alert" className="m-0 text-[0.933333rem] text-[var(--danger,#B23A40)]">This picture could not be opened.</p>
         ) : !preview ? (
-          <p className="m-0 text-[14px] text-[var(--muted,#5B6577)]" aria-busy="true">Loading...</p>
+          <p className="m-0 text-[0.933333rem] text-[var(--muted,#5B6577)]" aria-busy="true">Loading...</p>
         ) : (
           <canvas
             ref={canvasRef}
@@ -227,7 +227,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ source, title = 'Add t
         </div>
 
         <div>
-          <label htmlFor="editor-text" className="block text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">Text</label>
+          <label htmlFor="editor-text" className="block text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1">Text</label>
           <textarea
             id="editor-text"
             value={selected.text}
@@ -235,7 +235,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ source, title = 'Add t
             maxLength={MAX_TEXT_LENGTH}
             placeholder={layers[0] && selected.id === layers[0].id ? 'Top text' : 'Type here'}
             onChange={(e) => patch({ text: e.target.value })}
-            className="w-full bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3.5 py-2.5 text-[15px] text-[var(--text,#17233A)] outline-none resize-none"
+            className="w-full bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3.5 py-2.5 text-[1rem] text-[var(--text,#17233A)] outline-none resize-none"
           />
         </div>
 
@@ -278,7 +278,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({ source, title = 'Add t
           </div>
         </div>
 
-        {error && <div role="alert" className="p-2.5 rounded-[8px] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">{error}</div>}
+        {error && <div role="alert" className="p-2.5 rounded-[8px] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[0.866667rem]">{error}</div>}
       </div>
     </div>
   );

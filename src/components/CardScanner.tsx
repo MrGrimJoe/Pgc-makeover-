@@ -52,19 +52,19 @@ export const CardScanner: React.FC<CardScannerProps> = ({ onResult, onClose }) =
     <BottomSheet label="Scan your student card" onClose={onClose} className="p-4">
       {({ requestClose }) => (
         <div className="flex flex-col gap-3">
-          <h2 className="text-[16px] font-semibold text-[var(--text,#17233A)]">Scan your student card</h2>
-          <p className="text-[13px] text-[var(--muted,#5B6577)]">
+          <h2 className="text-[1.066667rem] font-semibold text-[var(--text,#17233A)]">Scan your student card</h2>
+          <p className="text-[0.866667rem] text-[var(--muted,#5B6577)]">
             Hold the card flat and put the barcode inside the picture. It is read on this device. The picture is not saved or sent anywhere.
           </p>
           <div className="relative w-full aspect-[4/3] rounded-[12px] overflow-hidden bg-black">
             <video ref={videoRef} muted playsInline autoPlay className="w-full h-full object-cover" aria-label="Camera view" />
           </div>
           {error ? (
-            <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">
+            <p role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)]">
               {ERROR_TEXT[error]}
             </p>
           ) : (
-            <p role="status" className="text-[13px] text-[var(--muted,#5B6577)]">
+            <p role="status" className="text-[0.866667rem] text-[var(--muted,#5B6577)]">
               Looking for the barcode...
             </p>
           )}
@@ -73,7 +73,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ onResult, onClose }) =
               <button
                 type="button"
                 onClick={() => setAttempt((n) => n + 1)}
-                className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[14px] font-semibold cursor-pointer border-0"
+                className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[0.933333rem] font-semibold cursor-pointer border-0"
               >
                 Try again
               </button>
@@ -81,7 +81,7 @@ export const CardScanner: React.FC<CardScannerProps> = ({ onResult, onClose }) =
             <button
               type="button"
               onClick={requestClose}
-              className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[14px] font-semibold cursor-pointer"
+              className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.933333rem] font-semibold cursor-pointer"
             >
               Close
             </button>

@@ -133,16 +133,16 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
   return (
     <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col">
       {/* Top bar 48px: Cancel (muted) left, "New post" centered, Post (blue) right */}
-      <div className="h-[48px] px-4 flex items-center justify-between border-b border-[var(--line,#E8EBF0)] font-semibold">
+      <div className="min-h-[48px] px-4 flex items-center justify-between border-b border-[var(--line,#E8EBF0)] font-semibold">
         <button
           type="button"
           onClick={onCancel || onPostCreated}
-          className="text-[15px] font-normal text-[var(--muted,#5B6577)] hover:text-[var(--text,#17233A)] cursor-pointer min-h-[44px] flex items-center bg-transparent border-0 p-0"
+          className="text-[1rem] font-normal text-[var(--muted,#5B6577)] hover:text-[var(--text,#17233A)] cursor-pointer min-h-[44px] flex items-center bg-transparent border-0 p-0"
         >
           Cancel
         </button>
 
-        <span className="text-[15px] font-semibold text-[var(--text,#17233A)]">
+        <span className="text-[1rem] font-semibold text-[var(--text,#17233A)]">
           New post
         </span>
 
@@ -150,14 +150,14 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
           type="button"
           onClick={handleSubmit}
           disabled={submitting || !body.trim() || uploading || !pollReady}
-          className="text-[15px] font-semibold text-[var(--blue,#244C8A)] disabled:opacity-40 cursor-pointer min-h-[44px] flex items-center bg-transparent border-0 p-0"
+          className="text-[1rem] font-semibold text-[var(--blue,#244C8A)] disabled:opacity-40 cursor-pointer min-h-[44px] min-w-[44px] justify-end flex items-center bg-transparent border-0 p-0"
         >
           {submitting ? 'Posting...' : 'Post'}
         </button>
       </div>
 
       {error && (
-        <div role="alert" className="m-4 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">
+        <div role="alert" className="m-4 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[0.866667rem]">
           {error}
         </div>
       )}
@@ -170,7 +170,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         aria-label="What's happening? Use #topics so classmates can find it"
         maxLength={1000}
         autoFocus
-        className="w-full border-0 outline-none resize-none bg-transparent text-[var(--text,#17233A)] text-[17px] p-4 min-h-[150px] leading-relaxed"
+        className="w-full border-0 outline-none resize-none bg-transparent text-[var(--text,#17233A)] text-[1.133333rem] p-4 min-h-[150px] leading-relaxed"
       />
 
       {/* Image thumbnails 72px square, 8px radius, in a row */}
@@ -212,7 +212,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
       {stickerKey && (
         <div className="flex items-center gap-2 px-4 py-2">
           <StickerView stickerKey={stickerKey} size={96} />
-          <button type="button" onClick={() => setStickerKey(null)} aria-label="Remove sticker" className="min-h-[44px] px-3 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[13px] text-[var(--text,#17233A)] cursor-pointer">Remove</button>
+          <button type="button" onClick={() => setStickerKey(null)} aria-label="Remove sticker" className="min-h-[44px] px-3 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[0.866667rem] text-[var(--text,#17233A)] cursor-pointer">Remove</button>
         </div>
       )}
 
@@ -261,12 +261,12 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         >
           <BarChart2 className="w-6 h-6 stroke-[1.7]" aria-hidden="true" />
         </button>
-        {uploading && <span className="text-[13px] text-[var(--muted,#5B6577)]">Uploading...</span>}
+        {uploading && <span className="text-[0.866667rem] text-[var(--muted,#5B6577)]">Uploading...</span>}
       </div>
 
       {pollOptions && (
         <fieldset className="mx-4 mb-2 p-3 rounded-[12px] border border-[var(--line,#E8EBF0)]">
-          <legend className="px-1 text-[13px] font-medium text-[var(--muted,#5B6577)]">Poll options</legend>
+          <legend className="px-1 text-[0.866667rem] font-medium text-[var(--muted,#5B6577)]">Poll options</legend>
           <div className="flex flex-col gap-2">
             {pollOptions.map((text, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -277,7 +277,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
                   onChange={(e) => setPollOptions((prev) => (prev ? prev.map((t, j) => (j === i ? e.target.value : t)) : prev))}
                   aria-label={`Poll option ${i + 1}`}
                   placeholder={`Option ${i + 1}`}
-                  className="flex-1 min-h-[44px] px-3 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-transparent text-[15px] text-[var(--text,#17233A)]"
+                  className="flex-1 min-h-[44px] px-3 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-transparent text-[1rem] text-[var(--text,#17233A)]"
                 />
                 {pollOptions.length > POLL_MIN_OPTIONS && (
                   <button
@@ -297,27 +297,27 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
               type="button"
               onClick={() => setPollOptions((prev) => (prev ? [...prev, ''] : prev))}
               disabled={pollOptions.length >= POLL_MAX_OPTIONS}
-              className="min-h-[44px] px-3 bg-transparent border-0 text-[14px] font-semibold text-[var(--blue,#244C8A)] disabled:opacity-40 cursor-pointer"
+              className="min-h-[44px] px-3 bg-transparent border-0 text-[0.933333rem] font-semibold text-[var(--blue,#244C8A)] disabled:opacity-40 cursor-pointer"
             >
               Add option
             </button>
             <button
               type="button"
               onClick={() => setPollOptions(null)}
-              className="min-h-[44px] px-3 bg-transparent border-0 text-[14px] text-[var(--danger,#B23A40)] cursor-pointer"
+              className="min-h-[44px] px-3 bg-transparent border-0 text-[0.933333rem] text-[var(--danger,#B23A40)] cursor-pointer"
             >
               Remove poll
             </button>
           </div>
           {pollCheck && !pollCheck.ok && pollOptions.some((t) => t.trim()) && (
-            <p role="status" className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">{pollCheck.error}</p>
+            <p role="status" className="mt-1 text-[0.8rem] text-[var(--muted,#5B6577)]">{pollCheck.error}</p>
           )}
-          <p className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">The poll closes when the post disappears. Results show after someone votes.</p>
+          <p className="mt-1 text-[0.8rem] text-[var(--muted,#5B6577)]">The poll closes when the post disappears. Results show after someone votes.</p>
         </fieldset>
       )}
 
       {/* Subtle-background note with 12px radius, 13px muted text and an 8px yellow dot */}
-      <div className="m-4 p-3 rounded-[12px] bg-[var(--bg2,#F8F9FC)] text-[13px] text-[var(--muted,#5B6577)] flex items-center">
+      <div className="m-4 p-3 rounded-[12px] bg-[var(--bg2,#F8F9FC)] text-[0.866667rem] text-[var(--muted,#5B6577)] flex items-center">
         <i className="inline-block w-2 h-2 rounded-full bg-[var(--yellow,#F2C94C)] mr-1.5 shrink-0" />
         <span>Disappears in 7 days, or 14 if 3 classmates engage.</span>
       </div>
@@ -328,7 +328,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
             <div className="flex-1 min-h-0">
               <PickerPanel userId={currentUserId} reloadKey={libraryKey} onPick={(key) => { setStickerKey(key); setPickerOpen(false); }} onAddFiles={(files) => setAddFiles(files)} onTemplateEdited={(file) => { setPickerOpen(false); void addPhotoFile(file); }} />
             </div>
-            <button type="button" onClick={() => setPickerOpen(false)} className="min-h-[44px] bg-transparent border-0 text-[14px] font-semibold text-[var(--muted,#5B6577)] cursor-pointer">Close</button>
+            <button type="button" onClick={() => setPickerOpen(false)} className="min-h-[44px] bg-transparent border-0 text-[0.933333rem] font-semibold text-[var(--muted,#5B6577)] cursor-pointer">Close</button>
           </div>
         </div>
       )}

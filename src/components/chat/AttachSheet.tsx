@@ -13,7 +13,7 @@ interface AttachSheetProps {
 const GALLERY_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm';
 
 const btn =
-  'min-h-[72px] flex flex-col items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line,#E8EBF0)] bg-[var(--bg2,#F8F9FC)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer';
+  'min-h-[72px] flex flex-col items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line,#E8EBF0)] bg-[var(--bg2,#F8F9FC)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer';
 
 /** Bottom sheet with Camera, Gallery, Sticker and GIF. Focus is trapped; Escape closes it. */
 export const AttachSheet: React.FC<AttachSheetProps> = ({ onClose, onFiles, onSticker, onGif }) => {
@@ -53,7 +53,7 @@ export const AttachSheet: React.FC<AttachSheetProps> = ({ onClose, onFiles, onSt
             <Film className="w-6 h-6" aria-hidden="true" />GIF
           </button>
         </div>
-        <button type="button" onClick={onClose} className="w-full min-h-[44px] rounded-[10px] bg-transparent border-0 text-[var(--muted,#5B6577)] text-[14px] font-semibold cursor-pointer">
+        <button type="button" onClick={onClose} className="w-full min-h-[44px] rounded-[10px] bg-transparent border-0 text-[var(--muted,#5B6577)] text-[0.933333rem] font-semibold cursor-pointer">
           Cancel
         </button>
         <input ref={camera} type="file" tabIndex={-1} accept="image/*" capture="environment" onChange={pick} className="hidden" aria-label="Take a photo" data-testid="camera-input" />

@@ -32,17 +32,17 @@ interface ConversationListProps {
 
 export const ConversationList: React.FC<ConversationListProps> = ({ conversations, loading, error, onSelect, onBack, embedded = false, selectedId = null }) => (
   <div className={embedded ? 'w-full bg-[var(--bg,#fff)] flex flex-col' : 'w-full max-w-content mx-auto min-h-screen bg-[var(--bg,#fff)] flex flex-col'}>
-    <header className={`sticky z-40 bg-[var(--bg,#fff)] border-b border-[var(--line,#E8EBF0)] flex items-center px-4 ${embedded ? 'top-0 h-[56px]' : 'top-[48px] h-[48px]'}`}>
+    <header className={`sticky z-40 bg-[var(--bg,#fff)] border-b border-[var(--line,#E8EBF0)] flex items-center px-4 ${embedded ? 'top-0 h-[56px]' : 'top-[48px] min-h-[48px]'}`}>
       {!embedded && (
         <button type="button" onClick={onBack} title="Back" aria-label="Back" className="w-[44px] h-[44px] -ml-3 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0">
           <ArrowLeft className="w-5 h-5 stroke-[1.7]" />
         </button>
       )}
-      <h1 className="font-semibold text-[20px] text-[var(--text,#17233A)] tracking-[-0.3px] m-0">Messages</h1>
+      <h1 className="font-semibold text-[1.333333rem] text-[var(--text,#17233A)] tracking-[-0.3px] m-0">Messages</h1>
     </header>
 
     {error && (
-      <div role="alert" className="m-4 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">{error}</div>
+      <div role="alert" className="m-4 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[0.866667rem]">{error}</div>
     )}
 
     {loading && (
@@ -58,8 +58,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
 
     {!loading && conversations.length === 0 && !error && (
       <div className="py-20 text-center space-y-3 px-4">
-        <p className="text-[14px] text-[var(--muted,#5B6577)]">No conversations yet.</p>
-        <p className="text-[13px] text-[var(--muted,#5B6577)]">Visit a classmate&apos;s profile and tap &ldquo;Message&rdquo; to start a chat.</p>
+        <p className="text-[0.933333rem] text-[var(--muted,#5B6577)]">No conversations yet.</p>
+        <p className="text-[0.866667rem] text-[var(--muted,#5B6577)]">Visit a classmate&apos;s profile and tap &ldquo;Message&rdquo; to start a chat.</p>
       </div>
     )}
 
@@ -78,8 +78,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
               >
                 <Avatar mediaId={other.avatar_media_id} displayName={other.display_name} username={other.username} size={40} />
                 <span className="flex-1 min-w-0">
-                  <b className="font-semibold text-[15px] block text-[var(--text,#17233A)] truncate">{other.display_name}</b>
-                  <small className="text-[var(--muted,#5B6577)] block text-[13px] truncate">{previewText(last)}</small>
+                  <b className="font-semibold text-[1rem] block text-[var(--text,#17233A)] truncate">{other.display_name}</b>
+                  <small className="text-[var(--muted,#5B6577)] block text-[0.866667rem] truncate">{previewText(last)}</small>
                 </span>
                 {last && <span className="shrink-0"><ExpiryChip expiresAt={last.expires_at} /></span>}
               </button>

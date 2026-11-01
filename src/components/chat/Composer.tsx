@@ -115,7 +115,7 @@ export const Composer: React.FC<ComposerProps> = ({
           placeholder={placeholder}
           aria-label={label}
           enterKeyHint={isTouchDevice() ? 'enter' : 'send'}
-          className="flex-1 min-h-[44px] resize-none bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3.5 py-[10px] text-[15px] leading-[20px] text-[var(--text,#17233A)] outline-none focus:border-[var(--blue,#244C8A)]"
+          className="flex-1 min-h-[44px] resize-none bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3.5 py-[10px] text-[1rem] leading-[20px] text-[var(--text,#17233A)] outline-none focus:border-[var(--blue,#244C8A)]"
         />
         {onTogglePicker && (
           <button

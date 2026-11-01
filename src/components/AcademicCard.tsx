@@ -12,10 +12,10 @@ export interface AcademicInfo {
   confirm_due: boolean;
 }
 
-const field = 'w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 py-2 text-[15px] text-[var(--text,#17233A)]';
-const label = 'block text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1';
-const primary = 'min-h-[44px] px-4 rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[14px] font-semibold disabled:opacity-50 cursor-pointer border-0';
-const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer disabled:opacity-40';
+const field = 'w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 py-2 text-[1rem] text-[var(--text,#17233A)]';
+const label = 'block text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1';
+const primary = 'min-h-[44px] px-4 rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[0.933333rem] font-semibold disabled:opacity-50 cursor-pointer border-0';
+const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer disabled:opacity-40';
 
 async function send<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
@@ -77,13 +77,13 @@ export const AcademicCard: React.FC<{ onChanged?: () => void }> = ({ onChanged }
 
   return (
     <section aria-labelledby="set-academic" className="border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 space-y-3">
-      <h2 id="set-academic" className="m-0 text-[15px] font-semibold text-[var(--text,#17233A)]">Academic details</h2>
+      <h2 id="set-academic" className="m-0 text-[1rem] font-semibold text-[var(--text,#17233A)]">Academic details</h2>
       {graduated ? (
-        <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">You are marked as graduated. Your posts and messages are kept.</p>
+        <p className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">You are marked as graduated. Your posts and messages are kept.</p>
       ) : (
         <>
           {info.confirm_due && (
-            <p role="status" className="m-0 text-[13px] text-[var(--text,#17233A)]">Please check these are still right, then confirm or save changes.</p>
+            <p role="status" className="m-0 text-[0.866667rem] text-[var(--text,#17233A)]">Please check these are still right, then confirm or save changes.</p>
           )}
           <div>
             <label htmlFor="acad-program" className={label}>Program</label>
@@ -121,7 +121,7 @@ export const AcademicCard: React.FC<{ onChanged?: () => void }> = ({ onChanged }
           </div>
           {askGraduate && (
             <div role="group" aria-label="Confirm graduation" className="space-y-2">
-              <p className="m-0 text-[13px] text-[var(--text,#17233A)]">Your account moves to Alumni. Nothing you posted or sent is deleted. You cannot undo this yourself.</p>
+              <p className="m-0 text-[0.866667rem] text-[var(--text,#17233A)]">Your account moves to Alumni. Nothing you posted or sent is deleted. You cannot undo this yourself.</p>
               <div className="flex gap-2">
                 <button type="button" disabled={busy} className={primary} onClick={() => void run(() => send<AcademicInfo>('POST', '/api/me/academic/graduate'), 'Your account is now marked as graduated.')}>Yes, I have graduated</button>
                 <button type="button" className={ghost} onClick={() => setAskGraduate(false)}>Cancel</button>
@@ -130,7 +130,7 @@ export const AcademicCard: React.FC<{ onChanged?: () => void }> = ({ onChanged }
           )}
         </>
       )}
-      {note && <p role={note.type === 'error' ? 'alert' : 'status'} className={`m-0 text-[13px] ${note.type === 'error' ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'}`}>{note.text}</p>}
+      {note && <p role={note.type === 'error' ? 'alert' : 'status'} className={`m-0 text-[0.866667rem] ${note.type === 'error' ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'}`}>{note.text}</p>}
     </section>
   );
 };

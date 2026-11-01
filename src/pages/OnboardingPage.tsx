@@ -24,12 +24,12 @@ type UsernameState =
   | { status: 'unavailable'; message: string };
 
 const fieldClass =
-  'w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 py-2 text-[15px] text-[var(--text,#17233A)]';
-const labelClass = 'block text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1';
+  'w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 py-2 text-[1rem] text-[var(--text,#17233A)]';
+const labelClass = 'block text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1';
 const primaryButton =
-  'w-full min-h-[44px] rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[14px] font-semibold disabled:opacity-50 cursor-pointer border-0';
+  'w-full min-h-[44px] rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[0.933333rem] font-semibold disabled:opacity-50 cursor-pointer border-0';
 const secondaryButton =
-  'w-full min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[14px] font-semibold disabled:opacity-50 cursor-pointer';
+  'w-full min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.933333rem] font-semibold disabled:opacity-50 cursor-pointer';
 
 const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9]|_(?=[a-z0-9])){1,18}[a-z0-9]$/;
 
@@ -37,7 +37,7 @@ const PrintedSummary: React.FC<{ check: PrintedCheck; confirmed: boolean; onConf
   const d = describeCheck(check);
   const bad = hasMismatch(check);
   return (
-    <div className="mt-1 space-y-1 text-[13px] text-[var(--text,#17233A)]">
+    <div className="mt-1 space-y-1 text-[0.866667rem] text-[var(--text,#17233A)]">
       {d.ok.length > 0 && <p role="status" className="m-0">The printed {d.ok.join(', ')} on your card look right.</p>}
       {d.check.length > 0 && (
         <p role={bad ? 'alert' : 'status'} className={`m-0 ${bad ? 'text-[var(--danger,#B23A40)]' : ''}`}>
@@ -290,8 +290,8 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
   if (session === 'expired') {
     return (
       <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-20 tablet:py-10 px-4 text-center space-y-4">
-        <h1 className="text-[18px] font-semibold text-[var(--text,#17233A)]">Your sign-up session ended</h1>
-        <p className="text-[14px] text-[var(--muted,#5B6577)]">For your safety it only lasts 15 minutes. Start again to continue.</p>
+        <h1 className="text-[1.2rem] font-semibold text-[var(--text,#17233A)]">Your sign-up session ended</h1>
+        <p className="text-[0.933333rem] text-[var(--muted,#5B6577)]">For your safety it only lasts 15 minutes. Start again to continue.</p>
         <button type="button" onClick={onRestart} className={primaryButton}>
           Start again
         </button>
@@ -302,8 +302,8 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
   if (created) {
     return (
       <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-12 px-4 space-y-5 text-center">
-        <h1 className="text-[18px] font-semibold text-[var(--text,#17233A)]">Add a profile photo</h1>
-        <p className="text-[14px] text-[var(--muted,#5B6577)]">
+        <h1 className="text-[1.2rem] font-semibold text-[var(--text,#17233A)]">Add a profile photo</h1>
+        <p className="text-[0.933333rem] text-[var(--muted,#5B6577)]">
           Other students see it next to your name. You can change it any time.
         </p>
         <div className="flex justify-center">
@@ -319,7 +319,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
           onChange={(e) => handlePhoto(e.target.files?.[0])}
         />
         {error && (
-          <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">
+          <p role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)]">
             {error}
           </p>
         )}
@@ -337,8 +337,8 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
 
   return (
     <div className="w-full max-w-[360px] mx-auto tablet:my-16 tablet:px-8 tablet:bg-[var(--bg,#fff)] tablet:border tablet:border-[var(--line,#E8EBF0)] tablet:rounded-[16px] py-8 px-4">
-      <h1 className="text-[20px] font-semibold text-[var(--text,#17233A)]">Create your account</h1>
-      <p className="mt-1 mb-5 text-[14px] text-[var(--muted,#5B6577)]">
+      <h1 className="text-[1.333333rem] font-semibold text-[var(--text,#17233A)]">Create your account</h1>
+      <p className="mt-1 mb-5 text-[0.933333rem] text-[var(--muted,#5B6577)]">
         {email ? `Signing up as ${email}.` : 'Tell us a little about you.'}
       </p>
 
@@ -357,7 +357,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
             aria-describedby="signup-real-name-help"
             className={fieldClass}
           />
-          <p id="signup-real-name-help" className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">
+          <p id="signup-real-name-help" className="mt-1 text-[0.8rem] text-[var(--muted,#5B6577)]">
             Shown on your profile page only. Posts and messages use your username.
           </p>
         </div>
@@ -383,7 +383,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
             id="signup-username-status"
             role="status"
             aria-live="polite"
-            className={`mt-1 text-[12px] min-h-[16px] ${
+            className={`mt-1 text-[0.8rem] min-h-[16px] ${
               usernameState.status === 'unavailable' ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--muted,#5B6577)]'
             }`}
           >
@@ -475,7 +475,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
             aria-describedby="signup-roll-help"
             className={`${fieldClass} font-mono tracking-wider`}
           />
-          <p id="signup-roll-help" className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">
+          <p id="signup-roll-help" className="mt-1 text-[0.8rem] text-[var(--muted,#5B6577)]">
             Type it exactly as printed on your card. It is never shown to anyone and is only used to stop one student signing up twice.
           </p>
         </div>
@@ -483,21 +483,21 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
         <div>
           <span className={labelClass}>Student card</span>
           {scannedBarcode && barcodeMatchesRoll(scannedBarcode, roll) ? (
-            <p role="status" className="text-[13px] text-[var(--text,#17233A)]">
+            <p role="status" className="text-[0.866667rem] text-[var(--text,#17233A)]">
               Card scanned. The barcode matches your roll number.
             </p>
           ) : scannedBarcode ? (
-            <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">
+            <p role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)]">
               The barcode reads {scannedBarcode}, which does not match the roll number you typed. Check the number or scan again.
             </p>
           ) : (
-            <p className="text-[12px] text-[var(--muted,#5B6577)]">
+            <p className="text-[0.8rem] text-[var(--muted,#5B6577)]">
               {uploadMode
                 ? 'Upload a picture of your card to finish. It is required, and a blurry, dark or cropped picture will be turned down with a reason.'
                 : 'Scan the barcode on your card to finish. It is required. It is read on this device and the picture is not saved.'}
             </p>
           )}
-          {printed === 'reading' && <p role="status" className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">Reading the printed details on your card...</p>}
+          {printed === 'reading' && <p role="status" className="mt-1 text-[0.8rem] text-[var(--muted,#5B6577)]">Reading the printed details on your card...</p>}
           {printed && printed !== 'reading' && <PrintedSummary check={printed} confirmed={mismatchOk} onConfirm={setMismatchOk} />}
           {uploadMode ? (
             <div
@@ -515,11 +515,11 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
                 className="sr-only"
                 onChange={(e) => void handleCardPicture(e.target.files?.[0])}
               />
-              <p className="text-[12px] text-[var(--muted,#5B6577)] m-0">
+              <p className="text-[0.8rem] text-[var(--muted,#5B6577)] m-0">
                 Drop a clear picture of the front of your card here, with the whole barcode in it. It is read on this device and the picture is not saved or sent anywhere.
               </p>
-              {photoProblem && <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)] m-0">{photoProblem}</p>}
-              {photoBusy && <p role="status" className="text-[12px] text-[var(--muted,#5B6577)] m-0">Reading your picture...</p>}
+              {photoProblem && <p role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)] m-0">{photoProblem}</p>}
+              {photoBusy && <p role="status" className="text-[0.8rem] text-[var(--muted,#5B6577)] m-0">Reading your picture...</p>}
               <button type="button" disabled={photoBusy} onClick={() => cardFileRef.current?.click()} className={secondaryButton}>
                 {scannedBarcode ? 'Choose a different picture' : 'Upload a picture of your student card'}
               </button>
@@ -534,7 +534,7 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete, onRe
         {siteKey && <TurnstileWidget siteKey={siteKey} onToken={setTurnstileToken} resetKey={turnstileReset} />}
 
         {error && (
-          <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">
+          <p role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)]">
             {error}
           </p>
         )}

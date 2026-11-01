@@ -38,7 +38,7 @@ export interface CampusPickerViewProps {
 }
 
 const fieldClass =
-  'w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[15px] text-[var(--text,#17233A)]';
+  'w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[1rem] text-[var(--text,#17233A)]';
 
 export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
   const inputId = `${p.id}-input`;
@@ -50,7 +50,7 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
   if (p.selected && !p.editing) {
     return (
       <div>
-        <p id={`${p.id}-label`} className="block text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">
+        <p id={`${p.id}-label`} className="block text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1">
           {p.label}
         </p>
         <div
@@ -59,17 +59,17 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
           className="flex items-center justify-between gap-3 min-h-[44px] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 py-1.5"
         >
           <div className="min-w-0">
-            <span className="block text-[15px] text-[var(--text,#17233A)] truncate">
+            <span className="block text-[1rem] text-[var(--text,#17233A)] truncate">
               {p.selected.campus ? p.selected.campus.name : p.selected.other}
             </span>
-            <span className="block text-[12px] text-[var(--muted,#5B6577)] truncate">
+            <span className="block text-[0.8rem] text-[var(--muted,#5B6577)] truncate">
               {p.selected.campus ? p.selected.campus.city : 'Other campus'}
             </span>
           </div>
           <button
             type="button"
             onClick={p.onChange}
-            className="min-h-[44px] px-2 text-[13px] font-semibold text-[var(--blue,#244C8A)] cursor-pointer bg-transparent border-0"
+            className="min-h-[44px] px-2 text-[0.866667rem] font-semibold text-[var(--blue,#244C8A)] cursor-pointer bg-transparent border-0"
           >
             Change
           </button>
@@ -80,7 +80,7 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
 
   return (
     <div className="space-y-2">
-      <label htmlFor={inputId} className="block text-[13px] font-medium text-[var(--muted,#5B6577)]">
+      <label htmlFor={inputId} className="block text-[0.866667rem] font-medium text-[var(--muted,#5B6577)]">
         {p.label}
       </label>
 
@@ -101,7 +101,7 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
       )}
 
       <div className="relative">
-        <div className="flex items-center gap-2 border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 min-h-[44px] bg-[var(--bg,#fff)]">
+        <div className="field-box flex items-center gap-2 border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 min-h-[44px] bg-[var(--bg,#fff)]">
           <Search className="w-4 h-4 shrink-0 stroke-[1.7] text-[var(--muted,#5B6577)]" aria-hidden="true" />
           <input
             id={inputId}
@@ -118,7 +118,7 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
             onChange={(e) => p.onQueryChange(e.target.value)}
             onFocus={p.onFocus}
             onKeyDown={p.onKeyDown}
-            className="flex-1 min-w-0 border-0 bg-transparent text-[15px] text-[var(--text,#17233A)] outline-none"
+            className="flex-1 min-w-0 self-stretch border-0 bg-transparent text-[1rem] text-[var(--text,#17233A)] outline-none"
           />
         </div>
 
@@ -141,8 +141,8 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
                 }}
                 className={`px-3 py-2 min-h-[44px] cursor-pointer ${i === p.activeIndex ? 'bg-[var(--tint,#EAF0FA)]' : ''}`}
               >
-                <span className="block text-[15px] text-[var(--text,#17233A)]">{c.name}</span>
-                {c.city && <span className="block text-[12px] text-[var(--muted,#5B6577)]">{c.city}</span>}
+                <span className="block text-[1rem] text-[var(--text,#17233A)]">{c.name}</span>
+                {c.city && <span className="block text-[0.8rem] text-[var(--muted,#5B6577)]">{c.city}</span>}
               </li>
             ))}
             {p.canOther && (
@@ -154,7 +154,7 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
                   e.preventDefault();
                   p.onOpenOther();
                 }}
-                className={`px-3 py-2 min-h-[44px] cursor-pointer border-t border-[var(--line,#E8EBF0)] text-[14px] font-semibold text-[var(--blue,#244C8A)] ${
+                className={`px-3 py-2 min-h-[44px] cursor-pointer border-t border-[var(--line,#E8EBF0)] text-[0.933333rem] font-semibold text-[var(--blue,#244C8A)] ${
                   p.activeIndex === p.results.length ? 'bg-[var(--tint,#EAF0FA)]' : ''
                 }`}
               >
@@ -165,7 +165,7 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
         )}
       </div>
 
-      <p role="status" aria-live="polite" className="text-[12px] text-[var(--muted,#5B6577)] min-h-[16px]">
+      <p role="status" aria-live="polite" className="text-[0.8rem] text-[var(--muted,#5B6577)] min-h-[16px]">
         {p.open && p.query.trim() && optionCount === 0
           ? 'No campus found'
           : p.open && p.results.length > 0
@@ -176,7 +176,7 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
       {p.otherOpen && (
         <div className="border border-[var(--line,#E8EBF0)] rounded-[8px] p-3 space-y-2">
           <div>
-            <label htmlFor={`${p.id}-other`} className="block text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">
+            <label htmlFor={`${p.id}-other`} className="block text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1">
               Other campus
             </label>
             <input
@@ -188,21 +188,21 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
               className={fieldClass}
             />
           </div>
-          <p className="text-[12px] text-[var(--muted,#5B6577)]">
+          <p className="text-[0.8rem] text-[var(--muted,#5B6577)]">
             Other campuses are shown on your profile but are not used to find people on your campus.
           </p>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={p.onSubmitOther}
-              className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[13px] font-semibold cursor-pointer border-0"
+              className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[0.866667rem] font-semibold cursor-pointer border-0"
             >
               Use this campus
             </button>
             <button
               type="button"
               onClick={p.onCancelOther}
-              className="min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer"
+              className="min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer"
             >
               Cancel
             </button>
@@ -211,7 +211,7 @@ export const CampusPickerView: React.FC<CampusPickerViewProps> = (p) => {
       )}
 
       {p.message && (
-        <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">
+        <p role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)]">
           {p.message}
         </p>
       )}

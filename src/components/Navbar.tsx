@@ -13,11 +13,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   appName = 'Dialtone',
 }) => {
   return (
-    <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center justify-between px-4">
+    <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] min-h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center justify-between px-4">
       <button
         type="button"
         onClick={onTitleClick}
-        className="font-semibold text-[20px] text-[var(--text,#17233A)] tracking-[-0.3px] hover:opacity-85 transition-opacity cursor-pointer bg-transparent border-0 p-0 min-h-[44px] flex items-center"
+        className="font-semibold text-[1.333333rem] text-[var(--text,#17233A)] tracking-[-0.3px] hover:opacity-85 transition-opacity cursor-pointer bg-transparent border-0 p-0 min-h-[44px] flex items-center"
       >
         {appName}
       </button>

@@ -42,11 +42,11 @@ export const AppealForm: React.FC = () => {
 
   if (state === 'loading') return null;
   if (state === 'unavailable') {
-    return <p className="text-[12px] text-left text-[var(--muted,#5B6577)]">To ask for a review, tap Log in with Google again and the request form will appear here.</p>;
+    return <p className="text-[0.8rem] text-left text-[var(--muted,#5B6577)]">To ask for a review, tap Log in with Google again and the request form will appear here.</p>;
   }
-  if (appeal?.status === 'open') return <p role="status" className="text-[13px] text-left text-[var(--text,#17233A)]">Your request is waiting for an administrator.</p>;
-  if (appeal?.status === 'denied') return <p role="status" className="text-[13px] text-left text-[var(--text,#17233A)]">Your request was reviewed and the account stays blocked.{appeal.decision_note ? ` Note: ${appeal.decision_note}` : ''}</p>;
-  if (appeal?.status === 'granted') return <p role="status" className="text-[13px] text-left text-[var(--text,#17233A)]">Your request was approved. Log in with Google again.</p>;
+  if (appeal?.status === 'open') return <p role="status" className="text-[0.866667rem] text-left text-[var(--text,#17233A)]">Your request is waiting for an administrator.</p>;
+  if (appeal?.status === 'denied') return <p role="status" className="text-[0.866667rem] text-left text-[var(--text,#17233A)]">Your request was reviewed and the account stays blocked.{appeal.decision_note ? ` Note: ${appeal.decision_note}` : ''}</p>;
+  if (appeal?.status === 'granted') return <p role="status" className="text-[0.866667rem] text-left text-[var(--text,#17233A)]">Your request was approved. Log in with Google again.</p>;
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,11 +66,11 @@ export const AppealForm: React.FC = () => {
 
   return (
     <form onSubmit={send} className="space-y-2 text-left">
-      <label htmlFor="appeal-message" className="block text-[13px] font-medium text-[var(--muted,#5B6577)]">Ask for a review (what happened?)</label>
+      <label htmlFor="appeal-message" className="block text-[0.866667rem] font-medium text-[var(--muted,#5B6577)]">Ask for a review (what happened?)</label>
       <textarea id="appeal-message" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={500} rows={4}
-        className="w-full bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 py-2 text-[15px] text-[var(--text,#17233A)]" />
-      {error && <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">{error}</p>}
-      <button type="submit" disabled={busy || !message.trim()} className="w-full min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[14px] font-semibold cursor-pointer disabled:opacity-50">
+        className="w-full bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 py-2 text-[1rem] text-[var(--text,#17233A)]" />
+      {error && <p role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)]">{error}</p>}
+      <button type="submit" disabled={busy || !message.trim()} className="w-full min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.933333rem] font-semibold cursor-pointer disabled:opacity-50">
         {busy ? 'Sending...' : 'Send request'}
       </button>
     </form>
@@ -92,12 +92,12 @@ export const SignInPage: React.FC<SignInPageProps> = ({ notice = null }) => {
       <div className="space-y-6 text-center">
         {/* Minimal branding */}
         <div className="space-y-1">
-          <h1 className="text-[20px] font-semibold text-[var(--text,#17233A)] tracking-tight">Dialtone</h1>
-          <p className="text-[14px] text-[var(--muted,#5B6577)]">Log in or create your student account.</p>
+          <h1 className="text-[1.333333rem] font-semibold text-[var(--text,#17233A)] tracking-tight">Dialtone</h1>
+          <p className="text-[0.933333rem] text-[var(--muted,#5B6577)]">Log in or create your student account.</p>
         </div>
 
         {notice && (
-          <p role="alert" className="text-[13px] text-left rounded-[8px] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] p-3">
+          <p role="alert" className="text-[0.866667rem] text-left rounded-[8px] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] p-3">
             {NOTICES[notice]}
           </p>
         )}
@@ -109,7 +109,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ notice = null }) => {
             type="button"
             onClick={() => start('login')}
             disabled={loading !== null}
-            className="w-full min-h-[44px] px-4 rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] font-semibold border-0 text-[14px] flex items-center justify-center space-x-2 transition-colors disabled:opacity-50 cursor-pointer"
+            className="w-full min-h-[44px] px-4 rounded-[8px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] font-semibold border-0 text-[0.933333rem] flex items-center justify-center space-x-2 transition-colors disabled:opacity-50 cursor-pointer"
           >
             <span>{loading === 'login' ? 'Connecting...' : 'Log in with Google'}</span>
             <ArrowRight className="w-4 h-4 ml-1" aria-hidden="true" />
@@ -119,7 +119,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ notice = null }) => {
             type="button"
             onClick={() => start('signup')}
             disabled={loading !== null}
-            className="w-full min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] font-semibold text-[14px] flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+            className="w-full min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] font-semibold text-[0.933333rem] flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
           >
             <span>{loading === 'signup' ? 'Connecting...' : 'Sign up with Google'}</span>
           </button>
@@ -130,14 +130,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({ notice = null }) => {
               type="button"
               onClick={() => start('signup', true)}
               disabled={loading !== null}
-              className="w-full min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--muted,#5B6577)] text-[13px] font-medium flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+              className="w-full min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--muted,#5B6577)] text-[0.866667rem] font-medium flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
             >
               <span>{loading === 'signup-mock' ? 'Signing up...' : 'Sign up as test user'}</span>
             </button>
           )}
         </div>
 
-        <p className="text-[12px] text-[var(--muted,#5B6577)]">
+        <p className="text-[0.8rem] text-[var(--muted,#5B6577)]">
           New here? Choose Sign up. You will pick a username, your campus and class.
         </p>
       </div>

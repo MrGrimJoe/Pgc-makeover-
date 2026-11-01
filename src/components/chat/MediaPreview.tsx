@@ -26,7 +26,7 @@ interface MediaPreviewProps {
 }
 
 const chip = (on: boolean) =>
-  `min-h-[44px] px-3.5 rounded-full border text-[13px] font-semibold cursor-pointer ${
+  `min-h-[44px] px-3.5 rounded-full border text-[0.866667rem] font-semibold cursor-pointer ${
     on ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] border-[var(--blue,#244C8A)]' : 'bg-[var(--bg,#fff)] text-[var(--text,#17233A)] border-[var(--line,#E8EBF0)]'
   }`;
 
@@ -91,15 +91,15 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
 
   return (
     <div ref={ref} role="dialog" aria-modal="true" aria-label={mode === 'library' ? 'Add to my stickers and GIFs' : 'Preview before sending'} tabIndex={-1} className="fixed inset-0 left-[var(--nav-w,0px)] z-50 bg-[var(--bg,#fff)] flex flex-col max-w-content mx-auto">
-      <header className="h-[48px] flex items-center px-2 border-b border-[var(--line,#E8EBF0)] shrink-0">
+      <header className="min-h-[48px] flex items-center px-2 border-b border-[var(--line,#E8EBF0)] shrink-0">
         <button type="button" onClick={onCancel} disabled={busy} aria-label="Cancel" className="w-[44px] h-[44px] flex items-center justify-center bg-transparent border-0 text-[var(--text,#17233A)] cursor-pointer disabled:opacity-40">
           <X className="w-5 h-5" aria-hidden="true" />
         </button>
-        <h2 className="m-0 text-[16px] font-semibold text-[var(--text,#17233A)]">{mode === 'library' ? 'Add to my stickers' : 'Preview'}</h2>
+        <h2 className="m-0 text-[1.066667rem] font-semibold text-[var(--text,#17233A)]">{mode === 'library' ? 'Add to my stickers' : 'Preview'}</h2>
       </header>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {tooMany && <p role="status" className="m-0 text-[13px] text-[var(--muted,#5B6577)]">Only the first {MAX_ITEMS} pictures are used.</p>}
+        {tooMany && <p role="status" className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">Only the first {MAX_ITEMS} pictures are used.</p>}
 
         {cur && (
           <div className="relative w-full aspect-square bg-[var(--bg2,#F8F9FC)] rounded-[12px] overflow-hidden" data-testid="stage">
@@ -129,7 +129,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
           <div role="tablist" aria-label="Pictures" className="flex gap-2">
             {items.map((it, i) => (
               <button key={i} type="button" role="tab" aria-selected={i === index} aria-label={`Picture ${i + 1} of ${items.length}`} onClick={() => setIndex(i)} className={`w-[44px] h-[44px] rounded-[8px] overflow-hidden p-0 cursor-pointer ${i === index ? 'border-2 border-[var(--blue,#244C8A)]' : 'border border-[var(--line,#E8EBF0)]'}`}>
-                {it.mime?.startsWith('video/') ? <span className="text-[11px]">Clip</span> : <img src={it.url} alt="" className="w-full h-full object-cover" />}
+                {it.mime?.startsWith('video/') ? <span className="text-[0.733333rem]">Clip</span> : <img src={it.url} alt="" className="w-full h-full object-cover" />}
               </button>
             ))}
           </div>
@@ -138,10 +138,10 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
         {cur && canEdit && (
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2 items-center">
-              <button type="button" onClick={() => setEditing(true)} className="min-h-[44px] px-3.5 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center gap-1.5">
+              <button type="button" onClick={() => setEditing(true)} className="min-h-[44px] px-3.5 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer inline-flex items-center gap-1.5">
                 <Pencil className="w-4 h-4" aria-hidden="true" />Add text
               </button>
-              <button type="button" onClick={() => patch({ rotate: (cur.rotate + 1) % 4 })} aria-label="Rotate 90 degrees" className="min-h-[44px] px-3.5 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center gap-1.5">
+              <button type="button" onClick={() => patch({ rotate: (cur.rotate + 1) % 4 })} aria-label="Rotate 90 degrees" className="min-h-[44px] px-3.5 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer inline-flex items-center gap-1.5">
                 <RotateCw className="w-4 h-4" aria-hidden="true" />Rotate
               </button>
             </div>
@@ -154,11 +154,11 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
             </div>
             {cur.aspect !== 'original' && (
               <div className="grid grid-cols-2 gap-3">
-                <label className="text-[12px] text-[var(--muted,#5B6577)] block">
+                <label className="text-[0.8rem] text-[var(--muted,#5B6577)] block">
                   Move across
                   <input type="range" min={0} max={100} value={Math.round(cur.ox * 100)} onChange={(e) => patch({ ox: Number(e.target.value) / 100 })} className="w-full min-h-[44px]" />
                 </label>
-                <label className="text-[12px] text-[var(--muted,#5B6577)] block">
+                <label className="text-[0.8rem] text-[var(--muted,#5B6577)] block">
                   Move up and down
                   <input type="range" min={0} max={100} value={Math.round(cur.oy * 100)} onChange={(e) => patch({ oy: Number(e.target.value) / 100 })} className="w-full min-h-[44px]" />
                 </label>
@@ -169,7 +169,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
 
         {cur && options.length > 0 && mode === 'send' && (
           <fieldset className="border-0 p-0 m-0">
-            <legend className="text-[13px] font-semibold text-[var(--text,#17233A)] mb-1.5">Send as</legend>
+            <legend className="text-[0.866667rem] font-semibold text-[var(--text,#17233A)] mb-1.5">Send as</legend>
             <div role="radiogroup" aria-label="Send as" className="flex flex-wrap gap-2">
               {options.map((o) => (
                 <button key={o} type="button" role="radio" aria-checked={cur.sendAs === o} onClick={() => patch({ sendAs: o })} className={chip(cur.sendAs === o)}>
@@ -182,16 +182,16 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ files, mode = 'send'
 
         {mode === 'send' && (
           <div>
-            <label htmlFor="preview-caption" className="block text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">Caption</label>
-            <input id="preview-caption" type="text" value={caption} maxLength={500} onChange={(e) => setCaption(e.target.value)} className="w-full min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3.5 text-[15px] text-[var(--text,#17233A)] outline-none" />
+            <label htmlFor="preview-caption" className="block text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1">Caption</label>
+            <input id="preview-caption" type="text" value={caption} maxLength={500} onChange={(e) => setCaption(e.target.value)} className="w-full min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[12px] px-3.5 text-[1rem] text-[var(--text,#17233A)] outline-none" />
           </div>
         )}
 
-        {error && <div role="alert" className="p-2.5 rounded-[8px] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">{error}</div>}
+        {error && <div role="alert" className="p-2.5 rounded-[8px] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[0.866667rem]">{error}</div>}
       </div>
 
       <div className="p-3 border-t border-[var(--line,#E8EBF0)] pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shrink-0">
-        <button type="button" onClick={() => void confirm()} disabled={busy || items.length === 0} className="w-full min-h-[44px] rounded-[12px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[15px] font-semibold cursor-pointer border-0 disabled:opacity-40">
+        <button type="button" onClick={() => void confirm()} disabled={busy || items.length === 0} className="w-full min-h-[44px] rounded-[12px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] text-[1rem] font-semibold cursor-pointer border-0 disabled:opacity-40">
           {busy ? 'Working...' : mode === 'library' ? 'Add' : 'Send'}
         </button>
       </div>

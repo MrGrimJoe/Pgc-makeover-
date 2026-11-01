@@ -21,7 +21,7 @@ interface MediaViewerProps {
 }
 
 const action =
-  'min-h-[44px] px-3 rounded-full border border-white/40 bg-black/40 text-white text-[13px] font-semibold cursor-pointer inline-flex items-center gap-1.5';
+  'min-h-[44px] px-3 rounded-full border border-white/40 bg-black/40 text-white text-[0.866667rem] font-semibold cursor-pointer inline-flex items-center gap-1.5';
 
 /** Full-screen view of message media with Download, Share, Forward, Save as sticker and Report. */
 export const MediaViewer: React.FC<MediaViewerProps> = ({ message, startIndex, isSelf, onClose, onNotice, onSendFile }) => {
@@ -66,9 +66,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ message, startIndex, i
 
   return (
     <div ref={ref} role="dialog" aria-modal="true" aria-label={`${mediaLabel(cur)} viewer`} tabIndex={-1} className="fixed inset-0 left-[var(--nav-w,0px)] z-50 bg-black flex flex-col max-w-content mx-auto">
-      <header className="h-[48px] flex items-center justify-between px-2 shrink-0">
+      <header className="min-h-[48px] flex items-center justify-between px-2 shrink-0">
         <button type="button" onClick={onClose} aria-label="Close viewer" className="w-[44px] h-[44px] flex items-center justify-center bg-transparent border-0 text-white cursor-pointer"><X className="w-6 h-6" aria-hidden="true" /></button>
-        {media.length > 1 && <span className="text-white text-[13px]" aria-live="polite">{index + 1} of {media.length}</span>}
+        {media.length > 1 && <span className="text-white text-[0.866667rem]" aria-live="polite">{index + 1} of {media.length}</span>}
         <span className="w-[44px]" />
       </header>
 

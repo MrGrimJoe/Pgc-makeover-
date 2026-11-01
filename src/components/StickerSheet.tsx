@@ -15,7 +15,7 @@ interface StickerSheetProps {
 }
 
 const btn =
-  'w-full min-h-[44px] rounded-[12px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[14px] font-semibold cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-40';
+  'w-full min-h-[44px] rounded-[12px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.933333rem] font-semibold cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-40';
 
 /** Opens when someone taps a sticker or GIF in a chat, post or comment: add it to your favorites, or put text on it. */
 export const StickerSheet: React.FC<StickerSheetProps> = ({ stickerKey, media = [], onClose }) => {
@@ -93,7 +93,7 @@ export const StickerSheet: React.FC<StickerSheetProps> = ({ stickerKey, media = 
               )}
               <button type="button" onClick={requestClose} className={`${btn} border-transparent text-[var(--muted,#5B6577)]`}>Close</button>
             </div>
-            {note && <p role={note.error ? 'alert' : 'status'} className={`m-0 text-[13px] ${note.error ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'}`}>{note.text}</p>}
+            {note && <p role={note.error ? 'alert' : 'status'} className={`m-0 text-[0.866667rem] ${note.error ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'}`}>{note.text}</p>}
           </div>
         )}
       </BottomSheet>

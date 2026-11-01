@@ -62,7 +62,7 @@ export const SideNav: React.FC<SideNavProps> = ({ activeTab, setActiveTab, onOpe
         title={label}
         aria-label={label}
         aria-current={active ? 'page' : undefined}
-        className={`flex items-center gap-3 min-h-[48px] rounded-[12px] border-0 cursor-pointer text-[15px] ${
+        className={`flex items-center gap-3 min-h-[48px] rounded-[12px] border-0 cursor-pointer text-[1rem] ${
           expanded ? 'px-3 w-full justify-start' : 'w-12 justify-center mx-auto'
         } ${active ? 'bg-[var(--tint,#EEF3FB)] text-[var(--text,#17233A)] font-semibold' : 'bg-transparent text-[var(--muted,#5B6577)] hover:bg-[var(--bg2,#F8F9FC)] hover:text-[var(--text,#17233A)]'}`}
       >
@@ -99,7 +99,7 @@ export const SideNav: React.FC<SideNavProps> = ({ activeTab, setActiveTab, onOpe
           type="button"
           onClick={onTitleClick}
           aria-label={`${appName} home`}
-          className={`bg-transparent border-0 cursor-pointer text-[var(--text,#17233A)] font-semibold tracking-[-0.3px] min-h-[48px] text-[22px] ${expanded ? 'text-left px-3' : 'mx-auto'}`}
+          className={`bg-transparent border-0 cursor-pointer text-[var(--text,#17233A)] font-semibold tracking-[-0.3px] min-h-[48px] text-[1.466667rem] ${expanded ? 'text-left px-3' : 'mx-auto min-w-[48px]'}`}
         >
           {expanded ? appName : appName.charAt(0)}
         </button>

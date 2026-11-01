@@ -28,8 +28,8 @@ interface SettingsPageProps {
 }
 
 const card = 'border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 space-y-3';
-const h2 = 'm-0 text-[15px] font-semibold text-[var(--text,#17233A)]';
-const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer disabled:opacity-40';
+const h2 = 'm-0 text-[1rem] font-semibold text-[var(--text,#17233A)]';
+const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer disabled:opacity-40';
 
 /** The four groups of Settings. One is shown at a time: tabs across the top on phones and tablets, a list on the left on desktop. */
 type SectionId = 'privacy' | 'look' | 'content' | 'account';
@@ -43,9 +43,9 @@ const SECTIONS: Array<{ id: SectionId; label: string; tab: string }> = [
 /** Sample bubbles for the live preview. Fixed text, not real messages. */
 const PreviewBubbles: React.FC = () => (
   <div className="p-3 space-y-2" aria-hidden="true">
-    <div className="max-w-[75%] px-3 py-1.5 text-[14px] rounded-[14px] rounded-bl-[4px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)]">Hello!</div>
-    <div className="max-w-[75%] ml-auto px-3 py-1.5 text-[14px] rounded-[14px] rounded-br-[4px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)]">Hi, how are you?</div>
-    <p className="m-0 text-[12px] text-[var(--muted,#5B6577)]">Messages stay for 14 days</p>
+    <div className="max-w-[75%] px-3 py-1.5 text-[0.933333rem] rounded-[14px] rounded-bl-[4px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)]">Hello!</div>
+    <div className="max-w-[75%] ml-auto px-3 py-1.5 text-[0.933333rem] rounded-[14px] rounded-br-[4px] bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)]">Hi, how are you?</div>
+    <p className="m-0 text-[0.8rem] text-[var(--muted,#5B6577)]">Messages stay for 14 days</p>
   </div>
 );
 
@@ -187,9 +187,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
 
   return (
     <div className="w-full max-w-content desktop:max-w-wide mx-auto min-h-screen bg-[var(--bg2,#F8F9FC)] pb-24 tablet:pb-8">
-      <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center px-2">
+      <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] min-h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center px-2">
         <button type="button" onClick={onBack} aria-label="Back" title="Back" className="w-[44px] h-[44px] flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0"><ArrowLeft className="w-5 h-5 stroke-[1.7]" aria-hidden="true" /></button>
-        <h1 className="m-0 text-[18px] font-semibold text-[var(--text,#17233A)]">Settings</h1>
+        <h1 className="m-0 text-[1.2rem] font-semibold text-[var(--text,#17233A)]">Settings</h1>
       </header>
 
       {!split && (
@@ -204,7 +204,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
               aria-controls="settings-panel"
               tabIndex={section === id ? 0 : -1}
               onClick={() => setSection(id)}
-              className={`flex-1 shrink-0 min-h-[44px] px-3 text-[14px] font-semibold whitespace-nowrap cursor-pointer bg-transparent border-0 border-b-2 ${section === id ? 'border-[var(--blue,#244C8A)] text-[var(--blue,#244C8A)]' : 'border-transparent text-[var(--muted,#5B6577)]'}`}
+              className={`flex-1 shrink-0 min-h-[44px] px-3 text-[0.933333rem] font-semibold whitespace-nowrap cursor-pointer bg-transparent border-0 border-b-2 ${section === id ? 'border-[var(--blue,#244C8A)] text-[var(--blue,#244C8A)]' : 'border-transparent text-[var(--muted,#5B6577)]'}`}
             >
               {tab}
             </button>
@@ -221,7 +221,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
                 type="button"
                 onClick={() => setSection(id)}
                 aria-current={section === id ? 'true' : undefined}
-                className={`w-full min-h-[44px] px-3 rounded-[8px] border-0 text-left text-[14px] cursor-pointer ${section === id ? 'bg-[var(--tint,#EEF3FB)] text-[var(--text,#17233A)] font-semibold' : 'bg-transparent text-[var(--muted,#5B6577)] hover:bg-[var(--bg,#fff)] hover:text-[var(--text,#17233A)]'}`}
+                className={`w-full min-h-[44px] px-3 rounded-[8px] border-0 text-left text-[0.933333rem] cursor-pointer ${section === id ? 'bg-[var(--tint,#EEF3FB)] text-[var(--text,#17233A)] font-semibold' : 'bg-transparent text-[var(--muted,#5B6577)] hover:bg-[var(--bg,#fff)] hover:text-[var(--text,#17233A)]'}`}
               >
                 {label}
               </button>
@@ -229,22 +229,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
           </div>
         )}
         <div {...(split ? {} : { role: 'tabpanel', id: 'settings-panel', 'aria-labelledby': `settings-tab-${section}` })} className={split ? 'flex-1 min-w-0 max-w-[640px] space-y-3' : 'space-y-3'}>
-        {message && <div role={message.type === 'error' ? 'alert' : 'status'} className={`rise-in p-2.5 rounded-[8px] border text-[13px] ${message.type === 'error' ? 'border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)]' : 'border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)]'} bg-[var(--bg,#fff)]`}>{message.text}</div>}
+        {message && <div role={message.type === 'error' ? 'alert' : 'status'} className={`rise-in p-2.5 rounded-[8px] border text-[0.866667rem] ${message.type === 'error' ? 'border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)]' : 'border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)]'} bg-[var(--bg,#fff)]`}>{message.text}</div>}
 
         <div className="rise-in border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 flex items-center gap-3" style={{ '--i': 0 } as React.CSSProperties}>
           <Avatar mediaId={currentUser.profile.avatar_media_id} displayName={currentUser.profile.display_name} username={username} size={56} />
           <div className="min-w-0 flex-1">
-            <b className="block truncate text-[16px] text-[var(--text,#17233A)]">{currentUser.profile.display_name || username}</b>
-            <span className="block truncate text-[13px] text-[var(--muted,#5B6577)]">@{username}</span>
+            <b className="block truncate text-[1.066667rem] text-[var(--text,#17233A)]">{currentUser.profile.display_name || username}</b>
+            <span className="block truncate text-[0.866667rem] text-[var(--muted,#5B6577)]">@{username}</span>
           </div>
           {onEditProfile && <button type="button" onClick={onEditProfile} className={ghost}>Edit profile</button>}
         </div>
         {show('privacy') && <div role="group" aria-labelledby="grp-privacy" className="rise-in space-y-3" style={{ '--i': 1 } as React.CSSProperties}>
-          <p id="grp-privacy" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Privacy and safety</p>
+          <p id="grp-privacy" className="m-0 px-1 pt-2 text-[0.8rem] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Privacy and safety</p>
         <section aria-labelledby="set-dm" className={card}>
           <h2 id="set-dm" className={h2}>Who can message you</h2>
           <label htmlFor="dm-policy-select" className="sr-only">Who can message you</label>
-          <select id="dm-policy-select" value={dmPolicy} onChange={(e) => void saveDm(e.target.value)} className="w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[15px] text-[var(--text,#17233A)] cursor-pointer">
+          <select id="dm-policy-select" value={dmPolicy} onChange={(e) => void saveDm(e.target.value)} className="w-full min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[1rem] text-[var(--text,#17233A)] cursor-pointer">
             <option value="everyone">Everyone</option>
             <option value="following">People I follow</option>
             <option value="none">No one</option>
@@ -252,11 +252,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
         </section>
         <section aria-labelledby="set-blocked" className={card}>
           <h2 id="set-blocked" className={h2}>Blocked people</h2>
-          {blocked.length === 0 ? <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">No blocked people</p> : (
+          {blocked.length === 0 ? <p className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">No blocked people</p> : (
             <ul className="list-none m-0 p-0 divide-y divide-[var(--line,#E8EBF0)]">
               {blocked.map((b) => (
                 <li key={b.user_id} className="flex items-center justify-between py-2">
-                  <span><b className="block text-[14px] text-[var(--text,#17233A)]">{b.display_name}</b><span className="block text-[12px] text-[var(--muted,#5B6577)]">@{b.username}</span></span>
+                  <span><b className="block text-[0.933333rem] text-[var(--text,#17233A)]">{b.display_name}</b><span className="block text-[0.8rem] text-[var(--muted,#5B6577)]">@{b.username}</span></span>
                   <button type="button" onClick={() => void unblock(b.user_id)} aria-label={`Unblock @${b.username}`} className={ghost}>Unblock</button>
                 </li>
               ))}
@@ -265,10 +265,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
         </section>
         </div>}
         {show('look') && <div role="group" aria-labelledby="grp-look" className="rise-in space-y-3" style={{ '--i': 2 } as React.CSSProperties}>
-          <p id="grp-look" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Appearance</p>
+          <p id="grp-look" className="m-0 px-1 pt-2 text-[0.8rem] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Appearance</p>
         <section aria-labelledby="set-bg" className={card}>
           <h2 id="set-bg" className={h2}>Chat background</h2>
-          <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">Used in all your chats. It stays on this phone and is never uploaded.</p>
+          <p className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">Used in all your chats. It stays on this phone and is never uploaded.</p>
           <div className="rounded-[12px] overflow-hidden border border-[var(--line,#E8EBF0)]" data-testid="bg-preview">
             <ChatBackground choice={bg}><PreviewBubbles /></ChatBackground>
           </div>
@@ -276,32 +276,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
             {CHAT_BACKGROUNDS.map((p) => {
               const on = bg.kind === 'preset' && bg.id === p.id;
               return (
-                <button key={p.id} type="button" role="radio" aria-checked={on} onClick={() => void choosePreset(p.id)} className={`min-h-[44px] px-3.5 rounded-full border text-[13px] font-semibold cursor-pointer ${on ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] border-[var(--blue,#244C8A)]' : 'bg-[var(--bg,#fff)] text-[var(--text,#17233A)] border-[var(--line,#E8EBF0)]'}`}>{p.name}</button>
+                <button key={p.id} type="button" role="radio" aria-checked={on} onClick={() => void choosePreset(p.id)} className={`min-h-[44px] px-3.5 rounded-full border text-[0.866667rem] font-semibold cursor-pointer ${on ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] border-[var(--blue,#244C8A)]' : 'bg-[var(--bg,#fff)] text-[var(--text,#17233A)] border-[var(--line,#E8EBF0)]'}`}>{p.name}</button>
               );
             })}
-            <button type="button" role="radio" aria-checked={bg.kind === 'image'} disabled={bgBusy} onClick={() => bgFile.current?.click()} className={`min-h-[44px] px-3.5 rounded-full border text-[13px] font-semibold cursor-pointer disabled:opacity-40 ${bg.kind === 'image' ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] border-[var(--blue,#244C8A)]' : 'bg-[var(--bg,#fff)] text-[var(--text,#17233A)] border-[var(--line,#E8EBF0)]'}`}>
+            <button type="button" role="radio" aria-checked={bg.kind === 'image'} disabled={bgBusy} onClick={() => bgFile.current?.click()} className={`min-h-[44px] px-3.5 rounded-full border text-[0.866667rem] font-semibold cursor-pointer disabled:opacity-40 ${bg.kind === 'image' ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] border-[var(--blue,#244C8A)]' : 'bg-[var(--bg,#fff)] text-[var(--text,#17233A)] border-[var(--line,#E8EBF0)]'}`}>
               {bgBusy ? 'Preparing...' : 'Your picture'}
             </button>
           </div>
           <input ref={bgFile} type="file" tabIndex={-1} accept="image/jpeg,image/png,image/webp" aria-label="Choose a picture for the chat background" className="hidden" data-testid="bg-input"
             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importImage(f); }} />
           <div className="flex items-center justify-between">
-            <span className="text-[13px] text-[var(--muted,#5B6577)]">Current: {bgName}</span>
+            <span className="text-[0.866667rem] text-[var(--muted,#5B6577)]">Current: {bgName}</span>
             <button type="button" onClick={() => void resetBg()} className={ghost}>Reset</button>
           </div>
         </section>
         </div>}
         {show('content') && <div role="group" aria-labelledby="grp-content" className="rise-in space-y-3" style={{ '--i': 3 } as React.CSSProperties}>
-          <p id="grp-content" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Your content</p>
+          <p id="grp-content" className="m-0 px-1 pt-2 text-[0.8rem] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Your content</p>
         <section aria-labelledby="set-interests" className={card}>
           <div className="flex items-center justify-between">
             <h2 id="set-interests" className={h2}>Interests</h2>
             {interests.length > 0 && <button type="button" onClick={() => void resetInterests()} className={ghost}>Reset</button>}
           </div>
-          {interests.length === 0 ? <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">Nothing here yet. Interests build up from what you like.</p> : (
+          {interests.length === 0 ? <p className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">Nothing here yet. Interests build up from what you like.</p> : (
             <ul className="list-none m-0 p-0 flex flex-wrap gap-2">
               {interests.map((i) => (
-                <li key={i.topic_id} className="text-[13px] text-[var(--text,#17233A)] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] pl-2.5 rounded-[8px] flex items-center">
+                <li key={i.topic_id} className="text-[0.866667rem] text-[var(--text,#17233A)] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] pl-2.5 rounded-[8px] flex items-center">
                   <span>#{i.slug}</span>
                   <button type="button" onClick={() => void removeInterest(i.topic_id)} aria-label={`Remove #${i.slug}`} className="min-h-[44px] min-w-[44px] flex items-center justify-center bg-transparent border-0 text-[var(--muted,#5B6577)] cursor-pointer"><X className="w-3.5 h-3.5" aria-hidden="true" /></button>
                 </li>
@@ -311,14 +311,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
         </section>
         <section aria-labelledby="set-stickers" className={card}>
           <h2 id="set-stickers" className={h2}>My stickers &amp; GIFs</h2>
-          {library === null ? <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]" aria-busy="true">Loading...</p> : library.length === 0 ? (
-            <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">No stickers yet. Add a picture or a short clip from your phone.</p>
+          {library === null ? <p className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]" aria-busy="true">Loading...</p> : library.length === 0 ? (
+            <p className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">No stickers yet. Add a picture or a short clip from your phone.</p>
           ) : (
             <ul className="grid grid-cols-4 gap-2 list-none m-0 p-0">
               {library.map((s) => (
                 <li key={s.media_id} className="relative">
                   <div className="aspect-square border border-[var(--line,#E8EBF0)] rounded-[8px] p-1 bg-[var(--bg,#fff)]"><LibraryImage mediaId={s.media_id} kind={s.kind} /></div>
-                  <button type="button" onClick={() => void removeFromLibrary(s.media_id)} aria-label={`Remove ${s.kind}`} className="w-full min-h-[44px] mt-1 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[12px] font-semibold text-[var(--danger,#B23A40)] cursor-pointer">Remove</button>
+                  <button type="button" onClick={() => void removeFromLibrary(s.media_id)} aria-label={`Remove ${s.kind}`} className="w-full min-h-[44px] mt-1 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[0.8rem] font-semibold text-[var(--danger,#B23A40)] cursor-pointer">Remove</button>
                 </li>
               ))}
             </ul>
@@ -329,24 +329,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
         </section>
         </div>}
         {show('account') && <div role="group" aria-labelledby="grp-account" className="rise-in space-y-3" style={{ '--i': 4 } as React.CSSProperties}>
-          <p id="grp-account" className="m-0 px-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Account</p>
+          <p id="grp-account" className="m-0 px-1 pt-2 text-[0.8rem] font-semibold uppercase tracking-wide text-[var(--muted,#5B6577)]">Account</p>
         <AcademicCard />
         {onOpenAdmin && (currentUser.role === 'admin' || currentUser.role === 'master') && (
           <section aria-labelledby="set-admin" className={card}>
             <h2 id="set-admin" className={h2}>Admin tools</h2>
-            <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">Reports, people and the activity log.</p>
+            <p className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">Reports, people and the activity log.</p>
             <button type="button" onClick={onOpenAdmin} className={`${ghost} w-full`}>Open admin tools</button>
           </section>
         )}
         <ShareApp className={card} />
         <section aria-labelledby="set-account" className={card}>
           <h2 id="set-account" className={h2}>Account</h2>
-          <div className="flex items-center gap-2 text-[12px] text-[var(--muted,#5B6577)]">
+          <div className="flex items-center gap-2 text-[0.8rem] text-[var(--muted,#5B6577)]">
             <span className="min-w-0 break-all">Account ID: <code>{userId}</code></span>
             <button type="button" onClick={() => { void navigator.clipboard?.writeText(userId).then(() => setMessage({ type: 'success', text: 'Account ID copied.' })).catch(() => {}); }} className={`${ghost} shrink-0`}>Copy</button>
           </div>
           <button type="button" onClick={() => void onLogout()} className={`${ghost} w-full`}>Sign out</button>
-          <button type="button" onClick={() => setShowDelete(true)} className="w-full min-h-[44px] bg-transparent border-0 text-[14px] font-semibold text-[var(--danger,#B23A40)] cursor-pointer">Delete account</button>
+          <button type="button" onClick={() => setShowDelete(true)} className="w-full min-h-[44px] bg-transparent border-0 text-[0.933333rem] font-semibold text-[var(--danger,#B23A40)] cursor-pointer">Delete account</button>
         </section>
         </div>}
         </div>
@@ -362,13 +362,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser, onProfi
         >
           {({ requestClose }) => (
             <div className="space-y-3 pt-1">
-              <h2 className="m-0 text-[16px] font-semibold text-[var(--danger,#B23A40)]">Delete account</h2>
-              <p className="m-0 text-[13px] text-[var(--muted,#5B6577)]">This permanently deletes your account, posts, comments and media. To confirm, type your username <strong>@{username}</strong>.</p>
-              {deleteError && <div role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">{deleteError}</div>}
-              <input type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} aria-label="Confirm username to delete account" autoComplete="off" className="w-full min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[15px] text-[var(--text,#17233A)]" />
+              <h2 className="m-0 text-[1.066667rem] font-semibold text-[var(--danger,#B23A40)]">Delete account</h2>
+              <p className="m-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">This permanently deletes your account, posts, comments and media. To confirm, type your username <strong>@{username}</strong>.</p>
+              {deleteError && <div role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)]">{deleteError}</div>}
+              <input type="text" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} aria-label="Confirm username to delete account" autoComplete="off" className="w-full min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[1rem] text-[var(--text,#17233A)]" />
               <div className="flex gap-2">
                 <button type="button" onClick={requestClose} disabled={deleting} className={`${ghost} flex-1`}>Cancel</button>
-                <button type="button" onClick={() => void deleteAccount()} disabled={deleting || confirmText !== username} className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--danger,#B23A40)] text-[var(--bg,#fff)] text-[13px] font-semibold cursor-pointer border-0 disabled:opacity-40">{deleting ? 'Deleting...' : 'Delete permanently'}</button>
+                <button type="button" onClick={() => void deleteAccount()} disabled={deleting || confirmText !== username} className="flex-1 min-h-[44px] rounded-[8px] bg-[var(--danger,#B23A40)] text-[var(--bg,#fff)] text-[0.866667rem] font-semibold cursor-pointer border-0 disabled:opacity-40">{deleting ? 'Deleting...' : 'Delete permanently'}</button>
               </div>
             </div>
           )}

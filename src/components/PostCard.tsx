@@ -116,7 +116,8 @@ export const PostCard: React.FC<PostCardProps> = ({
         <button
           type="button"
           onClick={() => onViewAuthorProfile && onViewAuthorProfile(post.author_username)}
-          className="rounded-full shrink-0 cursor-pointer border-0 p-0 bg-transparent"
+          // 6px of padding cancelled by a -6px margin: the 32px picture stays where it is but the tap area is 44px
+          className="rounded-full shrink-0 cursor-pointer border-0 p-[6px] -m-[6px] bg-transparent"
           title={`View @${post.author_username}`}
           aria-label={`View @${post.author_username}`}
         >
@@ -129,18 +130,22 @@ export const PostCard: React.FC<PostCardProps> = ({
         </button>
 
         <div className="flex-1 min-w-0">
+          {/* One button for the name and the class line (it was a 17px-tall name only). min-h 44px with a -6px
+              margin keeps the header the same height while the tap area is 44px tall and as wide as the column. */}
           <button
             type="button"
             onClick={() => onViewAuthorProfile && onViewAuthorProfile(post.author_username)}
-            className="font-semibold text-[14px] leading-tight text-[var(--text,#17233A)] hover:underline block text-left truncate cursor-pointer bg-transparent border-0 p-0"
+            className="group w-full min-h-[44px] -my-[6px] flex flex-col justify-center text-left cursor-pointer bg-transparent border-0 p-0"
           >
-            {post.author_username}
-          </button>
-          {post.author_class_name && (
-            <span className="block text-[12px] font-normal text-[var(--muted,#5B6577)] leading-tight truncate">
-              {post.author_class_name}
+            <span className="block font-semibold text-[0.933333rem] leading-tight text-[var(--text,#17233A)] group-hover:underline truncate">
+              {post.author_username}
             </span>
-          )}
+            {post.author_class_name && (
+              <span className="block text-[0.8rem] font-normal text-[var(--muted,#5B6577)] leading-tight truncate">
+                {post.author_class_name}
+              </span>
+            )}
+          </button>
         </div>
 
         <div className="shrink-0 flex items-center gap-2">
@@ -162,21 +167,21 @@ export const PostCard: React.FC<PostCardProps> = ({
 
       {/* Delete confirmation inline banner */}
       {confirmDelete && (
-        <div role="alert" className="mx-4 mb-2 p-2 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px] flex items-center justify-between">
+        <div role="alert" className="mx-4 mb-2 p-2 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[0.866667rem] flex items-center justify-between">
           <span>Delete post permanently?</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleDeletePost}
               disabled={deleting}
-              className="px-2.5 py-1 min-h-[44px] rounded-[6px] bg-[var(--danger,#B23A40)] text-white font-semibold text-[12px] cursor-pointer flex items-center"
+              className="px-2.5 py-1 min-h-[44px] rounded-[6px] bg-[var(--danger,#B23A40)] text-white font-semibold text-[0.8rem] cursor-pointer flex items-center"
             >
               {deleting ? 'Deleting...' : 'Delete'}
             </button>
             <button
               type="button"
               onClick={() => setConfirmDelete(false)}
-              className="px-2 py-1 min-h-[44px] rounded-[6px] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[12px] cursor-pointer hover:bg-[var(--bg,#fff)] flex items-center"
+              className="px-2 py-1 min-h-[44px] rounded-[6px] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[0.8rem] cursor-pointer hover:bg-[var(--bg,#fff)] flex items-center"
             >
               Cancel
             </button>
@@ -245,14 +250,14 @@ export const PostCard: React.FC<PostCardProps> = ({
           </div>
 
           {/* Likes count */}
-          <div className="px-4 pt-0.5 text-[13px] text-[var(--muted,#5B6577)]">
+          <div className="px-4 pt-0.5 text-[0.866667rem] text-[var(--muted,#5B6577)]">
             <b className="font-semibold text-[var(--text,#17233A)]">
               {likesCount} {likesCount === 1 ? 'like' : 'likes'}
             </b>
           </div>
 
           {/* Caption */}
-          <div className="px-4 pt-2 text-[15px] leading-normal break-words">
+          <div className="px-4 pt-2 text-[1rem] leading-normal break-words">
             <b className="font-semibold text-[var(--text,#17233A)] mr-1.5">
               {post.author_username}
             </b>
@@ -266,11 +271,11 @@ export const PostCard: React.FC<PostCardProps> = ({
           )}
 
           {/* Comments link */}
-          <div className="px-4 pt-1 pb-1 text-[13px] text-[var(--muted,#5B6577)]">
+          <div className="px-4 pt-1 pb-1 text-[0.866667rem] text-[var(--muted,#5B6577)]">
             <button
               type="button"
               onClick={() => setShowComments(true)}
-              className="text-[var(--muted,#5B6577)] hover:underline cursor-pointer bg-transparent border-0 p-0 text-[13px]"
+              className="text-[var(--muted,#5B6577)] hover:underline cursor-pointer bg-transparent border-0 p-0 text-[0.866667rem]"
             >
               {commentsCount > 0
                 ? `View all ${commentsCount} comments`
@@ -281,7 +286,7 @@ export const PostCard: React.FC<PostCardProps> = ({
       ) : (
         <>
           {/* Text-only post: text at 17px directly under header */}
-          <div className="px-4 pt-0 pb-1 text-[17px] leading-normal break-words">
+          <div className="px-4 pt-0 pb-1 text-[1.133333rem] leading-normal break-words">
             {renderBodyWithTags(post.body)}
           </div>
 
@@ -333,7 +338,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           </div>
 
           {/* Meta line: "3 likes · 2 comments" */}
-          <div className="px-4 pt-0.5 pb-1 text-[13px] text-[var(--muted,#5B6577)]">
+          <div className="px-4 pt-0.5 pb-1 text-[0.866667rem] text-[var(--muted,#5B6577)]">
             <b className="font-semibold text-[var(--text,#17233A)]">
               {likesCount} {likesCount === 1 ? 'like' : 'likes'}
             </b>

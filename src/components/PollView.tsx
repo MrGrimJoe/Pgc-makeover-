@@ -50,7 +50,7 @@ export const PollView: React.FC<PollViewProps> = ({ postId, poll: initial }) => 
                 onClick={() => vote(o.id)}
                 disabled={busy || poll.closed}
                 aria-pressed={mine}
-                className={`relative w-full min-h-[44px] overflow-hidden rounded-[8px] border text-left px-3 py-2 text-[15px] text-[var(--text,#17233A)] bg-transparent cursor-pointer disabled:cursor-default ${
+                className={`relative w-full min-h-[44px] overflow-hidden rounded-[8px] border text-left px-3 py-2 text-[1rem] text-[var(--text,#17233A)] bg-transparent cursor-pointer disabled:cursor-default ${
                   mine ? 'border-[var(--blue,#244C8A)] font-semibold' : 'border-[var(--line,#E8EBF0)]'
                 }`}
               >
@@ -59,18 +59,18 @@ export const PollView: React.FC<PollViewProps> = ({ postId, poll: initial }) => 
                 )}
                 <span className="relative flex items-center justify-between gap-2">
                   <span className="break-words">{o.text}{mine ? ' (your vote)' : ''}</span>
-                  {showCounts && <span className="shrink-0 text-[13px] text-[var(--muted,#5B6577)]">{pct}%</span>}
+                  {showCounts && <span className="shrink-0 text-[0.866667rem] text-[var(--muted,#5B6577)]">{pct}%</span>}
                 </span>
               </button>
             </li>
           );
         })}
       </ul>
-      <p className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">
+      <p className="mt-1 text-[0.8rem] text-[var(--muted,#5B6577)]">
         {poll.closed ? 'Poll closed' : showCounts ? `${total} ${total === 1 ? 'vote' : 'votes'}` : 'Vote to see results'}
       </p>
       {error && (
-        <p role="alert" className="mt-1 text-[12px] text-[var(--danger,#B23A40)]">{error}</p>
+        <p role="alert" className="mt-1 text-[0.8rem] text-[var(--danger,#B23A40)]">{error}</p>
       )}
     </div>
   );

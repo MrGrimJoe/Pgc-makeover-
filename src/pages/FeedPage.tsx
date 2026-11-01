@@ -137,7 +137,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
           type="button"
           onClick={() => setFeedMode('for_you')}
           aria-current={feedMode === 'for_you' ? 'true' : undefined}
-          className={`flex-1 min-h-[44px] py-3 text-center text-[14px] font-semibold transition-colors cursor-pointer border-b-2 bg-transparent ${
+          className={`flex-1 min-h-[44px] py-3 text-center text-[0.933333rem] font-semibold transition-colors cursor-pointer border-b-2 bg-transparent ${
             feedMode === 'for_you'
               ? 'text-[var(--text,#17233A)] border-[var(--blue,#244C8A)]'
               : 'text-[var(--muted,#5B6577)] border-transparent hover:text-[var(--text,#17233A)]'
@@ -149,7 +149,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
           type="button"
           onClick={() => setFeedMode('following')}
           aria-current={feedMode === 'following' ? 'true' : undefined}
-          className={`flex-1 min-h-[44px] py-3 text-center text-[14px] font-semibold transition-colors cursor-pointer border-b-2 bg-transparent ${
+          className={`flex-1 min-h-[44px] py-3 text-center text-[0.933333rem] font-semibold transition-colors cursor-pointer border-b-2 bg-transparent ${
             feedMode === 'following'
               ? 'text-[var(--text,#17233A)] border-[var(--blue,#244C8A)]'
               : 'text-[var(--muted,#5B6577)] border-transparent hover:text-[var(--text,#17233A)]'
@@ -161,12 +161,12 @@ export const FeedPage: React.FC<FeedPageProps> = ({
 
       {/* Error state */}
       {error && (
-        <div role="alert" className="py-8 text-center text-[var(--danger,#B23A40)] text-[14px] px-4 space-y-2">
+        <div role="alert" className="py-8 text-center text-[var(--danger,#B23A40)] text-[0.933333rem] px-4 space-y-2">
           <p>{error}</p>
           <button
             type="button"
             onClick={() => void manager.retry().catch(() => undefined)}
-            className="text-[13px] font-semibold text-[var(--blue,#244C8A)] hover:underline cursor-pointer min-h-[44px] px-3 bg-transparent border-0"
+            className="text-[0.866667rem] font-semibold text-[var(--blue,#244C8A)] hover:underline cursor-pointer min-h-[44px] px-3 bg-transparent border-0"
           >
             Try again
           </button>
@@ -195,11 +195,11 @@ export const FeedPage: React.FC<FeedPageProps> = ({
       {/* Empty State: one muted line and one small button */}
       {empty && (
         <div className="py-16 text-center space-y-3 px-4">
-          <p className="text-[14px] text-[var(--muted,#5B6577)]">No posts in this feed yet.</p>
+          <p className="text-[0.933333rem] text-[var(--muted,#5B6577)]">No posts in this feed yet.</p>
           <button
             type="button"
             onClick={onNavigateToCompose}
-            className="text-[13px] font-semibold text-[var(--blue,#244C8A)] hover:underline cursor-pointer min-h-[44px] px-3 bg-transparent border-0"
+            className="text-[0.866667rem] font-semibold text-[var(--blue,#244C8A)] hover:underline cursor-pointer min-h-[44px] px-3 bg-transparent border-0"
           >
             Create a post
           </button>
@@ -233,7 +233,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
       </div>
 
       {status.loading && mountedFrames.length > 0 && (
-        <p role="status" className="text-center py-4 text-[13px] text-[var(--muted,#5B6577)]">
+        <p role="status" className="text-center py-4 text-[0.866667rem] text-[var(--muted,#5B6577)]">
           Loading older posts...
         </p>
       )}

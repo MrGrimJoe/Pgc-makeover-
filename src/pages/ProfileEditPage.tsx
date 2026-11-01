@@ -165,16 +165,16 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
         <button
           type="button"
           onClick={onCancel}
-          className="text-[15px] text-text-muted hover:text-text cursor-pointer min-h-[44px] flex items-center transition-colors"
+          className="text-[1rem] text-text-muted hover:text-text cursor-pointer min-h-[44px] flex items-center transition-colors"
         >
           Cancel
         </button>
-        <span className="text-[15px] font-semibold text-text">Edit profile</span>
+        <span className="text-[1rem] font-semibold text-text">Edit profile</span>
         <button
           type="button"
           onClick={handleSubmit}
           disabled={saving || uploadingPhoto || uploadingBackground || !isUsernameValid || !displayName.trim()}
-          className="text-[15px] font-semibold text-primary hover:text-primary-hover disabled:opacity-40 cursor-pointer min-h-[44px] flex items-center transition-colors"
+          className="text-[1rem] font-semibold text-primary hover:text-primary-hover disabled:opacity-40 cursor-pointer min-h-[44px] flex items-center transition-colors"
         >
           {saving ? 'Saving...' : 'Done'}
         </button>
@@ -183,7 +183,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
       {message && (
         <div
           role="alert"
-          className={`p-3 rounded-sm text-[13px] ${
+          className={`p-3 rounded-sm text-[0.866667rem] ${
             message.type === 'success'
               ? 'bg-primary-tint text-primary'
               : 'bg-danger-tint text-danger'
@@ -211,7 +211,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
             />
             <label
               htmlFor="profile-photo"
-              className="min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold flex items-center cursor-pointer peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--blue,#244C8A)]"
+              className="min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold flex items-center cursor-pointer peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--blue,#244C8A)]"
             >
               {uploadingPhoto ? 'Uploading...' : avatarMediaId ? 'Change photo' : 'Add photo'}
             </label>
@@ -219,7 +219,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
               <button
                 type="button"
                 onClick={() => setAvatarMediaId(null)}
-                className="min-h-[44px] px-3 text-[13px] font-semibold text-[var(--muted,#5B6577)] cursor-pointer bg-transparent border-0"
+                className="min-h-[44px] px-3 text-[0.866667rem] font-semibold text-[var(--muted,#5B6577)] cursor-pointer bg-transparent border-0"
               >
                 Remove
               </button>
@@ -229,7 +229,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
 
         {/* Display name (shown on posts and messages) */}
         <div>
-          <label htmlFor="display-name" className="block text-[13px] font-medium text-text-muted mb-1">
+          <label htmlFor="display-name" className="block text-[0.866667rem] font-medium text-text-muted mb-1">
             Display name
           </label>
           <input
@@ -240,16 +240,16 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
             maxLength={50}
             required
             aria-describedby="display-name-help"
-            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[15px] text-text focus:outline-none focus:border-primary transition-colors"
+            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[1rem] text-text focus:outline-none focus:border-primary transition-colors"
           />
-          <p id="display-name-help" className="mt-1 text-[12px] text-text-muted">
+          <p id="display-name-help" className="mt-1 text-[0.8rem] text-text-muted">
             Shown on your posts and messages.
           </p>
         </div>
 
         {/* Real name (profile page only) */}
         <div>
-          <label htmlFor="real-name" className="block text-[13px] font-medium text-text-muted mb-1">
+          <label htmlFor="real-name" className="block text-[0.866667rem] font-medium text-text-muted mb-1">
             Real name
           </label>
           <input
@@ -260,16 +260,16 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
             onChange={(e) => setRealName(e.target.value)}
             maxLength={60}
             aria-describedby="real-name-help"
-            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[15px] text-text focus:outline-none focus:border-primary transition-colors"
+            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[1rem] text-text focus:outline-none focus:border-primary transition-colors"
           />
-          <p id="real-name-help" className="mt-1 text-[12px] text-text-muted">
+          <p id="real-name-help" className="mt-1 text-[0.8rem] text-text-muted">
             Shown on your profile page only.
           </p>
         </div>
 
         {/* Username */}
         <div>
-          <label htmlFor="username" className="block text-[13px] font-medium text-text-muted mb-1">
+          <label htmlFor="username" className="block text-[0.866667rem] font-medium text-text-muted mb-1">
             Username
           </label>
           <input
@@ -279,10 +279,10 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
             onChange={(e) => setUsername(e.target.value)}
             maxLength={30}
             required
-            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[15px] text-text font-mono focus:outline-none focus:border-primary transition-colors"
+            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[1rem] text-text font-mono focus:outline-none focus:border-primary transition-colors"
           />
           {username && !isUsernameValid && (
-            <span className="text-[12px] text-danger mt-1 block">
+            <span className="text-[0.8rem] text-danger mt-1 block">
               3-30 letters, numbers, underscores only
             </span>
           )}
@@ -290,7 +290,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
 
         {/* Bio */}
         <div>
-          <label htmlFor="bio" className="block text-[13px] font-medium text-text-muted mb-1">
+          <label htmlFor="bio" className="block text-[0.866667rem] font-medium text-text-muted mb-1">
             Bio
           </label>
           <textarea
@@ -300,23 +300,23 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
             onChange={(e) => setBio(e.target.value)}
             maxLength={500}
             placeholder="Add a bio..."
-            className="w-full bg-surface border border-border rounded-sm p-3 text-[15px] text-text focus:outline-none focus:border-primary resize-none transition-colors"
+            className="w-full bg-surface border border-border rounded-sm p-3 text-[1rem] text-text focus:outline-none focus:border-primary resize-none transition-colors"
           />
-          <span className="text-[12px] text-text-muted font-mono block text-right mt-0.5">
+          <span className="text-[0.8rem] text-text-muted font-mono block text-right mt-0.5">
             {bio.length} / 500
           </span>
         </div>
 
         {/* Class Association */}
         <div>
-          <label htmlFor="class-select" className="block text-[13px] font-medium text-text-muted mb-1">
+          <label htmlFor="class-select" className="block text-[0.866667rem] font-medium text-text-muted mb-1">
             Class
           </label>
           <select
             id="class-select"
             value={classId}
             onChange={(e) => setClassId(e.target.value)}
-            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[15px] text-text focus:outline-none focus:border-primary transition-colors cursor-pointer"
+            className="w-full min-h-[44px] bg-surface border border-border rounded-sm px-3 py-2 text-[1rem] text-text focus:outline-none focus:border-primary transition-colors cursor-pointer"
           >
             <option value="">None selected</option>
             {classes.map((c) => (
@@ -333,7 +333,7 @@ export const ProfileEditPage: React.FC<ProfileEditPageProps> = ({
 
       {/* Profile style */}
       <div className="pt-4 border-t border-border space-y-3">
-        <span className="text-[13px] font-semibold text-text">Profile style</span>
+        <span className="text-[0.866667rem] font-semibold text-text">Profile style</span>
         <ProfileStylePicker
           value={style}
           onChange={setStyle}

@@ -24,7 +24,7 @@ interface ProfileStylePickerProps {
 }
 
 const optionBase =
-  'block rounded-[8px] border border-[var(--line,#E8EBF0)] cursor-pointer text-center text-[13px] text-[var(--text,#17233A)] ' +
+  'block rounded-[8px] border border-[var(--line,#E8EBF0)] cursor-pointer text-center text-[0.866667rem] text-[var(--text,#17233A)] ' +
   'peer-checked:border-[var(--blue,#244C8A)] peer-checked:ring-2 peer-checked:ring-[var(--blue,#244C8A)] ' +
   'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--blue,#244C8A)]';
 
@@ -49,7 +49,7 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">Preview</p>
+        <p className="text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1">Preview</p>
         <div
           className="rounded-[12px] border border-[var(--line,#E8EBF0)] p-4 text-[var(--text,#17233A)]"
           style={{
@@ -61,14 +61,14 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
           <div className="flex items-center gap-3">
             <Avatar mediaId={avatarMediaId} displayName={displayName} username={username} size={48} ringColor={style.accent} />
             <div className="min-w-0" style={style.textStyleCss as React.CSSProperties}>
-              <b className="block text-[15px] truncate" style={{ fontWeight: style.textStyleCss.fontWeight ?? 600 }}>
+              <b className="block text-[1rem] truncate" style={{ fontWeight: style.textStyleCss.fontWeight ?? 600 }}>
                 {displayName || username}
               </b>
-              <span className="block text-[13px] text-[var(--muted,#5B6577)] truncate">@{username}</span>
+              <span className="block text-[0.866667rem] text-[var(--muted,#5B6577)] truncate">@{username}</span>
             </div>
           </div>
           {bio && (
-            <p className="mt-2 text-[14px] whitespace-pre-wrap" style={style.textStyleCss as React.CSSProperties}>
+            <p className="mt-2 text-[0.933333rem] whitespace-pre-wrap" style={style.textStyleCss as React.CSSProperties}>
               {bio}
             </p>
           )}
@@ -76,7 +76,7 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
       </div>
 
       <fieldset>
-        <legend className="text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">Wallpaper</legend>
+        <legend className="text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1">Wallpaper</legend>
         <div className="grid grid-cols-3 gap-2">
           {WALLPAPERS.map((w) => (
             <label key={w.id} className="relative">
@@ -126,7 +126,7 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
         </div>
         {onPickImage && (
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] text-[14px] text-[var(--text,#17233A)] cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-[var(--blue,#244C8A)]">
+            <label className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[8px] border border-[var(--line,#E8EBF0)] text-[0.933333rem] text-[var(--text,#17233A)] cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-[var(--blue,#244C8A)]">
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -145,20 +145,20 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
               <button
                 type="button"
                 onClick={() => onChange({ ...value, wallpaper_id: null, wallpaper_media_id: null })}
-                className="min-h-[44px] px-4 rounded-[8px] text-[14px] text-[var(--danger,#B3261E)] cursor-pointer"
+                className="min-h-[44px] px-4 rounded-[8px] text-[0.933333rem] text-[var(--danger,#B3261E)] cursor-pointer"
               >
                 Remove image
               </button>
             )}
           </div>
         )}
-        <p className="mt-1 text-[12px] text-[var(--muted,#5B6577)]">
+        <p className="mt-1 text-[0.8rem] text-[var(--muted,#5B6577)]">
           Your image is darkened so the text on top stays readable. Everyone signed in can see it.
         </p>
       </fieldset>
 
       <fieldset>
-        <legend className="text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">Accent color</legend>
+        <legend className="text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1">Accent color</legend>
         <div className="grid grid-cols-3 gap-2">
           {THEMES.map((t) => (
             <label key={t.id} className="relative">
@@ -184,7 +184,7 @@ export const ProfileStylePicker: React.FC<ProfileStylePickerProps> = ({
       </fieldset>
 
       <fieldset>
-        <legend className="text-[13px] font-medium text-[var(--muted,#5B6577)] mb-1">Text style</legend>
+        <legend className="text-[0.866667rem] font-medium text-[var(--muted,#5B6577)] mb-1">Text style</legend>
         <div className="grid grid-cols-3 gap-2">
           {TEXT_STYLES.map((t) => (
             <label key={t.id} className="relative">

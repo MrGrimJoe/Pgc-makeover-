@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { promptInstall, readInstallEnv, useCanPrompt } from '../lib/pwa.ts';
 import { QrCode } from './QrCode.tsx';
 
-const h2 = 'm-0 text-[15px] font-semibold text-[var(--text,#17233A)]';
-const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer disabled:opacity-40';
-const muted = 'm-0 text-[13px] text-[var(--muted,#5B6577)]';
+const h2 = 'm-0 text-[1rem] font-semibold text-[var(--text,#17233A)]';
+const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer disabled:opacity-40';
+const muted = 'm-0 text-[0.866667rem] text-[var(--muted,#5B6577)]';
 
 /** The public address of the app: the site's own origin, never a path, a token or anything about the person. */
 export function canonicalAppUrl(): string {

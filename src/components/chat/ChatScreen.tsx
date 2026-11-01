@@ -148,8 +148,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
         <button type="button" onClick={() => onViewProfile(other.username)} className="flex items-center gap-2.5 flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer min-h-[44px]">
           <Avatar mediaId={other.avatar_media_id} displayName={other.display_name} username={other.username} size={36} />
           <span className="flex-1 min-w-0">
-            <span className="font-semibold text-[15px] leading-tight block truncate text-[var(--text,#17233A)]">{other.display_name}</span>
-            <span className="text-[12px] text-[var(--muted,#5B6577)] block leading-tight truncate">@{other.username}</span>
+            <span className="font-semibold text-[1rem] leading-tight block truncate text-[var(--text,#17233A)]">{other.display_name}</span>
+            <span className="text-[0.8rem] text-[var(--muted,#5B6577)] block leading-tight truncate">@{other.username}</span>
           </span>
         </button>
         <div className="relative">
@@ -158,15 +158,15 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
           </button>
           {menuOpen && (
             <div role="menu" className="absolute right-0 top-[48px] z-50 w-[180px] rounded-[10px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] shadow-lg overflow-hidden">
-              <button type="button" role="menuitem" onClick={() => void blockUser()} className="w-full min-h-[44px] px-3 text-left text-[14px] text-[var(--text,#17233A)] bg-transparent border-0 cursor-pointer">Block @{other.username}</button>
-              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setReporting({ type: 'user', id: other.id }); }} className="w-full min-h-[44px] px-3 text-left text-[14px] text-[var(--danger,#B23A40)] bg-transparent border-0 cursor-pointer">Report @{other.username}</button>
+              <button type="button" role="menuitem" onClick={() => void blockUser()} className="w-full min-h-[44px] px-3 text-left text-[0.933333rem] text-[var(--text,#17233A)] bg-transparent border-0 cursor-pointer">Block @{other.username}</button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setReporting({ type: 'user', id: other.id }); }} className="w-full min-h-[44px] px-3 text-left text-[0.933333rem] text-[var(--danger,#B23A40)] bg-transparent border-0 cursor-pointer">Report @{other.username}</button>
             </div>
           )}
         </div>
       </header>
 
-      {error && <div role="alert" className="m-3 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[13px]">{error}</div>}
-      {notice && <div role="status" className="m-3 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[13px]">{notice}</div>}
+      {error && <div role="alert" className="m-3 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--danger,#B23A40)] text-[var(--danger,#B23A40)] text-[0.866667rem]">{error}</div>}
+      {notice && <div role="status" className="m-3 p-2.5 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[0.866667rem]">{notice}</div>}
 
       <ChatBackground choice={background} className="flex-1">
         <div className="p-4 space-y-3" aria-live="polite" aria-label="Messages">
@@ -177,7 +177,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ conversation, currentUse
             </div>
           )}
           {!loading && messages.length === 0 && (
-            <p className="py-16 text-center text-[13px] text-[var(--text,#17233A)] m-0">No messages yet. Send a message to start the conversation!</p>
+            <p className="py-16 text-center text-[0.866667rem] text-[var(--text,#17233A)] m-0">No messages yet. Send a message to start the conversation!</p>
           )}
           {messages.map((msg) => (
             <MessageBubble key={msg.id} msg={msg} isSelf={msg.sender_id === currentUserId} onOpenMedia={(m, i) => setViewer({ msg: m, index: i })} onReport={(m) => setReporting({ type: 'message', id: m.id })} />

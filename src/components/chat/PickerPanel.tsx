@@ -48,7 +48,7 @@ const KIND_OF_TAB = { stickers: 'sticker', gifs: 'gif' } as const;
 /** Thumbnail in the grid. With reduced motion, GIFs are a still label until sent. */
 const Thumb: React.FC<{ tile: Tile; reduced: boolean }> = ({ tile, reduced }) =>
   tile.kind === 'gif' && reduced ? (
-    <span className="w-full h-full flex items-center justify-center text-[12px] font-semibold text-[var(--muted,#5B6577)]">GIF</span>
+    <span className="w-full h-full flex items-center justify-center text-[0.8rem] font-semibold text-[var(--muted,#5B6577)]">GIF</span>
   ) : (
     <img src={tile.src} alt={tile.alt} loading="lazy" className="w-full h-full object-contain" />
   );
@@ -155,8 +155,8 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
     }
   };
 
-  const tabBtn = (on: boolean) => `flex-1 min-h-[44px] text-[14px] font-semibold cursor-pointer border-0 border-b-2 bg-transparent ${on ? 'border-[var(--blue,#244C8A)] text-[var(--blue,#244C8A)]' : 'border-transparent text-[var(--muted,#5B6577)]'}`;
-  const chipBtn = (on: boolean) => `shrink-0 min-h-[44px] px-3.5 rounded-full border text-[13px] font-semibold cursor-pointer ${on ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] border-[var(--blue,#244C8A)]' : 'bg-[var(--bg,#fff)] text-[var(--text,#17233A)] border-[var(--line,#E8EBF0)]'}`;
+  const tabBtn = (on: boolean) => `flex-1 min-h-[44px] text-[0.933333rem] font-semibold cursor-pointer border-0 border-b-2 bg-transparent ${on ? 'border-[var(--blue,#244C8A)] text-[var(--blue,#244C8A)]' : 'border-transparent text-[var(--muted,#5B6577)]'}`;
+  const chipBtn = (on: boolean) => `shrink-0 min-h-[44px] px-3.5 rounded-full border text-[0.866667rem] font-semibold cursor-pointer ${on ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] border-[var(--blue,#244C8A)]' : 'bg-[var(--bg,#fff)] text-[var(--text,#17233A)] border-[var(--line,#E8EBF0)]'}`;
 
   return (
     <div className="flex flex-col h-full">
@@ -171,16 +171,16 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
           ))}
         </div>
         {(active === 'mine' || active === 'favorites') && tiles.length > 0 && (
-          <button type="button" onClick={() => setManage((m) => !m)} aria-pressed={manage} className="shrink-0 min-h-[44px] px-3 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center gap-1.5">
+          <button type="button" onClick={() => setManage((m) => !m)} aria-pressed={manage} className="shrink-0 min-h-[44px] px-3 rounded-full border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer inline-flex items-center gap-1.5">
             <Settings2 className="w-4 h-4" aria-hidden="true" />{manage ? 'Done' : 'Manage'}
           </button>
         )}
       </div>
-      {error && <p role="alert" className="m-0 px-3 text-[13px] text-[var(--danger,#B23A40)]">{error}</p>}
+      {error && <p role="alert" className="m-0 px-3 text-[0.866667rem] text-[var(--danger,#B23A40)]">{error}</p>}
       <div className="flex-1 overflow-y-auto p-2">
-        {items === null && active === 'mine' && <p className="text-[13px] text-[var(--muted,#5B6577)] p-2 m-0" aria-busy="true">Loading...</p>}
+        {items === null && active === 'mine' && <p className="text-[0.866667rem] text-[var(--muted,#5B6577)] p-2 m-0" aria-busy="true">Loading...</p>}
         {items !== null && tiles.length === 0 && (
-          <p className="text-[13px] text-[var(--muted,#5B6577)] p-3 m-0">
+          <p className="text-[0.866667rem] text-[var(--muted,#5B6577)] p-3 m-0">
             {active === 'favorites'
               ? `No favorite ${kind === 'gif' ? 'GIFs' : 'stickers'} yet. Tap one in a chat, post or comment and choose Add to favorites.`
               : active === 'mine'
@@ -195,7 +195,7 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
                 <Thumb tile={tile} reduced={reduced} />
               </button>
               {manage && (
-                <button type="button" onClick={() => void remove(tile)} aria-label={`Remove ${tile.alt}`} className="absolute inset-x-0 bottom-0 min-h-[44px] rounded-b-[8px] bg-[var(--danger,#B23A40)] text-[var(--bg,#fff)] text-[12px] font-semibold border-0 cursor-pointer">Remove</button>
+                <button type="button" onClick={() => void remove(tile)} aria-label={`Remove ${tile.alt}`} className="absolute inset-x-0 bottom-0 min-h-[44px] rounded-b-[8px] bg-[var(--danger,#B23A40)] text-[var(--bg,#fff)] text-[0.8rem] font-semibold border-0 cursor-pointer">Remove</button>
               )}
             </li>
           ))}
@@ -205,7 +205,7 @@ export const PickerPanel: React.FC<PickerPanelProps> = ({ userId, onPick, onAddF
         <EditFlow source={templateSource} sendLabel="Use this picture" onClose={() => setTemplateSource(null)} onSend={(f) => { setTemplateSource(null); onTemplateEdited(f); }} />
       )}
       <div className="p-2 shrink-0">
-        <button type="button" onClick={() => file.current?.click()} className="w-full min-h-[44px] rounded-[10px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer inline-flex items-center justify-center gap-1.5">
+        <button type="button" onClick={() => file.current?.click()} className="w-full min-h-[44px] rounded-[10px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer inline-flex items-center justify-center gap-1.5">
           <Plus className="w-4 h-4" aria-hidden="true" />Add from phone
         </button>
         <input ref={file} type="file" tabIndex={-1} accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple aria-label="Choose pictures to add" className="hidden" data-testid="library-input"

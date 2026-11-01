@@ -81,8 +81,46 @@
   --accent-text: #F2C94C;
 }
 
+/*
+ * Increase Contrast. The default colors already pass 4.5:1 for text, but the hairlines (--line) are only about
+ * 1.2:1 against the page, so the edges of fields and cards disappear for people with low vision. When the system
+ * asks for more contrast, lines reach at least 3:1 and secondary text reaches about 9:1, and the focus ring is thicker.
+ * (These blocks come after the tokens above so they win; the first dark blocks stay the ones tests read.)
+ */
+@media (prefers-contrast: more) {
+  :root {
+    --line: #7A8396;  /* 3.8:1 on white, 3.3:1 on --tint */
+    --muted: #3E4859; /* 9.2:1 on white */
+  }
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+    outline-width: 3px;
+  }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --line: #6B7894;  /* 4.1:1 on the page, 3.4:1 on --tint */
+    --muted: #C3CCDC; /* 11.3:1 */
+  }
+}
+@media (prefers-contrast: more) {
+  :root[data-theme="dark"] {
+    --line: #6B7894;
+    --muted: #C3CCDC;
+  }
+}
+
 *, *::before, *::after {
   box-sizing: inherit;
+}
+
+/*
+ * Text size follows the person's own setting. The root is 93.75% of the browser's default size, which is
+ * 15px at the default of 16px and grows when someone chooses a larger text size. Every font size in the app is
+ * in rem (N px at the default = N/15 rem), so the whole interface scales with it. A fixed "15px" here used to
+ * ignore that setting.
+ */
+html {
+  font-size: 93.75%;
 }
 
 html, body {
@@ -90,7 +128,8 @@ html, body {
   min-height: 100%;
   background: var(--bg2);
   color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -154,6 +193,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 /* One-off entrance for list items and cards; --i staggers the first few */
 .rise-in { animation: rise-in 240ms ease-out backwards; animation-delay: calc(min(var(--i, 0), 6) * 40ms); }
 .tab-pop { animation: tab-pop 220ms ease-out; }
+
+/*
+ * A field drawn as a bordered box around a bare input (search, campus): the whole box shows the focus ring.
+ * Without this the ring was drawn around the small input inside the box.
+ */
+.field-box:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
+.field-box input:focus-visible { outline: none; }
 
 /* Press feedback on buttons */
 button:not(:disabled), [role="button"] { transition: transform 90ms ease-out, opacity 150ms ease, background-color 150ms ease, color 150ms ease; }

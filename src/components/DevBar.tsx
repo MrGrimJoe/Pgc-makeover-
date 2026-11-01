@@ -36,13 +36,13 @@ export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
     <div
       role="region"
       aria-label="Development Toolbar"
-      className={`fixed ${currentUser && layout === 'phone' ? 'bottom-12' : 'bottom-0'} left-0 right-0 z-50 bg-[#F2C94C] text-[#17233A] border-t border-[#17233A]/20 px-3 py-1 text-[12px] font-sans flex flex-wrap items-center justify-between gap-2`}
+      className={`fixed ${currentUser && layout === 'phone' ? 'bottom-12' : 'bottom-0'} left-0 right-0 z-50 bg-[#F2C94C] text-[#17233A] border-t border-[#17233A]/20 px-3 py-1 text-[0.8rem] font-sans flex flex-wrap items-center justify-between gap-2`}
     >
       <div className="flex items-center space-x-2">
-        <span className="font-semibold px-1.5 py-0.5 bg-[#17233A] text-[#F2C94C] rounded text-[11px] uppercase tracking-wider">
+        <span className="font-semibold px-1.5 py-0.5 bg-[#17233A] text-[#F2C94C] rounded text-[0.733333rem] uppercase tracking-wider">
           DEV
         </span>
-        <span className="font-medium hidden sm:inline text-[11px]">
+        <span className="font-medium hidden sm:inline text-[0.733333rem]">
           Development mode
         </span>
       </div>
@@ -56,7 +56,7 @@ export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
             aria-label="Switch Dev User"
             value={currentUser?.profile.username || ''}
             onChange={(e) => handleSwitchUser(e.target.value)}
-            className="px-1.5 py-0.5 rounded bg-white text-[#17233A] border border-[#17233A]/30 text-[11px] font-medium cursor-pointer"
+            className="px-1.5 py-0.5 rounded bg-white text-[#17233A] border border-[#17233A]/30 text-[0.733333rem] font-medium cursor-pointer"
           >
             <option value="" disabled>Switch user...</option>
             {SEEDED_DEV_USERS.map((u) => (
@@ -69,13 +69,13 @@ export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
 
         {currentUser ? (
           <>
-            <span className="text-[11px]">
+            <span className="text-[0.733333rem]">
               @{currentUser.profile.username}
             </span>
             <button
               type="button"
               onClick={onLogout}
-              className="px-2 py-0.5 rounded bg-[#17233A] text-white hover:bg-[#17233A]/80 font-semibold transition-colors cursor-pointer text-[11px]"
+              className="px-2 py-0.5 rounded bg-[#17233A] text-white hover:bg-[#17233A]/80 font-semibold transition-colors cursor-pointer text-[0.733333rem]"
             >
               Sign out
             </button>
@@ -84,7 +84,7 @@ export const DevBar: React.FC<DevBarProps> = ({ currentUser, onLogout }) => {
           <button
             type="button"
             onClick={handleDevSignIn}
-            className="px-2 py-0.5 rounded bg-[#17233A] text-white hover:bg-[#17233A]/80 font-semibold transition-colors cursor-pointer text-[11px]"
+            className="px-2 py-0.5 rounded bg-[#17233A] text-white hover:bg-[#17233A]/80 font-semibold transition-colors cursor-pointer text-[0.733333rem]"
           >
             Sign in as test user
           </button>

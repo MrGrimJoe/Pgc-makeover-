@@ -8,7 +8,7 @@ export const ExpiryChip: React.FC<ExpiryChipProps> = ({ expiresAt }) => {
   const remainingMs = new Date(expiresAt).getTime() - Date.now();
 
   if (remainingMs <= 0) {
-    return <span className="text-[12px] text-[var(--danger,#B23A40)] font-semibold">0d left</span>;
+    return <span className="text-[0.8rem] text-[var(--danger,#B23A40)] font-semibold">0d left</span>;
   }
 
   const hoursRemaining = remainingMs / (1000 * 60 * 60);
@@ -18,14 +18,14 @@ export const ExpiryChip: React.FC<ExpiryChipProps> = ({ expiresAt }) => {
     const text = hoursRemaining < 1
       ? `${Math.max(1, Math.floor(remainingMs / (1000 * 60)))}m left`
       : `${Math.floor(hoursRemaining)}h left`;
-    return <span className="text-[12px] text-[var(--danger,#B23A40)] font-semibold">{text}</span>;
+    return <span className="text-[0.8rem] text-[var(--danger,#B23A40)] font-semibold">{text}</span>;
   }
 
   // Yellow-brown and bold under 48h
   if (hoursRemaining < 48) {
     const days = Math.ceil(hoursRemaining / 24);
     return (
-      <span className="text-[12px] text-[var(--accent-text,#8A6A00)] font-semibold">
+      <span className="text-[0.8rem] text-[var(--accent-text,#8A6A00)] font-semibold">
         {days}d left
       </span>
     );
@@ -34,7 +34,7 @@ export const ExpiryChip: React.FC<ExpiryChipProps> = ({ expiresAt }) => {
   // Muted normally (e.g. "6d left")
   const days = Math.ceil(hoursRemaining / 24);
   return (
-    <span className="text-[12px] text-[var(--muted,#5B6577)] font-normal">
+    <span className="text-[0.8rem] text-[var(--muted,#5B6577)] font-normal">
       {days}d left
     </span>
   );

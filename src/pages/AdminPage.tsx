@@ -25,8 +25,8 @@ type Confirm =
   | { kind: 'appoint'; person: { id: string; username: string } };
 
 const card = 'border border-[var(--line,#E8EBF0)] rounded-[12px] bg-[var(--bg,#fff)] p-4 space-y-3';
-const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer hover:bg-[var(--bg2,#F8F9FC)] disabled:opacity-40';
-const danger = 'min-h-[44px] px-3.5 rounded-[8px] border-0 bg-[var(--danger,#B23A40)] text-[var(--bg,#fff)] text-[13px] font-semibold cursor-pointer disabled:opacity-40';
+const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer hover:bg-[var(--bg2,#F8F9FC)] disabled:opacity-40';
+const danger = 'min-h-[44px] px-3.5 rounded-[8px] border-0 bg-[var(--danger,#B23A40)] text-[var(--bg,#fff)] text-[0.866667rem] font-semibold cursor-pointer disabled:opacity-40';
 const muted = 'text-[var(--muted,#5B6577)]';
 
 const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
@@ -128,14 +128,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
 
   const tabBtn = (id: Tab, label: string) => (
     <button key={id} type="button" aria-pressed={tab === id} onClick={() => { setTab(id); setConfirm(null); }}
-      className={`flex-1 min-h-[44px] rounded-[8px] border-0 text-[14px] cursor-pointer ${tab === id ? 'bg-[var(--tint,#EEF3FB)] text-[var(--text,#17233A)] font-semibold' : `bg-transparent ${muted} hover:bg-[var(--bg2,#F8F9FC)]`}`}>
+      className={`flex-1 min-h-[44px] rounded-[8px] border-0 text-[0.933333rem] cursor-pointer ${tab === id ? 'bg-[var(--tint,#EEF3FB)] text-[var(--text,#17233A)] font-semibold' : `bg-transparent ${muted} hover:bg-[var(--bg2,#F8F9FC)]`}`}>
       {label}
     </button>
   );
 
   const confirmPanel = confirm && (
     <div role="group" aria-label="Confirm" className={`${card} border-[var(--danger,#B23A40)]`}>
-      <p className="m-0 text-[14px] text-[var(--text,#17233A)]">
+      <p className="m-0 text-[0.933333rem] text-[var(--text,#17233A)]">
         {confirm.kind === 'appoint'
           ? (isMaster
               ? <>Make <strong>@{confirm.person.username}</strong> an admin? You stay the master admin.</>
@@ -148,7 +148,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
       </p>
       {confirm.kind === 'status' && confirm.status !== 'active' && (
         <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} placeholder="Reason (optional, kept in the activity log)" aria-label="Reason"
-          className="w-full min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[14px] text-[var(--text,#17233A)]" />
+          className="w-full min-h-[44px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[0.933333rem] text-[var(--text,#17233A)]" />
       )}
       <div className="flex gap-2">
         <button type="button" className={`${ghost} flex-1`} disabled={busy} onClick={() => setConfirm(null)}>Cancel</button>
@@ -161,23 +161,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
 
   return (
     <div className="w-full max-w-content mx-auto min-h-screen bg-[var(--bg2,#F8F9FC)] pb-24 tablet:pb-8">
-      <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center px-4">
+      <header className="sticky top-0 z-40 bg-[var(--bg,#fff)] min-h-[48px] border-b border-[var(--line,#E8EBF0)] flex items-center px-4">
         <button type="button" onClick={onBack} title="Back" aria-label="Back" className="w-[44px] h-[44px] -ml-3 flex items-center justify-center text-[var(--text,#17233A)] cursor-pointer bg-transparent border-0">
           <ArrowLeft className="w-5 h-5 stroke-[1.7]" />
         </button>
-        <h1 className="font-semibold text-[20px] text-[var(--text,#17233A)] tracking-[-0.3px] m-0">Admin</h1>
-        <span className={`ml-auto text-[12px] ${muted}`}>{isMaster ? 'Master admin' : 'Admin'}</span>
+        <h1 className="font-semibold text-[1.333333rem] text-[var(--text,#17233A)] tracking-[-0.3px] m-0">Admin</h1>
+        <span className={`ml-auto text-[0.8rem] ${muted}`}>{isMaster ? 'Master admin' : 'Admin'}</span>
       </header>
 
       <div className="p-3 space-y-3">
-        {notice && <div role={notice.type === 'error' ? 'alert' : 'status'} className={`text-[13px] ${notice.type === 'error' ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'}`}>{notice.text}</div>}
+        {notice && <div role={notice.type === 'error' ? 'alert' : 'status'} className={`text-[0.866667rem] ${notice.type === 'error' ? 'text-[var(--danger,#B23A40)]' : 'text-[var(--text,#17233A)]'}`}>{notice.text}</div>}
 
         {stats && (
           <dl className="grid grid-cols-3 gap-2 m-0">
             {([['People', stats.users], ['Posts', stats.posts], ['Open reports', stats.open_reports]] as const).map(([label, n]) => (
               <div key={label} className={`${card} !p-3 text-center`}>
-                <dd className="m-0 text-[20px] font-semibold text-[var(--text,#17233A)]">{n}</dd>
-                <dt className={`text-[12px] ${muted}`}>{label}</dt>
+                <dd className="m-0 text-[1.333333rem] font-semibold text-[var(--text,#17233A)]">{n}</dd>
+                <dt className={`text-[0.8rem] ${muted}`}>{label}</dt>
               </div>
             ))}
           </dl>
@@ -189,21 +189,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
 
         {tab === 'reports' && (
           <section aria-label="Reports" className="space-y-3">
-            <label className={`flex items-center gap-2 text-[13px] ${muted}`}>
+            <label className={`flex items-center gap-2 text-[0.866667rem] ${muted}`}>
               <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} /> Only reports that still need a look
             </label>
-            {reports === null && <p className={`m-0 text-[14px] ${muted}`}>Loading...</p>}
-            {reports?.length === 0 && <p className={`m-0 text-[14px] ${muted}`}>No reports{onlyPending ? ' waiting' : ''}.</p>}
+            {reports === null && <p className={`m-0 text-[0.933333rem] ${muted}`}>Loading...</p>}
+            {reports?.length === 0 && <p className={`m-0 text-[0.933333rem] ${muted}`}>No reports{onlyPending ? ' waiting' : ''}.</p>}
             {reports?.map((r) => {
               const p = previews[r.id];
               return (
                 <article key={r.id} className={card} aria-label={`Report about a ${r.target_type}`}>
-                  <p className="m-0 text-[14px] text-[var(--text,#17233A)]"><strong>{r.target_type}</strong> reported by @{r.reporter_username}: {r.reason}</p>
-                  <p className={`m-0 text-[12px] ${muted}`}>{new Date(r.created_at).toLocaleString()} · {r.status}</p>
+                  <p className="m-0 text-[0.933333rem] text-[var(--text,#17233A)]"><strong>{r.target_type}</strong> reported by @{r.reporter_username}: {r.reason}</p>
+                  <p className={`m-0 text-[0.8rem] ${muted}`}>{new Date(r.created_at).toLocaleString()} · {r.status}</p>
                   {p && (
-                    <blockquote className="m-0 p-3 rounded-[8px] bg-[var(--bg2,#F8F9FC)] text-[14px] text-[var(--text,#17233A)] whitespace-pre-wrap break-words">
+                    <blockquote className="m-0 p-3 rounded-[8px] bg-[var(--bg2,#F8F9FC)] text-[0.933333rem] text-[var(--text,#17233A)] whitespace-pre-wrap break-words">
                       {!p.exists ? 'This is gone (deleted or expired).' : p.text || '(no text)'}
-                      {p.author_username && <span className={`block mt-1 text-[12px] ${muted}`}>by @{p.author_username}</span>}
+                      {p.author_username && <span className={`block mt-1 text-[0.8rem] ${muted}`}>by @{p.author_username}</span>}
                     </blockquote>
                   )}
                   <div className="flex flex-wrap gap-2">
@@ -227,11 +227,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
           <section aria-label="People" className="space-y-3">
             <form role="search" onSubmit={(e) => { e.preventDefault(); loadPeople(query); }} className="flex gap-2">
               <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Username starts with..." aria-label="Search people by username"
-                className="flex-1 min-w-0 min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[14px] text-[var(--text,#17233A)]" />
+                className="flex-1 min-w-0 min-h-[44px] bg-[var(--bg,#fff)] border border-[var(--line,#E8EBF0)] rounded-[8px] px-3 text-[0.933333rem] text-[var(--text,#17233A)]" />
               <button type="submit" className={ghost}>Search</button>
             </form>
-            {people === null && <p className={`m-0 text-[14px] ${muted}`}>Loading...</p>}
-            {people?.length === 0 && <p className={`m-0 text-[14px] ${muted}`}>Nobody found.</p>}
+            {people === null && <p className={`m-0 text-[0.933333rem] ${muted}`}>Loading...</p>}
+            {people?.length === 0 && <p className={`m-0 text-[0.933333rem] ${muted}`}>Nobody found.</p>}
             <ul className="list-none m-0 p-0 space-y-2">
               {people?.map((p) => {
                 const self = p.id === me;
@@ -241,11 +241,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
                 return (
                   <li key={p.id} className={card}>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[14px] font-semibold text-[var(--text,#17233A)]">@{p.username}</span>
-                      <span className={`text-[13px] ${muted}`}>{p.display_name}</span>
-                      {isAdmin && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--tint,#EEF3FB)] text-[var(--text,#17233A)]">admin</span>}
-                      {p.status !== 'active' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--danger-tint,#FBEAEA)] text-[var(--danger,#B23A40)]">{p.status}</span>}
-                      {self && <span className={`text-[12px] ${muted}`}>(you)</span>}
+                      <span className="text-[0.933333rem] font-semibold text-[var(--text,#17233A)]">@{p.username}</span>
+                      <span className={`text-[0.866667rem] ${muted}`}>{p.display_name}</span>
+                      {isAdmin && <span className="text-[0.733333rem] font-semibold px-2 py-0.5 rounded-full bg-[var(--tint,#EEF3FB)] text-[var(--text,#17233A)]">admin</span>}
+                      {p.status !== 'active' && <span className="text-[0.733333rem] font-semibold px-2 py-0.5 rounded-full bg-[var(--danger-tint,#FBEAEA)] text-[var(--danger,#B23A40)]">{p.status}</span>}
+                      {self && <span className={`text-[0.8rem] ${muted}`}>(you)</span>}
                     </div>
                     {canAct && (
                       <div className="flex flex-wrap gap-2">
@@ -264,17 +264,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
 
         {tab === 'signups' && (
           <section aria-label="Sign-up help" className="space-y-2">
-            <p className={`m-0 text-[13px] ${muted}`}>
+            <p className={`m-0 text-[0.866667rem] ${muted}`}>
               Students who were told their roll number is already registered. Nobody here has been blocked. If the holder is not the real student, suspend or ban that account in People, then ask the student to sign up again.
             </p>
-            {disputes === null && <p className={`m-0 text-[14px] ${muted}`}>Loading...</p>}
-            {disputes?.length === 0 && <p className={`m-0 text-[14px] ${muted}`}>No requests.</p>}
+            {disputes === null && <p className={`m-0 text-[0.933333rem] ${muted}`}>Loading...</p>}
+            {disputes?.length === 0 && <p className={`m-0 text-[0.933333rem] ${muted}`}>No requests.</p>}
             <ul className="list-none m-0 p-0 space-y-2">
               {disputes?.map((d) => (
                 <li key={d.id} className={`${card} !p-3`}>
-                  <p className="m-0 text-[14px] text-[var(--text,#17233A)]"><strong>{d.email ?? 'Unknown email'}</strong> {d.status === 'open' ? 'asked for help' : '(handled)'}</p>
-                  <p className={`m-0 text-[13px] ${muted}`}>{d.holder_username ? `The roll number belongs to @${d.holder_username}.` : 'The account that held the roll number no longer exists, so the student can sign up again.'}</p>
-                  <p className={`m-0 text-[12px] ${muted}`}>{new Date(d.created_at).toLocaleString()}</p>
+                  <p className="m-0 text-[0.933333rem] text-[var(--text,#17233A)]"><strong>{d.email ?? 'Unknown email'}</strong> {d.status === 'open' ? 'asked for help' : '(handled)'}</p>
+                  <p className={`m-0 text-[0.866667rem] ${muted}`}>{d.holder_username ? `The roll number belongs to @${d.holder_username}.` : 'The account that held the roll number no longer exists, so the student can sign up again.'}</p>
+                  <p className={`m-0 text-[0.8rem] ${muted}`}>{new Date(d.created_at).toLocaleString()}</p>
                   {d.status === 'open' && <button type="button" className={ghost} onClick={() => resolveDispute(d.id)}>Mark handled</button>}
                 </li>
               ))}
@@ -284,14 +284,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
 
         {tab === 'appeals' && (
           <section aria-label="Appeals" className="space-y-2">
-            {appeals === null && <p className={`m-0 text-[14px] ${muted}`}>Loading...</p>}
-            {appeals?.length === 0 && <p className={`m-0 text-[14px] ${muted}`}>No appeals.</p>}
+            {appeals === null && <p className={`m-0 text-[0.933333rem] ${muted}`}>Loading...</p>}
+            {appeals?.length === 0 && <p className={`m-0 text-[0.933333rem] ${muted}`}>No appeals.</p>}
             <ul className="list-none m-0 p-0 space-y-2">
               {appeals?.map((a) => (
                 <li key={a.id} className={`${card} !p-3`}>
-                  <p className="m-0 text-[14px] text-[var(--text,#17233A)]"><strong>@{a.username}</strong> ({a.account_status}) {a.status === 'open' ? '' : `- ${a.status}`}</p>
-                  <p className="m-0 text-[14px] text-[var(--text,#17233A)] whitespace-pre-wrap">{a.message}</p>
-                  <p className={`m-0 text-[12px] ${muted}`}>{new Date(a.created_at).toLocaleString()}</p>
+                  <p className="m-0 text-[0.933333rem] text-[var(--text,#17233A)]"><strong>@{a.username}</strong> ({a.account_status}) {a.status === 'open' ? '' : `- ${a.status}`}</p>
+                  <p className="m-0 text-[0.933333rem] text-[var(--text,#17233A)] whitespace-pre-wrap">{a.message}</p>
+                  <p className={`m-0 text-[0.8rem] ${muted}`}>{new Date(a.created_at).toLocaleString()}</p>
                   {a.status === 'open' && (
                     <div className="flex gap-2">
                       <button type="button" className={ghost} onClick={() => decide(a.id, 'granted')}>Reinstate</button>
@@ -306,16 +306,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser, onBack, onLos
 
         {tab === 'activity' && (
           <section aria-label="Activity" className="space-y-2">
-            {actions === null && <p className={`m-0 text-[14px] ${muted}`}>Loading...</p>}
-            {actions?.length === 0 && <p className={`m-0 text-[14px] ${muted}`}>Nothing yet.</p>}
+            {actions === null && <p className={`m-0 text-[0.933333rem] ${muted}`}>Loading...</p>}
+            {actions?.length === 0 && <p className={`m-0 text-[0.933333rem] ${muted}`}>Nothing yet.</p>}
             <ul className="list-none m-0 p-0 space-y-2">
               {actions?.map((a) => (
                 <li key={a.id} className={`${card} !p-3`}>
-                  <p className="m-0 text-[14px] text-[var(--text,#17233A)]">
+                  <p className="m-0 text-[0.933333rem] text-[var(--text,#17233A)]">
                     <strong>{a.actor_username === 'master admin' ? 'The master admin' : a.actor_username ? `@${a.actor_username}` : 'Someone'}</strong> {ACTION_TEXT[a.action] ?? a.action} {a.target_username ? `@${a.target_username}` : ''}
                   </p>
-                  {a.detail && <p className={`m-0 text-[13px] ${muted}`}>{a.detail}</p>}
-                  <p className={`m-0 text-[12px] ${muted}`}>{new Date(a.created_at).toLocaleString()}</p>
+                  {a.detail && <p className={`m-0 text-[0.866667rem] ${muted}`}>{a.detail}</p>}
+                  <p className={`m-0 text-[0.8rem] ${muted}`}>{new Date(a.created_at).toLocaleString()}</p>
                 </li>
               ))}
             </ul>

@@ -67,7 +67,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isSelf, onOpe
         <div className="flex flex-wrap gap-1 justify-end">{keyedSticker}{mediaBlock}</div>
       ) : (
         <div
-          className={`max-w-[80%] px-3.5 py-2 text-[15px] leading-relaxed break-words whitespace-pre-wrap ${
+          className={`max-w-[80%] px-3.5 py-2 text-[1rem] leading-relaxed break-words whitespace-pre-wrap ${
             isSelf
               ? 'bg-[var(--blue,#244C8A)] text-[var(--bg,#fff)] rounded-[16px] rounded-br-[4px]'
               : 'bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] rounded-[16px] rounded-bl-[4px]'
@@ -88,7 +88,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, isSelf, onOpe
             type="button"
             onClick={() => onReport(msg)}
             aria-label="Report this message"
-            className="min-h-[44px] px-2 rounded-full bg-[var(--bg,#fff)] text-[12px] text-[var(--muted,#5B6577)] hover:text-[var(--danger,#B23A40)] cursor-pointer border-0"
+            className="min-h-[44px] px-2 rounded-full bg-[var(--bg,#fff)] text-[0.8rem] text-[var(--muted,#5B6577)] hover:text-[var(--danger,#B23A40)] cursor-pointer border-0"
           >
             Report
           </button>

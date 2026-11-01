@@ -182,7 +182,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
       {/* Error state */}
       {error && !loading && (
         <div role="alert" className="py-16 text-center space-y-2 px-4">
-          <p className="text-[14px] text-[var(--muted,#5B6577)]">{error}</p>
+          <p className="text-[0.933333rem] text-[var(--muted,#5B6577)]">{error}</p>
         </div>
       )}
 
@@ -209,21 +209,22 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
               size={wide ? 112 : 80}
               ringColor={style.accent}
             />
-            <div className="flex flex-1 justify-around text-center text-[13px] text-[var(--muted,#5B6577)]">
+            {/* flex-wrap: at large text sizes the three counts move onto a second line instead of running into each other */}
+            <div className="flex flex-1 min-w-0 flex-wrap justify-around gap-y-2 text-center text-[0.866667rem] text-[var(--muted,#5B6577)]">
               <div>
-                <b className="block text-[17px] text-[var(--text,#17233A)] font-semibold leading-tight">
+                <b className="block text-[1.133333rem] text-[var(--text,#17233A)] font-semibold leading-tight">
                   {userPosts.length || profile.posts_count || 0}
                 </b>
                 posts
               </div>
               <div>
-                <b className="block text-[17px] text-[var(--text,#17233A)] font-semibold leading-tight">
+                <b className="block text-[1.133333rem] text-[var(--text,#17233A)] font-semibold leading-tight">
                   {profile.followers_count ?? 0}
                 </b>
                 followers
               </div>
               <div>
-                <b className="block text-[17px] text-[var(--text,#17233A)] font-semibold leading-tight">
+                <b className="block text-[1.133333rem] text-[var(--text,#17233A)] font-semibold leading-tight">
                   {profile.following_count ?? 0}
                 </b>
                 following
@@ -232,25 +233,25 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
           </div>
 
           {/* Identity & Bio */}
-          <div className={`${wide ? 'px-6' : 'px-4'} text-[14px]`}>
+          <div className={`${wide ? 'px-6' : 'px-4'} text-[0.933333rem]`}>
             <b
-              className="font-semibold text-[15px] block text-[var(--text,#17233A)]"
+              className="font-semibold text-[1rem] block text-[var(--text,#17233A)]"
               style={text}
             >
               {profile.display_name}
             </b>
-            <span className="text-[var(--muted,#5B6577)] text-[13px] block">
+            <span className="text-[var(--muted,#5B6577)] text-[0.866667rem] block">
               @{profile.username}
               {profile.class_name ? ` · ${profile.class_name}` : ''}
               {profile.campus_name || profile.campus_other ? ` · ${profile.campus_name || profile.campus_other}` : ''}
             </span>
             {profile.real_name && (
-              <span className="text-[var(--muted,#5B6577)] text-[13px] block">
+              <span className="text-[var(--muted,#5B6577)] text-[0.866667rem] block">
                 Real name: {profile.real_name}
               </span>
             )}
             {profile.bio && (
-              <div className="mt-1 text-[14px] text-[var(--text,#17233A)] whitespace-pre-wrap" style={text}>
+              <div className="mt-1 text-[0.933333rem] text-[var(--text,#17233A)] whitespace-pre-wrap" style={text}>
                 {profile.bio}
               </div>
             )}
@@ -263,7 +264,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                 <button
                   type="button"
                   onClick={onNavigateToEditProfile}
-                  className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
+                  className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
                 >
                   Edit profile
                 </button>
@@ -282,7 +283,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                   <button
                     type="button"
                     onClick={onLogout}
-                    className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
+                    className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
                   >
                     Sign out
                   </button>
@@ -294,7 +295,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                   type="button"
                   onClick={handleToggleFollow}
                   disabled={togglingFollow}
-                  className={`flex-1 min-h-[44px] rounded-[8px] font-semibold text-[13px] transition-colors cursor-pointer flex items-center justify-center ${
+                  className={`flex-1 min-h-[44px] rounded-[8px] font-semibold text-[0.866667rem] transition-colors cursor-pointer flex items-center justify-center ${
                     profile.is_following
                       ? 'border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)]'
                       : 'border border-[var(--blue,#244C8A)] bg-[var(--blue,#244C8A)] text-white hover:opacity-95'
@@ -312,7 +313,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                         avatar_media_id: profile.avatar_media_id,
                       })
                     }
-                    className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
+                    className="flex-1 min-h-[44px] rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer flex items-center justify-center transition-colors"
                   >
                     Message
                   </button>
@@ -332,7 +333,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                       <button
                         type="button"
                         onClick={handleBlockToggle}
-                        className="w-full text-left px-3 py-2 min-h-[44px] flex items-center text-[13px] font-semibold text-[var(--danger,#B23A40)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
+                        className="w-full text-left px-3 py-2 min-h-[44px] flex items-center text-[0.866667rem] font-semibold text-[var(--danger,#B23A40)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
                       >
                         {isBlocked ? 'Unblock' : 'Block'}
                       </button>
@@ -342,7 +343,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                           setShowMenu(false);
                           setShowReport(true);
                         }}
-                        className="w-full text-left px-3 py-2 min-h-[44px] flex items-center text-[13px] font-medium text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
+                        className="w-full text-left px-3 py-2 min-h-[44px] flex items-center text-[0.866667rem] font-medium text-[var(--text,#17233A)] hover:bg-[var(--bg2,#F8F9FC)] cursor-pointer"
                       >
                         Report
                       </button>
@@ -368,7 +369,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-[var(--tint,#EAF0FA)] to-[#c9d8f0] p-2 flex items-center justify-center text-[12px] text-[var(--text,#17233A)] overflow-hidden font-normal text-center select-none">
+                  <div className="w-full h-full bg-gradient-to-br from-[var(--tint,#EAF0FA)] to-[#c9d8f0] p-2 flex items-center justify-center text-[0.8rem] text-[var(--text,#17233A)] overflow-hidden font-normal text-center select-none">
                     <span className="line-clamp-3 leading-tight">{post.body}</span>
                   </div>
                 )}
@@ -377,7 +378,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
           </div>
 
           {userPosts.length === 0 && (
-            <div className="py-12 text-center text-[13px] text-[var(--muted,#5B6577)] border-t border-[var(--line,#E8EBF0)] mt-1">
+            <div className="py-12 text-center text-[0.866667rem] text-[var(--muted,#5B6577)] border-t border-[var(--line,#E8EBF0)] mt-1">
               No posts yet
             </div>
           )}

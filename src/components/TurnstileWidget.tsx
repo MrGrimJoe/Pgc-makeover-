@@ -64,7 +64,7 @@ export const TurnstileWidget: React.FC<Props> = ({ siteKey, onToken, resetKey = 
   return (
     <div>
       <div ref={host} aria-label="Security check" />
-      {failed && <p role="alert" className="text-[13px] text-[var(--danger,#B23A40)]">The security check could not load. Check your connection, turn off content blockers for this site, and reload.</p>}
+      {failed && <p role="alert" className="text-[0.866667rem] text-[var(--danger,#B23A40)]">The security check could not load. Check your connection, turn off content blockers for this site, and reload.</p>}
     </div>
   );
 };

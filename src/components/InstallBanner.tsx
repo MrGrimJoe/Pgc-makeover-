@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Share, X } from 'lucide-react';
 import { bannerKind, isDismissed, promptInstall, readInstallEnv, rememberDismissed, useCanPrompt } from '../lib/pwa.ts';
 
-const box = 'mx-3 mt-3 rounded-[12px] border border-[var(--line,#E8EBF0)] bg-[var(--tint,#EAF0FA)] p-3 text-[13px] text-[var(--text,#17233A)]';
-const primary = 'min-h-[44px] px-3.5 rounded-[8px] border-0 bg-[var(--blue,#244C8A)] text-white text-[13px] font-semibold cursor-pointer';
-const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[13px] font-semibold cursor-pointer';
+const box = 'mx-3 mt-3 rounded-[12px] border border-[var(--line,#E8EBF0)] bg-[var(--tint,#EAF0FA)] p-3 text-[0.866667rem] text-[var(--text,#17233A)]';
+const primary = 'min-h-[44px] px-3.5 rounded-[8px] border-0 bg-[var(--blue,#244C8A)] text-white text-[0.866667rem] font-semibold cursor-pointer';
+const ghost = 'min-h-[44px] px-3.5 rounded-[8px] border border-[var(--line,#E8EBF0)] bg-[var(--bg,#fff)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer';
 
 /**
  * One calm, dismissible banner. It appears only when installing is possible and useful:
