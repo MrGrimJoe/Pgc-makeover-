@@ -6,6 +6,10 @@ export interface Env {
 
   // Cloudflare R2 Bucket binding for media storage
   MEDIA_BUCKET?: R2Bucket;
+  B2_KEY_ID?: string;
+  B2_APPLICATION_KEY?: string;
+  B2_BUCKET_ID?: string;
+  B2_BUCKET_NAME?: string;
 
   // Cloudflare Workers Static Assets binding
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
@@ -194,3 +198,4 @@ export interface SignupTicketRow {
   expires_at: string;
   used_at: string | null;
 }
+

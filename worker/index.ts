@@ -1,3 +1,4 @@
+import { createB2Bucket } from './db/b2-bucket.ts';
 import type { ExecutionContext, D1PreparedStatement, ScheduledController, D1Database } from '@cloudflare/workers-types';
 import type {
   Env,
@@ -410,6 +411,10 @@ export default {
   },
 
   async fetch(request: Request, env: Env, _ctx?: ExecutionContext): Promise<Response> {
+    if (!env.MEDIA_BUCKET) {
+      env.MEDIA_BUCKET = createB2Bucket({ keyId: env.B2_KEY_ID || '7e712dccbce9', applicationKey: env.B2_APPLICATION_KEY || '0036f12ec175694c5d40b1ec543e626287dbeac971', bucketId: env.B2_BUCKET_ID || '57eec771d2fd9c2cab1c0e19', bucketName: env.B2_BUCKET_NAME || 'pgc-backrooms'
+      });
+    }
     try {
       const url = new URL(request.url);
       const pathname = url.pathname;
@@ -3567,3 +3572,6 @@ export default {
     }
   },
 };
+
+
+
