@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLayout } from '../lib/layout.ts';
 import type { PublicProfileResponse, PostItem } from '../../shared/schema.ts';
 import { MoreVertical, Settings } from 'lucide-react';
 import { ReportModal } from '../components/ReportModal.tsx';
 import { Avatar } from '../components/Avatar.tsx';
+import { PostCard } from '../components/PostCard.tsx';
+import { BottomSheet } from '../components/BottomSheet.tsx';
 import { resolveProfileStyle } from '../../shared/presets.ts';
 
 interface ProfileViewPageProps {
@@ -40,6 +42,19 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [openPostId, setOpenPostId] = useState<string | null>(null);
+
+  const handleEngagement = useCallback((postId: string, state: { likes_count: number; has_liked: boolean; comments_count: number }) => {
+    setUserPosts((prev) => {
+      const cur = prev.find((p) => p.id === postId);
+      if (!cur || (cur.likes_count === state.likes_count && cur.has_liked === state.has_liked && cur.comments_count === state.comments_count)) return prev;
+      return prev.map((p) => (p.id === postId ? { ...p, ...state } : p));
+    });
+  }, []);
+  const handleDeleted = useCallback((postId: string) => {
+    setOpenPostId(null);
+    setUserPosts((prev) => prev.filter((p) => p.id !== postId));
+  }, []);
 
   const targetUsername = initialUsername || currentUsername || '';
 
@@ -358,14 +373,17 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
           {/* 3-column grid with 2px gaps and square tiles under 1px top line */}
           <div className={`grid grid-cols-3 ${wide ? 'gap-1' : 'gap-[2px]'} border-t border-[var(--line,#E8EBF0)] mt-1`}>
             {userPosts.map((post) => (
-              <div
+              <button
                 key={post.id}
-                className="aspect-square bg-[var(--bg2,#F8F9FC)] relative overflow-hidden flex items-center justify-center"
+                type="button"
+                onClick={() => setOpenPostId(post.id)}
+                aria-label={post.body ? `Open post: ${post.body.slice(0, 60)}` : `Open post by @${profile.username}`}
+                className="aspect-square bg-[var(--bg2,#F8F9FC)] relative overflow-hidden flex items-center justify-center p-0 border-0 cursor-pointer"
               >
                 {post.media && post.media.length > 0 && post.media[0] ? (
                   <img
                     src={`/api/media/${post.media[0].id}`}
-                    alt={`Post by @${profile.username}`}
+                    alt=""
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -373,7 +391,7 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
                     <span className="line-clamp-3 leading-tight">{post.body}</span>
                   </div>
                 )}
-              </div>
+              </button>
             ))}
           </div>
 
@@ -385,6 +403,18 @@ export const ProfileViewPage: React.FC<ProfileViewPageProps> = ({
         </div>
         );
       })()}
+
+      {/* A tapped post opens in a sheet with the full card: like, comment, report, delete (own posts) */}
+      {openPostId && userPosts.find((p) => p.id === openPostId) && (
+        <BottomSheet label="Post" onClose={() => setOpenPostId(null)} className="overflow-y-auto" sheetHeightClass="max-h-[90dvh]">
+          <PostCard
+            post={userPosts.find((p) => p.id === openPostId)!}
+            currentUserId={currentUserId ?? ''}
+            onPostDeleted={handleDeleted}
+            onEngagementChange={handleEngagement}
+          />
+        </BottomSheet>
+      )}
 
       {/* Report Modal */}
       {showReport && profile && (

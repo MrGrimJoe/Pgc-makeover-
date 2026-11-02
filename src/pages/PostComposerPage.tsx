@@ -93,9 +93,12 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
     setMediaList((prev) => prev.filter((m) => m.id !== mediaId));
   };
 
+  // A picture, meme or sticker can be posted on its own; a poll needs its question (the text)
+  const canPost = !submitting && !uploading && pollReady && (!!body.trim() || (pollOptions === null && (mediaList.length > 0 || !!stickerKey)));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!body.trim() || submitting || !pollReady) return;
+    if (!canPost) return;
 
     setSubmitting(true);
     setError(null);
@@ -149,7 +152,7 @@ export const PostComposerPage: React.FC<PostComposerPageProps> = ({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={submitting || !body.trim() || uploading || !pollReady}
+          disabled={!canPost}
           className="text-[1rem] font-semibold text-[var(--blue,#244C8A)] disabled:opacity-40 cursor-pointer min-h-[44px] min-w-[44px] justify-end flex items-center bg-transparent border-0 p-0"
         >
           {submitting ? 'Posting...' : 'Post'}

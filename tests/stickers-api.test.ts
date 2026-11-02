@@ -136,12 +136,19 @@ describe('sticker keys in messages, posts and comments', () => {
       expect((await comment(alice, { sticker_key: KEY, extra: 1 })).status).toBe(400);
     });
 
-    it('a post is text plus exactly one of photos or one sticker/GIF, never both, and text is required', async () => {
+    it('a post can be a sticker or a picture on its own (no text), as long as it is not empty', async () => {
+      const photo = await upload(bob, PNG(3), 'image/png', 'photo');
+      expect((await post(bob, { sticker_key: KEY })).status).toBe(201);
+      expect((await post(bob, { media_ids: [photo] })).status).toBe(201);
+    });
+
+    it('a post carries photos or one sticker/GIF, never both; text is optional with a picture or sticker but a post cannot be empty', async () => {
       const photo = await upload(alice, PNG(2), 'image/png', 'photo');
       expect((await post(alice, { body: 'photos', media_ids: [photo] })).status).toBe(201);
       expect((await post(alice, { body: 'sticker', sticker_key: KEY })).status).toBe(201);
       expect((await post(alice, { body: 'both', media_ids: [photo], sticker_key: KEY })).status).toBe(400);
-      expect((await post(alice, { sticker_key: KEY })).status).toBe(400);
+      expect((await post(alice, {})).status).toBe(400); // nothing at all
+      expect((await post(alice, { body: '   ' })).status).toBe(400);
       expect((await post(alice, { body: 'two', sticker_key: [KEY, KEY] })).status).toBe(400);
     });
 

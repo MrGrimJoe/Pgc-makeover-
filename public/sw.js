@@ -2,16 +2,20 @@
  * Dialtone service worker: static files only.
  *
  * What it does:
- *   - keeps the offline page, the app icons, the hashed build files (/assets/) and the bundled
- *     stickers so the app starts faster and shows a clear page when the phone is offline.
+ *   - keeps the offline page, the app icons, the hashed build files (/assets/), the bundled
+ *     stickers and the app shell (index.html) so the app starts faster and still OPENS when the phone is
+ *     offline (it then shows the posts already saved on the device; the plain offline page is only the
+ *     fallback for a phone that has never loaded the app).
  * What it never does:
  *   - touch /api/ (feeds, profiles, messages, media, sign-in all go straight to the network),
- *   - cache HTML pages, uploads or any response for a signed-in person,
+ *   - cache any page except the one static app shell, uploads, or any response for a signed-in person,
  *   - handle non-GET or range (video) requests.
  * Bump CACHE when this file's rules change; old caches are deleted on activate.
  */
-const CACHE = 'dialtone-static-v1';
+const CACHE = 'dialtone-static-v2';
 const OFFLINE_URL = '/offline.html';
+// The app shell (index.html). It is the same file for every route and every person: it holds no account data.
+const SHELL_URL = '/__shell';
 const PRECACHE = [
   OFFLINE_URL,
   '/icons/icon-192.png',
@@ -53,10 +57,22 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
 
-  // Page loads: always the network (the shell is tiny and changes with each deploy); offline page on failure.
+  // Page loads: network first (a deploy is picked up at once). A good HTML answer refreshes the saved shell;
+  // when the network fails the saved shell opens the app, and only a phone that never loaded it gets /offline.html.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match(OFFLINE_URL).then((r) => r || Response.error()))
+      fetch(request)
+        .then((response) => {
+          const type = response.headers.get('content-type') || '';
+          if (response.ok && response.status === 200 && response.type === 'basic' && type.includes('text/html')) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(new Request(self.location.origin + SHELL_URL), copy)).catch(() => {});
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(SHELL_URL).then((shell) => shell || caches.match(OFFLINE_URL)).then((r) => r || Response.error())
+        )
     );
     return;
   }

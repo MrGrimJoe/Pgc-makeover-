@@ -186,7 +186,7 @@ describe('service worker', () => {
   it('precaches only the offline page and icons on install', async () => {
     const sw = loadWorker();
     await sw.run('install');
-    const urls = [...sw.store.get('dialtone-static-v1')!.keys()].map((u) => new URL(u).pathname);
+    const urls = [...sw.store.get('dialtone-static-v2')!.keys()].map((u) => new URL(u).pathname);
     expect(urls.sort()).toEqual(['/icons/apple-touch-icon.png', '/icons/icon-192.png', '/icons/icon-512.png', '/offline.html']);
   });
 
@@ -208,16 +208,31 @@ describe('service worker', () => {
     expect((await sw.run('fetch', { request: other })).handled).toBe(false);
   });
 
-  it('page loads go to the network, are never cached, and fall back to the offline page', async () => {
+  it('page loads go to the network first, keep only the one static shell, and open it when offline', async () => {
     const sw = loadWorker();
-    sw.setResponder((u) => new Response(u.endsWith('offline.html') ? 'OFFLINE' : '<html>private shell</html>', { status: 200 }));
+    sw.setResponder((u) => new Response(u.endsWith('offline.html') ? 'OFFLINE' : '<html>shell</html>', { status: 200, headers: { 'content-type': u.endsWith('offline.html') ? 'text/html' : 'text/html; charset=utf-8' } }));
     await sw.run('install');
     const online = await sw.get('/', { mode: 'navigate' });
-    expect(await online.value!.text()).toContain('private shell');
-    const keys = [...sw.store.get('dialtone-static-v1')!.keys()].map((u) => new URL(u).pathname);
+    expect(await online.value!.text()).toContain('shell');
+    await new Promise((r) => setTimeout(r, 0));
+    const keys = [...sw.store.get('dialtone-static-v2')!.keys()].map((u) => new URL(u).pathname);
+    expect(keys).toContain('/__shell');
     expect(keys).not.toContain('/');
+    expect(keys).not.toContain('/messages');
     sw.setOffline(true);
     const off = await sw.get('/messages', { mode: 'navigate' });
+    expect(await off.value!.text()).toContain('shell'); // the app opens offline
+  });
+
+  it('a phone that never loaded the app gets the plain offline page; JSON and errors are never saved as the shell', async () => {
+    const sw = loadWorker();
+    sw.setResponder((u) => new Response(u.endsWith('offline.html') ? 'OFFLINE' : '{"a":1}', { status: 200, headers: { 'content-type': u.endsWith('offline.html') ? 'text/html' : 'application/json' } }));
+    await sw.run('install');
+    await sw.get('/', { mode: 'navigate' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect([...sw.store.get('dialtone-static-v2')!.keys()].some((u) => u.endsWith('/__shell'))).toBe(false);
+    sw.setOffline(true);
+    const off = await sw.get('/', { mode: 'navigate' });
     expect(await off.value!.text()).toBe('OFFLINE');
   });
 
@@ -235,7 +250,7 @@ describe('service worker', () => {
     sw.setResponder(() => new Response('nope', { status: 404 }));
     await sw.get('/assets/missing.js');
     await new Promise((r) => setTimeout(r, 0));
-    expect([...sw.store.get('dialtone-static-v1')!.keys()].some((k) => k.endsWith('/assets/missing.js'))).toBe(false);
+    expect([...sw.store.get('dialtone-static-v2')!.keys()].some((k) => k.endsWith('/assets/missing.js'))).toBe(false);
   });
 
   it('leaves everything outside the static folders to the browser', async () => {
@@ -251,6 +266,6 @@ describe('service worker', () => {
     sw.store.set('dialtone-static-v0', new Map());
     sw.store.set('someone-elses-cache', new Map());
     await sw.run('activate');
-    expect([...sw.store.keys()].sort()).toEqual(['dialtone-static-v1', 'someone-elses-cache']);
+    expect([...sw.store.keys()].sort()).toEqual(['dialtone-static-v2', 'someone-elses-cache']);
   });
 });

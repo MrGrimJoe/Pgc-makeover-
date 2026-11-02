@@ -142,13 +142,14 @@ describe('PickerPanel', () => {
     expect(m.container.textContent).toContain('No stickers yet');
   });
 
-  it('with reduced motion bundled GIFs are a still "GIF" tile until sent', async () => {
+  it('with reduced motion bundled GIFs show a still first frame (never a bare "GIF" label) until sent', async () => {
     restores.push(stubMatchMedia((q) => q.includes('prefers-reduced-motion')));
     m = await mount(<PickerPanel userId="u1" initialTab="gifs" onPick={() => undefined} onAddFiles={() => undefined} />);
     await flush();
     await click(byText(m.container, '[role="radio"]', loopPack.name));
-    expect(m.container.querySelector(`button[aria-label="Send ${loop.alt}"] img`)).toBeNull();
-    expect(m.container.querySelector(`button[aria-label="Send ${loop.alt}"]`)?.textContent).toBe('GIF');
+    const tile = m.container.querySelector(`button[aria-label="Send ${loop.alt}"]`)!;
+    expect(tile.querySelector('canvas[role="img"], img')).not.toBeNull(); // a still picture, not the text "GIF"
+    expect(tile.textContent).not.toBe('GIF');
   });
 
   it('Add from phone passes the chosen files up (the preview handles the rest), and there are no axe violations', async () => {

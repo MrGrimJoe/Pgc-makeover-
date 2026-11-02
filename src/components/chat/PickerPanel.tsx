@@ -1,3 +1,4 @@
+import { StillFrame } from './StillFrame.tsx';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Settings2 } from 'lucide-react';
 import { STICKER_PACKS, type StickerPack } from '../../../shared/stickers.ts';
@@ -45,10 +46,10 @@ interface Tile {
 
 const KIND_OF_TAB = { stickers: 'sticker', gifs: 'gif' } as const;
 
-/** Thumbnail in the grid. With reduced motion, GIFs are a still label until sent. */
+/** Thumbnail in the grid. With reduced motion, GIFs show their first frame only, until sent. */
 const Thumb: React.FC<{ tile: Tile; reduced: boolean }> = ({ tile, reduced }) =>
   tile.kind === 'gif' && reduced ? (
-    <span className="w-full h-full flex items-center justify-center text-[0.8rem] font-semibold text-[var(--muted,#5B6577)]">GIF</span>
+    <StillFrame src={tile.src} alt={tile.alt} className="w-full h-full object-contain" />
   ) : (
     <img src={tile.src} alt={tile.alt} loading="lazy" className="w-full h-full object-contain" />
   );

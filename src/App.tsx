@@ -22,6 +22,8 @@ import { SettingsPage } from './pages/SettingsPage.tsx';
 import { AdminPage } from './pages/AdminPage.tsx';
 import { MessagesPage } from './pages/MessagesPage.tsx';
 import { InstallBanner } from './components/InstallBanner.tsx';
+import { OfflineBanner } from './components/OfflineBanner.tsx';
+import { saveLastMe, loadLastMe, clearLastMe } from './lib/last-session.ts';
 import { AcademicBanner } from './components/AcademicBanner.tsx';
 // DEV-ONLY: remove before launch
 import { DevBar } from './components/DevBar.tsx';
@@ -109,16 +111,25 @@ export default function App() {
       const res = await fetch('/api/me');
       if (res.ok) {
         const data = (await res.json()) as MeResponse;
+        saveLastMe(data);
         setCurrentUser(data);
         setActiveTab('feed');
       } else {
+        clearLastMe(); // the server answered and says nobody is signed in
         setCurrentUser(null);
         // Coming back from Google as a new person: continue with onboarding instead of the sign-in screen
         setActiveTab(authRedirect.signup ? 'signup' : 'signin');
       }
     } catch {
-      setCurrentUser(null);
-      setActiveTab('signin');
+      // The server could not be reached (offline): keep a person who was signed in inside the app, on the posts saved here
+      const saved = loadLastMe();
+      if (saved) {
+        setCurrentUser(saved);
+        setActiveTab('feed');
+      } else {
+        setCurrentUser(null);
+        setActiveTab('signin');
+      }
     } finally {
       setLoadingUser(false);
     }
@@ -139,6 +150,7 @@ export default function App() {
       // Ignore network errors on logout
     } finally {
       // Cached posts, history and learned preferences must not stay on the phone for the next person
+      clearLastMe();
       if (currentUser) await forgetFeedDataFor(currentUser.user.id);
       setCurrentUser(null);
       setActiveTab('signin');
@@ -222,6 +234,8 @@ export default function App() {
             setActiveTab('messages');
           }}
         />}
+
+        <OfflineBanner />
 
         {/* Install help: Home only when signed in; the sign-in page only gets the open-in-your-browser notice */}
         {currentUser ? activeTab === 'feed' && (<><AcademicBanner onOpenSettings={() => setActiveTab('settings')} /><InstallBanner /></>) : (activeTab === 'signin' || activeTab === 'signup') && <InstallBanner signedOut />}

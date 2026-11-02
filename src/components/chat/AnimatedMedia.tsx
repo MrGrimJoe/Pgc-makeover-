@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { StillFrame } from './StillFrame.tsx';
 import { Play } from 'lucide-react';
 import type { MediaItem } from '../../../shared/schema.ts';
 import { usePrefersReducedMotion } from '../../lib/motion.ts';
@@ -32,10 +33,16 @@ export const AnimatedMedia: React.FC<AnimatedMediaProps> = ({ media, src: srcPro
         onClick={() => setPlaying(true)}
         aria-label={`Play ${label}`}
         style={style}
-        className={`min-h-[44px] min-w-[44px] w-full flex items-center justify-center gap-2 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer ${className}`}
+        className={`relative overflow-hidden min-h-[44px] min-w-[44px] w-full flex items-center justify-center gap-2 rounded-[8px] bg-[var(--bg2,#F8F9FC)] border border-[var(--line,#E8EBF0)] text-[var(--text,#17233A)] text-[0.866667rem] font-semibold cursor-pointer ${className}`}
       >
-        <Play className="w-4 h-4" aria-hidden="true" />
-        Play {label}
+        {!isVideo && srcProp ? (
+          <>
+            <StillFrame src={src} alt="" className="w-full h-full object-contain" />
+            <span className="absolute bottom-1 right-1 flex items-center gap-1 rounded-full bg-black/60 text-white px-2 min-h-[28px] text-[0.8rem]"><Play className="w-3.5 h-3.5" aria-hidden="true" />Play</span>
+          </>
+        ) : (
+          <><Play className="w-4 h-4" aria-hidden="true" />Play {label}</>
+        )}
       </button>
     );
   }

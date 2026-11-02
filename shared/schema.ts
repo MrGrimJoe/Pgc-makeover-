@@ -175,11 +175,13 @@ export const stickerKeySchema = z
 
 export const createPostSchema = z
   .object({
+    /** Text is optional when the post carries a picture, meme or sticker/GIF; a poll needs its question here. */
     body: z
       .string()
       .trim()
-      .min(1, { message: 'Post content cannot be empty' })
-      .max(1000, { message: 'Post content cannot exceed 1000 characters' }),
+      .max(1000, { message: 'Post content cannot exceed 1000 characters' })
+      .optional()
+      .default(''),
     media_ids: z
       .array(z.string().min(1))
       .max(4, { message: 'Maximum 4 images allowed per post' })
@@ -202,6 +204,10 @@ export const createPostSchema = z
       .optional(),
   })
   .strict()
+  .refine((v) => v.body.length > 0 || v.media_ids.length > 0 || !!v.sticker_key, {
+    message: 'Post content cannot be empty',
+    path: ['body'],
+  })
   .refine((v) => !(v.media_ids.length > 0 && v.sticker_key), {
     message: 'A post can have photos or one sticker/GIF, not both',
     path: ['sticker_key'],

@@ -257,12 +257,14 @@ export const PostCard: React.FC<PostCardProps> = ({
           </div>
 
           {/* Caption */}
+          {post.body && (
           <div className="px-4 pt-2 text-[1rem] leading-normal break-words">
             <b className="font-semibold text-[var(--text,#17233A)] mr-1.5">
               {post.author_username}
             </b>
             {renderBodyWithTags(post.body)}
           </div>
+          )}
 
           {post.sticker_key && (
             <div className="px-4 pt-2">
@@ -286,9 +288,11 @@ export const PostCard: React.FC<PostCardProps> = ({
       ) : (
         <>
           {/* Text-only post: text at 17px directly under header */}
+          {post.body && (
           <div className="px-4 pt-0 pb-1 text-[1.133333rem] leading-normal break-words">
             {renderBodyWithTags(post.body)}
           </div>
+          )}
 
           {post.sticker_key && (
             <div className="px-4 pt-2">
