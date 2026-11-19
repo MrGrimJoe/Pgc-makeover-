@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { R2Bucket, R2Object, R2ObjectBody, R2PutOptions, R2GetOptions } from '@cloudflare/workers-types';
 
 interface B2Config {
@@ -13,6 +14,35 @@ interface B2AuthCache {
   downloadUrl: string;
   expiresAt: number;
 }
+
+const b2AuthorizeResponseSchema = z.object({
+  authorizationToken: z.string(),
+  apiInfo: z.object({
+    storageApi: z.object({
+      apiUrl: z.string(),
+      downloadUrl: z.string(),
+    }),
+  }),
+});
+
+const b2UploadUrlResponseSchema = z.object({
+  uploadUrl: z.string(),
+  authorizationToken: z.string(),
+});
+
+const b2UploadResponseSchema = z.object({
+  fileId: z.string(),
+  contentSha1: z.string().optional(),
+});
+
+const b2ListFilesResponseSchema = z.object({
+  files: z.array(
+    z.object({
+      fileName: z.string(),
+      fileId: z.string(),
+    })
+  ),
+});
 
 let cachedAuth: B2AuthCache | null = null;
 
@@ -32,11 +62,16 @@ async function getB2Auth(config: B2Config): Promise<B2AuthCache> {
     throw new Error(`B2 authorize failed (${res.status}): ${err}`);
   }
 
-  const data = (await res.json()) as any;
+  const raw = await res.json();
+  const parsed = b2AuthorizeResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`B2 authorize response invalid: ${parsed.error.message}`);
+  }
+
   cachedAuth = {
-    token: data.authorizationToken,
-    apiUrl: data.apiInfo.storageApi.apiUrl,
-    downloadUrl: data.apiInfo.storageApi.downloadUrl,
+    token: parsed.data.authorizationToken,
+    apiUrl: parsed.data.apiInfo.storageApi.apiUrl,
+    downloadUrl: parsed.data.apiInfo.storageApi.downloadUrl,
     expiresAt: now + 20 * 60 * 60 * 1000, // 20 hours
   };
   return cachedAuth;
@@ -49,7 +84,7 @@ async function sha1Hex(data: Uint8Array): Promise<string> {
 
 export function createB2Bucket(config: B2Config): R2Bucket {
   return {
-    async put(key: string, value: any, options?: R2PutOptions): Promise<R2Object> {
+    async put(key: string, value: unknown, options?: R2PutOptions): Promise<R2Object> {
       const auth = await getB2Auth(config);
 
       // Convert value to Uint8Array
@@ -62,8 +97,8 @@ export function createB2Bucket(config: B2Config): R2Bucket {
         bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
       } else if (typeof value === 'string') {
         bytes = new TextEncoder().encode(value);
-      } else if (value && typeof value.arrayBuffer === 'function') {
-        const ab = await value.arrayBuffer();
+      } else if (value && typeof (value as { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer === 'function') {
+        const ab = await (value as { arrayBuffer: () => Promise<ArrayBuffer> }).arrayBuffer();
         bytes = new Uint8Array(ab);
       } else {
         bytes = new Uint8Array(0);
@@ -72,7 +107,7 @@ export function createB2Bucket(config: B2Config): R2Bucket {
       const sha1 = await sha1Hex(bytes);
       const contentType = (options?.httpMetadata as Record<string, string> | undefined)?.contentType || 'application/octet-stream';
 
-      // 1. Get upload URL
+      // 1. Request upload URL
       const uploadUrlRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_get_upload_url`, {
         method: 'POST',
         headers: {
@@ -86,19 +121,24 @@ export function createB2Bucket(config: B2Config): R2Bucket {
         const err = await uploadUrlRes.text();
         throw new Error(`B2 get_upload_url failed: ${err}`);
       }
-      const uploadInfo = (await uploadUrlRes.json()) as { uploadUrl: string; authorizationToken: string };
 
-      // 2. Upload
-      const uploadRes = await fetch(uploadInfo.uploadUrl, {
+      const rawUploadUrl = await uploadUrlRes.json();
+      const parsedUploadUrl = b2UploadUrlResponseSchema.safeParse(rawUploadUrl);
+      if (!parsedUploadUrl.success) {
+        throw new Error(`B2 get_upload_url response invalid: ${parsedUploadUrl.error.message}`);
+      }
+
+      // 2. Upload file bytes
+      const uploadRes = await fetch(parsedUploadUrl.data.uploadUrl, {
         method: 'POST',
         headers: {
-          Authorization: uploadInfo.authorizationToken,
+          Authorization: parsedUploadUrl.data.authorizationToken,
           'X-Bz-File-Name': encodeURIComponent(key),
           'Content-Type': contentType,
           'Content-Length': bytes.length.toString(),
           'X-Bz-Content-Sha1': sha1,
         },
-        body: bytes as any,
+        body: bytes as BodyInit,
       });
 
       if (!uploadRes.ok) {
@@ -106,12 +146,17 @@ export function createB2Bucket(config: B2Config): R2Bucket {
         throw new Error(`B2 upload failed (${uploadRes.status}): ${err}`);
       }
 
-      const uploaded = (await uploadRes.json()) as any;
+      const rawUploaded = await uploadRes.json();
+      const parsedUploaded = b2UploadResponseSchema.safeParse(rawUploaded);
+      if (!parsedUploaded.success) {
+        throw new Error(`B2 upload response invalid: ${parsedUploaded.error.message}`);
+      }
+
       return {
         key,
-        version: uploaded.fileId,
+        version: parsedUploaded.data.fileId,
         size: bytes.length,
-        etag: uploaded.contentSha1 || `"${sha1}"`,
+        etag: parsedUploaded.data.contentSha1 || `"${sha1}"`,
         httpEtag: `"${sha1}"`,
         uploaded: new Date(),
         httpMetadata: { contentType },
@@ -137,7 +182,7 @@ export function createB2Bucket(config: B2Config): R2Bucket {
         key,
         size,
         httpMetadata: { contentType },
-        body: res.body as any,
+        body: res.body as unknown as ReadableStream,
         bodyUsed: false,
         async arrayBuffer() {
           return res.arrayBuffer();
@@ -179,7 +224,6 @@ export function createB2Bucket(config: B2Config): R2Bucket {
       const list = Array.isArray(keys) ? keys : [keys];
 
       for (const k of list) {
-        // Query fileId by name
         const listRes = await fetch(`${auth.apiUrl}/b2api/v3/b2_list_file_names`, {
           method: 'POST',
           headers: {
@@ -194,20 +238,23 @@ export function createB2Bucket(config: B2Config): R2Bucket {
         });
 
         if (listRes.ok) {
-          const data = (await listRes.json()) as { files: Array<{ fileName: string; fileId: string }> };
-          const match = data.files.find((f) => f.fileName === encodeURIComponent(k) || f.fileName === k);
-          if (match) {
-            await fetch(`${auth.apiUrl}/b2api/v3/b2_delete_file_version`, {
-              method: 'POST',
-              headers: {
-                Authorization: auth.token,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                fileName: match.fileName,
-                fileId: match.fileId,
-              }),
-            });
+          const raw = await listRes.json();
+          const parsed = b2ListFilesResponseSchema.safeParse(raw);
+          if (parsed.success) {
+            const match = parsed.data.files.find((f) => f.fileName === encodeURIComponent(k) || f.fileName === k);
+            if (match) {
+              await fetch(`${auth.apiUrl}/b2api/v3/b2_delete_file_version`, {
+                method: 'POST',
+                headers: {
+                  Authorization: auth.token,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  fileName: match.fileName,
+                  fileId: match.fileId,
+                }),
+              });
+            }
           }
         }
       }

@@ -9,6 +9,13 @@ interface Marker {
   content: string;
 }
 
+interface SecretHit {
+  file: string;
+  line: number;
+  name: string;
+  preview: string;
+}
+
 const SEARCH_MARKER = ['DEV', 'ONLY'].join('-');
 const IGNORED_DIRS = new Set([
   'node_modules',
@@ -33,9 +40,67 @@ const SCANNED_EXTENSIONS = new Set([
   '.sql',
 ]);
 
-// Only shipped code is scanned for DEV-ONLY markers. tests/, scripts/, docs and the
+// Only shipped code is scanned for DEV-ONLY markers and secrets. tests/, scripts/, docs and the
 // README legitimately mention or contain dev helpers and are deliberately excluded.
 const DEV_ONLY_SCAN_TARGETS = ['src', 'worker', 'server.ts', 'wrangler.toml'];
+
+const SECRET_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
+  { name: 'Backblaze Application Key', pattern: /003[0-9a-fA-F]{38,}/ },
+  { name: 'AWS Access Key ID', pattern: /AKIA[0-9A-Z]{16}/ },
+  { name: 'GitHub Personal Access Token', pattern: /gh[pousr]_[A-Za-z0-9_]{36,}/ },
+  { name: 'Cloudflare Token', pattern: /cfoat_[A-Za-z0-9_-]{30,}|cfort_[A-Za-z0-9_-]{30,}|cfk_[A-Za-z0-9_-]{30,}/ },
+  { name: 'Private Key Block', pattern: /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/ },
+];
+
+function scanFileForSecrets(fullPath: string, baseDir: string): SecretHit[] {
+  const hits: SecretHit[] = [];
+  if (!SCANNED_EXTENSIONS.has(path.extname(fullPath))) return hits;
+  try {
+    const content = fs.readFileSync(fullPath, 'utf8');
+    const lines = content.split('\n');
+    lines.forEach((lineText, idx) => {
+      for (const { name, pattern } of SECRET_PATTERNS) {
+        if (pattern.test(lineText)) {
+          hits.push({
+            file: path.relative(baseDir, fullPath),
+            line: idx + 1,
+            name,
+            preview: lineText.trim().slice(0, 80),
+          });
+        }
+      }
+    });
+  } catch {
+    // ignore read errors
+  }
+  return hits;
+}
+
+function findSecretsInTargets(rootDir: string): SecretHit[] {
+  const results: SecretHit[] = [];
+  for (const target of DEV_ONLY_SCAN_TARGETS) {
+    const fullPath = path.join(rootDir, target);
+    if (!fs.existsSync(fullPath)) continue;
+    if (fs.statSync(fullPath).isDirectory()) {
+      const walk = (dir: string) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (IGNORED_DIRS.has(entry.name)) continue;
+          const entryPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            walk(entryPath);
+          } else if (entry.isFile()) {
+            results.push(...scanFileForSecrets(entryPath, rootDir));
+          }
+        }
+      };
+      walk(fullPath);
+    } else {
+      results.push(...scanFileForSecrets(fullPath, rootDir));
+    }
+  }
+  return results;
+}
 
 function scanFileForMarkers(fullPath: string, baseDir: string): Marker[] {
   const results: Marker[] = [];
@@ -85,7 +150,6 @@ function findDevOnlyMarkers(dir: string, baseDir: string): Marker[] {
         results.push(...findDevOnlyMarkers(fullPath, baseDir));
       }
     } else if (entry.isFile()) {
-      // Exclude prelaunch-check.ts itself
       if (relativePath.endsWith('prelaunch-check.ts')) {
         continue;
       }
@@ -133,7 +197,15 @@ export function runPrelaunchCheck(options: { listOnly?: boolean; rootDir?: strin
   }
   console.log('');
 
-  // Hardcoded sample/placeholder data in the client (same list as tests/placeholder-data.test.ts)
+  // 1b. Secret scan for live credentials/tokens in shipped code
+  const secretHits = findSecretsInTargets(rootDir);
+  console.log(`Found ${secretHits.length} potential hardcoded secret(s):`);
+  for (const s of secretHits) {
+    console.log(`  ${s.file}:${s.line} [${s.name}] -> ${s.preview}`);
+  }
+  console.log('');
+
+  // Hardcoded sample/placeholder data in the client
   const placeholderHits = findPlaceholderStrings(path.join(rootDir, 'src'), rootDir);
   console.log(`Found ${placeholderHits.length} placeholder string(s) in src/:`);
   for (const h of placeholderHits) {
@@ -143,13 +215,19 @@ export function runPrelaunchCheck(options: { listOnly?: boolean; rootDir?: strin
 
   if (listOnly) {
     console.log(
-      `--list specified: Listed ${markers.length} marker(s) and ${placeholderHits.length} placeholder string(s).`
+      `--list specified: Listed ${markers.length} marker(s), ${secretHits.length} secret(s), and ${placeholderHits.length} placeholder string(s).`
     );
     return { pass: true, markers, failures: [] };
   }
 
   if (markers.length > 0) {
     failures.push(`${markers.length} ${SEARCH_MARKER} marker(s) remain in the codebase.`);
+  }
+
+  if (secretHits.length > 0) {
+    failures.push(
+      `${secretHits.length} hardcoded secret(s) found in shipped code (see list above).`
+    );
   }
 
   if (placeholderHits.length > 0) {
@@ -198,3 +276,4 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     process.exit(1);
   }
 }
+
