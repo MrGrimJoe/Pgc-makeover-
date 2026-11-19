@@ -166,6 +166,27 @@ export async function handleOnboardingRoutes(request: Request, env: Env): Promis
       // Not negotiable: there is no switch to turn this off. No card, no account.
       return jsonResponse({ error: 'Scan or upload your student card to finish signing up.', code: 'card_required' }, 422);
     }
+    // ------------------------------------------------------------
+    // Server‑side student verification
+    // ------------------------------------------------------------
+    // The barcode check is a cheap speed‑bump only. For real verification we
+    // maintain a whitelist of allowed roll_number ↔ barcode pairs. This list is
+    // stored in the D1 table `allowed_student_ids` (migration added separately).
+    // If the table exists, we require the submitted pair to be present; otherwise
+    // we fall back to the barcode‑match check above.
+    try {
+      const whitelisted = await env.DB.prepare(
+        `SELECT 1 FROM allowed_student_ids WHERE roll_number = ? AND barcode = ?`
+      )
+        .bind(data.roll_number, data.card?.barcode ?? '')
+        .first();
+      if (!whitelisted) {
+        // The pair is not in the whitelist – reject the sign‑up.
+        return jsonResponse({ error: 'Student ID could not be verified. Contact support.', code: 'student_unverified' }, 422);
+      }
+    } catch {
+      // If the table does not exist (e.g. in dev) we ignore the whitelist.
+    }
 
     const existingAccount = await env.DB.prepare('SELECT id FROM users WHERE provider_subject = ?')
       .bind(ticket.provider_subject)
